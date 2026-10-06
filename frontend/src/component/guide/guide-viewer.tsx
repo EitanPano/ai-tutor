@@ -53,7 +53,7 @@ function Complete({
         <div className="flex flex-wrap items-center gap-3">
           <Button loading={quiz.isPending} onClick={() => quiz.create({ threadId })}>
             {!quiz.isPending && <QuizIcon aria-hidden="true" className="size-4" />}
-            {quiz.isPending ? 'Writing your quiz�' : 'Quiz me on this'}
+            {quiz.isPending ? 'Writing your quiz…' : 'Quiz me on this'}
           </Button>
           <Link
             href={`/thread/${encodeURIComponent(threadId)}`}

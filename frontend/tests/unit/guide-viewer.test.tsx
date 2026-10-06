@@ -210,7 +210,9 @@ describe('GuideViewer', () => {
 
   it('offers a quiz on the thread from the completion state', async () => {
     serve([step(1, { doneAt: NOW }), step(2, { doneAt: NOW })])
-    api.createQuiz.mockResolvedValue({
+    let finish!: (value: unknown) => void
+    api.createQuiz.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const created = {
       quiz: {
         id: 'q7',
         threadId: 't1',
@@ -220,10 +222,13 @@ describe('GuideViewer', () => {
         items: [],
         attempts: []
       }
-    })
+    }
     const typist = await open()
 
     await typist.click(screen.getByRole('button', { name: 'Quiz me on this' }))
+
+    expect(await screen.findByRole('button', { name: 'Writing your quiz…' })).toBeDisabled()
+    finish(created)
 
     expect(api.createQuiz).toHaveBeenCalledWith({ threadId: 't1' })
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q7'))
