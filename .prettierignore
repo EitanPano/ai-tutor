@@ -11,3 +11,4 @@ test-results
 .doc
 .claude
 *.md
+frontend/tsconfig.json
