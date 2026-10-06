@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js'
+import { ensureDatabase } from './ensure-database.js'
 import { createDb } from './index.js'
 import { migrate, reset, rollback } from './migrate.js'
 import { resetPassword } from './reset-password.js'
@@ -12,6 +13,9 @@ async function main(): Promise<void> {
   const { db, pool } = createDb(config.databaseUrl)
   try {
     switch (command) {
+      case 'ensure-db':
+        await ensureDatabase(config.databaseUrl, new URL(config.databaseUrl).pathname.slice(1))
+        break
       case 'migrate':
         await migrate(pool, log)
         break
@@ -35,7 +39,7 @@ async function main(): Promise<void> {
       }
       default:
         throw new Error(
-          `Unknown command "${command}". Use migrate | rollback | reset | seed | reset-password <email>`
+          `Unknown command "${command}". Use ensure-db | migrate | rollback | reset | seed | reset-password <email>`
         )
     }
   } finally {
