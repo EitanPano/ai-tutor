@@ -14,6 +14,8 @@ export default defineConfig({
     {
       command: 'bun run --filter backend dev',
       cwd: '..',
+      // The backend must not query the DB at boot: globalSetup resets the e2e DB after the
+      // servers have started.
       // `/health` (not `/ready`): it must answer even if globalSetup has not created the database yet.
       url: 'http://localhost:4100/health',
       env: E2E_BACKEND_ENV,
@@ -23,7 +25,7 @@ export default defineConfig({
     {
       command: 'bun run dev --port 3100',
       url: 'http://localhost:3100/login',
-      env: { NEXT_PUBLIC_API_URL: 'http://localhost:4100' },
+      env: { NEXT_PUBLIC_API_URL: 'http://localhost:4100', NEXT_DIST_DIR: '.next-e2e' },
       reuseExistingServer: false,
       timeout: 120_000
     }

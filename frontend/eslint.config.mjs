@@ -8,6 +8,7 @@ export default defineConfig([
   ...nextTs,
   globalIgnores([
     '.next/**',
+    '.next-e2e/**',
     'next-env.d.ts',
     'src/types/api.ts',
     'playwright-report/**',
