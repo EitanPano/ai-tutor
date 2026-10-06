@@ -51,36 +51,37 @@ export function messageRouter(
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
     const ctx = await startAsk(db, auth, config, pathId(req), content)
     const requestId = String(res.locals.requestId)
-
-    res.status(200)
-    res.set({
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    })
-    res.flushHeaders()
-
     const out = eventWriter(res)
     const controller = new AbortController()
-    // A close before the response finished means the client went away.
-    res.on('close', () => {
-      if (!res.writableFinished) controller.abort()
-    })
-    const heartbeat = setInterval(() => out.comment('ping'), HEARTBEAT_MS)
     const errorEvent = (code: string, message: string) =>
       out.event('error', { error: { code, message }, requestId })
-
-    out.event('message.start', {
-      threadId: ctx.threadId,
-      userMessageId: ctx.userMessageId,
-      assistantMessageId: ctx.assistantMessageId
-    })
-
     const startedAt = Date.now()
-    const modelName = config.aiProvider === 'fake' ? 'fake' : config.aiModel
+    let heartbeat: NodeJS.Timeout | undefined
     let outcome: AskOutcome
+
+    // From here on the generation lock is held: every path, including a synchronous throw while
+    // setting up the stream, must reach `finishAsk` (which releases it) and clear the heartbeat.
     try {
+      res.status(200)
+      res.set({
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no'
+      })
+      res.flushHeaders()
+      // A close before the response finished means the client went away.
+      res.on('close', () => {
+        if (!res.writableFinished) controller.abort()
+      })
+      // The client may already be gone after the database work above: do not generate for nobody.
+      if (res.destroyed || res.socket?.destroyed) controller.abort()
+      heartbeat = setInterval(() => out.comment('ping'), HEARTBEAT_MS)
+      out.event('message.start', {
+        threadId: ctx.threadId,
+        userMessageId: ctx.userMessageId,
+        assistantMessageId: ctx.assistantMessageId
+      })
       const result = await tutor.explain(
         {
           topicName: ctx.topicName,
@@ -94,11 +95,11 @@ export function messageRouter(
     } catch (err) {
       // Log the failure, never the question or answer text.
       logger.error({ err, requestId, threadId: ctx.threadId }, 'tutor provider failed')
-      outcome = { kind: 'error', model: modelName, latencyMs: Date.now() - startedAt }
+      outcome = { kind: 'error', model: tutor.model, latencyMs: Date.now() - startedAt }
     }
 
     try {
-      await finishAsk(db, auth, ctx, outcome)
+      await finishAsk(db, auth, ctx, outcome, logger)
       if (outcome.kind === 'error') {
         errorEvent('ai_provider_error', PROVIDER_ERROR_MESSAGE)
       } else if (outcome.result.stopReason === 'refusal') {

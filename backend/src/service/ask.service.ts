@@ -2,11 +2,16 @@ import { sql } from 'kysely'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import { conflict } from '../lib/error.js'
+import type { Logger } from '../lib/logger.js'
 import type { ExplainResult, TutorTurn } from '../lib/tutor/tutor.js'
 import { ZERO_USAGE } from '../lib/tutor/tutor.js'
 import { assertAiEnabled } from './ai-guard.js'
 import { assertWithinBudget, recordAiCall } from './ai-budget.js'
-import { acquireGenerationLock, releaseGenerationLock } from './generation-lock.js'
+import {
+  acquireGenerationLock,
+  releaseGenerationLock,
+  type GenerationLockToken
+} from './generation-lock.js'
 import { ownedBy, type Auth } from './ownership.js'
 import { DEFAULT_TITLE, requireThread } from './thread.service.js'
 import { requireTopic } from './topic.service.js'
@@ -19,6 +24,7 @@ export type AskContext = {
   threadId: string
   userMessageId: string
   assistantMessageId: string
+  lockToken: GenerationLockToken
   topicName: string
   history: TutorTurn[]
 }
@@ -69,7 +75,7 @@ export async function startAsk(
     throw conflict('thread_full', 'This thread is full. Start a new thread to keep asking.')
   }
   const topic = await requireTopic(db, thread.topicId)
-  await acquireGenerationLock(db, auth)
+  const lockToken = await acquireGenerationLock(db, auth)
   try {
     const history = await buildHistory(db, auth, thread.id)
     const ids = await db.transaction().execute(async (trx) => {
@@ -110,16 +116,16 @@ export async function startAsk(
         .execute()
       return { userMessageId: user.id, assistantMessageId: assistant.id }
     })
-    return { threadId: thread.id, ...ids, topicName: topic.name, history }
+    return { threadId: thread.id, ...ids, lockToken, topicName: topic.name, history }
   } catch (err) {
-    await releaseGenerationLock(db, auth)
+    await releaseGenerationLock(db, auth, lockToken)
     throw err
   }
 }
 
 /**
- * Persists the outcome of the provider call and ALWAYS releases the generation lock, even when
- * persisting fails. Call it from a `finally`.
+ * Persists the outcome of the provider call and ALWAYS releases the generation lock. Call it once
+ * the provider finished or failed, whatever happened before.
  *
  * | outcome                 | assistant                          | user message |
  * | end_turn/stop_sequence  | text / complete / reason           | complete     |
@@ -127,38 +133,30 @@ export async function startAsk(
  * | aborted                 | partial / incomplete / aborted     | complete     |
  * | refusal                 | '' / failed / refusal              | failed       |
  * | provider error          | '' / failed / error                | failed       |
+ *
+ * The `ai_call` ledger row and the message persistence are independent writes: a persistence
+ * failure never loses the spend, and a ledger failure never loses the answer. The messages and
+ * the lock release share one transaction, so the state is atomic. If that transaction fails, a
+ * fallback marks the turn `failed`, the lock is released defensively, and the error is rethrown.
  */
 export async function finishAsk(
   db: Db,
   auth: Auth,
-  ctx: Pick<AskContext, 'userMessageId' | 'assistantMessageId'>,
-  outcome: AskOutcome
+  ctx: Pick<AskContext, 'userMessageId' | 'assistantMessageId' | 'lockToken'>,
+  outcome: AskOutcome,
+  log: Pick<Logger, 'error'>
 ): Promise<void> {
   const result = outcome.kind === 'result' ? outcome.result : undefined
   const stopReason = result ? result.stopReason : 'error'
   const failed = stopReason === 'refusal' || stopReason === 'error'
   const incomplete = stopReason === 'max_tokens' || stopReason === 'aborted'
   const status = failed ? 'failed' : incomplete ? 'incomplete' : 'complete'
+  const usage = result?.usage ?? ZERO_USAGE
   try {
-    await db.transaction().execute(async (trx) => {
-      await trx
-        .updateTable('message')
-        .set({ content: failed ? '' : (result?.text ?? ''), status, stop_reason: stopReason })
-        .where('id', '=', ctx.assistantMessageId)
-        .where(ownedBy('message', auth))
-        .execute()
-      if (failed) {
-        await trx
-          .updateTable('message')
-          .set({ status: 'failed' })
-          .where('id', '=', ctx.userMessageId)
-          .where(ownedBy('message', auth))
-          .execute()
-      }
-      const usage = result?.usage ?? ZERO_USAGE
-      await recordAiCall(trx, auth, {
+    try {
+      await recordAiCall(db, auth, {
         kind: 'explain',
-        model: result?.model ?? (outcome.kind === 'error' ? outcome.model : 'unknown'),
+        model: outcome.kind === 'result' ? outcome.result.model : outcome.model,
         input_token: usage.inputTokens,
         output_token: usage.outputTokens,
         cache_read_token: usage.cacheReadTokens,
@@ -166,8 +164,59 @@ export async function finishAsk(
         refusal_category: result?.refusalCategory ?? null,
         latency_ms: Math.max(0, Math.round(outcome.latencyMs))
       })
-    })
+    } catch (err) {
+      log.error({ err, userMessageId: ctx.userMessageId }, 'recording the ai_call failed')
+    }
+    try {
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable('message')
+          .set({ content: failed ? '' : (result?.text ?? ''), status, stop_reason: stopReason })
+          .where('id', '=', ctx.assistantMessageId)
+          .where(ownedBy('message', auth))
+          .execute()
+        if (failed) {
+          await trx
+            .updateTable('message')
+            .set({ status: 'failed' })
+            .where('id', '=', ctx.userMessageId)
+            .where(ownedBy('message', auth))
+            .execute()
+        }
+        await releaseGenerationLock(trx, auth, ctx.lockToken)
+      })
+    } catch (err) {
+      log.error({ err, userMessageId: ctx.userMessageId }, 'persisting the outcome failed')
+      await markTurnFailed(db, auth, ctx, log)
+      throw err
+    }
   } finally {
-    await releaseGenerationLock(db, auth)
+    // Covers every path where the transaction did not commit; a no-op after it did.
+    await releaseGenerationLock(db, auth, ctx.lockToken)
+  }
+}
+
+/** Fallback after a persistence failure: never leave the turn looking in flight. */
+async function markTurnFailed(
+  db: Db,
+  auth: Auth,
+  ctx: Pick<AskContext, 'userMessageId' | 'assistantMessageId'>,
+  log: Pick<Logger, 'error'>
+): Promise<void> {
+  try {
+    await db
+      .updateTable('message')
+      .set({ content: '', status: 'failed', stop_reason: 'error' })
+      .where('id', '=', ctx.assistantMessageId)
+      .where(ownedBy('message', auth))
+      .execute()
+    await db
+      .updateTable('message')
+      .set({ status: 'failed', stop_reason: 'error' })
+      .where('id', '=', ctx.userMessageId)
+      .where(ownedBy('message', auth))
+      .execute()
+  } catch (err) {
+    log.error({ err, userMessageId: ctx.userMessageId }, 'marking the turn failed also failed')
   }
 }

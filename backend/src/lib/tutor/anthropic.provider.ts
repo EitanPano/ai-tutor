@@ -16,6 +16,8 @@ export const MAX_OUTPUT_TOKENS = 2048
 export type AnthropicProviderOptions = {
   apiKey: string
   model: string
+  /** SDK retries on transient errors (default 2). */
+  maxRetries?: number
   /** Injectable for tests: the real SDK runs against canned SSE responses. */
   fetch?: typeof globalThis.fetch
 }
@@ -55,13 +57,14 @@ function refusalCategoryOf(message: object): string | null {
 export function createAnthropicProvider(options: AnthropicProviderOptions): TutorProvider {
   const client = new Anthropic({
     apiKey: options.apiKey,
-    maxRetries: 2,
+    maxRetries: options.maxRetries ?? 2,
     timeout: 60_000,
     ...(options.fetch ? { fetch: options.fetch } : {})
   })
   const model = options.model
 
   return {
+    model,
     async explain(input: ExplainInput, onDelta): Promise<ExplainResult> {
       let text = ''
       let seenUsage: TutorUsage = ZERO_USAGE

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 import { TutorProviderError, type ExplainInput } from '../../src/lib/tutor/tutor.js'
 
@@ -111,22 +111,43 @@ describe('FakeTutorProvider', () => {
     expect(result.stopReason).toBe('max_tokens')
   })
 
-  it('[fake:slow] waits between deltas and honours an abort with the text so far', async () => {
-    const controller = new AbortController()
-    const fake = new FakeTutorProvider({ delayMs: 0 })
-    const deltas: string[] = []
-    const started = Date.now()
-    const result = await fake.explain(
-      input('slow [fake:slow]', { signal: controller.signal }),
-      (text) => {
-        deltas.push(text)
-        if (deltas.length === 1) setTimeout(() => controller.abort(), 20)
-      }
-    )
-    expect(Date.now() - started).toBeLessThan(300)
-    expect(result.stopReason).toBe('aborted')
-    expect(result.text).toBe(deltas.join(''))
-    expect(result.text).not.toBe('')
+  describe('[fake:slow]', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('waits 400 ms between deltas', async () => {
+      vi.useFakeTimers()
+      const fake = new FakeTutorProvider({ delayMs: 0 })
+      const deltas: string[] = []
+      const pending = fake.explain(input('slow [fake:slow]'), (text) => deltas.push(text))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(deltas).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(399)
+      expect(deltas).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(deltas).toHaveLength(2)
+      await vi.runAllTimersAsync()
+      expect((await pending).stopReason).toBe('end_turn')
+    })
+
+    it('ends the wait on abort and returns the text so far, without any timer firing', async () => {
+      vi.useFakeTimers()
+      const controller = new AbortController()
+      const fake = new FakeTutorProvider({ delayMs: 0 })
+      const deltas: string[] = []
+      const pending = fake.explain(
+        input('slow [fake:slow]', { signal: controller.signal }),
+        (text) => deltas.push(text)
+      )
+      await vi.advanceTimersByTimeAsync(0)
+      controller.abort()
+      // No timer is advanced: an abort-unaware wait would leave this promise pending forever.
+      const result = await pending
+      expect(deltas).toHaveLength(1)
+      expect(result.stopReason).toBe('aborted')
+      expect(result.text).toBe(deltas.join(''))
+    })
   })
 
   it('returns aborted with empty text when the signal is already aborted', async () => {

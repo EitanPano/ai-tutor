@@ -76,7 +76,10 @@ function sseResponse(frames: Frame[]): Response {
 
 type Captured = { body: Record<string, unknown> }
 
-function providerWith(respond: (init?: RequestInit) => Response | Promise<Response>) {
+function providerWith(
+  respond: (init?: RequestInit) => Response | Promise<Response>,
+  maxRetries = 0
+) {
   const captured: Captured = { body: {} }
   const fetchStub = async (_url: unknown, init?: RequestInit) => {
     captured.body = JSON.parse(init?.body as string) as Record<string, unknown>
@@ -85,6 +88,7 @@ function providerWith(respond: (init?: RequestInit) => Response | Promise<Respon
   const provider = createAnthropicProvider({
     apiKey: 'test-key',
     model: 'claude-haiku-4-5',
+    maxRetries,
     fetch: fetchStub
   })
   return { provider, captured }
@@ -180,7 +184,7 @@ describe('anthropic provider', () => {
     const error = await provider.explain(baseInput(), () => {}).catch((err: unknown) => err)
     expect(error).toBeInstanceOf(TutorProviderError)
     expect((error as Error).message).not.toContain('SECRET-DETAIL')
-  }, 20_000)
+  })
 
   it('throws TutorProviderError on a 400', async () => {
     const { provider } = providerWith(

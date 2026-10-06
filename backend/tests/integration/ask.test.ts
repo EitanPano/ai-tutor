@@ -89,8 +89,31 @@ async function aiCalls(userId: string) {
     .execute()
 }
 
+/**
+ * Waits until the background turn of `userId` has fully settled: the lock is released and the
+ * ai_call row exists. Both are written by the server after the client is gone, so a test must not
+ * assert on them (or let the next test truncate the tables) before this returns.
+ */
+async function waitSettled(userId: string, expectedCalls = 1): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if ((await lockOf(userId)) === null && (await aiCalls(userId)).length >= expectedCalls) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('the abandoned turn never settled')
+}
+
+/** Inserts an ai_call at the middle of the user's current local day, so midnight cannot flip it. */
+async function insertSpend(userId: string, inputToken: number, outputToken: number) {
+  await sql`
+    INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+      stop_reason, latency_ms, created_at)
+    SELECT id, 'explain', 'fake', ${inputToken}, ${outputToken}, 0, 'end_turn', 1,
+      (date_trunc('day', now() AT TIME ZONE time_zone) + interval '12 hours') AT TIME ZONE time_zone
+    FROM app_user WHERE id = ${userId}`.execute(ctx.db)
+}
+
 /** Opens a real SSE request with `[fake:slow]` and returns once the first delta has arrived. */
-async function openSlowStream(cookie: string, threadId: string) {
+async function openSlowStream(cookie: string, threadId: string, userId: string) {
   const server = ctx.app.listen(0)
   const { port } = server.address() as AddressInfo
   const controller = new AbortController()
@@ -115,12 +138,19 @@ async function openSlowStream(cookie: string, threadId: string) {
   }
   expect(seen).toContain('event: delta')
   return {
-    /** Drops the connection like a closed browser tab, then stops the server. */
+    /**
+     * Drops the connection like a closed browser tab, waits for the server to finish persisting
+     * the abandoned turn, then stops the server.
+     */
     async close() {
-      controller.abort()
-      await reader.cancel().catch(() => {})
-      server.closeAllConnections()
-      await new Promise((resolve) => server.close(resolve))
+      try {
+        controller.abort()
+        await reader.cancel().catch(() => {})
+        await waitSettled(userId)
+      } finally {
+        server.closeAllConnections()
+        await new Promise((resolve) => server.close(resolve))
+      }
     },
     abortOnly() {
       controller.abort()
@@ -200,10 +230,14 @@ describe('POST /api/thread/:id/message streaming (AC04)', () => {
   it('keeps a title the user already chose and bumps updated_at', async () => {
     const session = await signUp(client)
     const thread = await newThread(session.cookie, { title: 'My title' })
+    await sql`UPDATE thread SET updated_at = now() - interval '1 hour' WHERE id = ${thread.id}`.execute(
+      ctx.db
+    )
+    const before = await detail(session.cookie, thread.id)
     await ask(session.cookie, thread.id, 'hello')
     const after = await detail(session.cookie, thread.id)
     expect(after.thread.title).toBe('My title')
-    expect(Date.parse(after.thread.updatedAt)).toBeGreaterThan(Date.parse(thread.updatedAt))
+    expect(Date.parse(after.thread.updatedAt)).toBeGreaterThan(Date.parse(before.thread.updatedAt))
   })
 
   it('does not log or return the question to other users', async () => {
@@ -240,19 +274,7 @@ describe('follow-up context (AC05)', () => {
 describe('limits and locks (AC09)', () => {
   it('answers 429 ai_budget_exceeded once today tokens reach the budget', async () => {
     const { session, threadId } = await setup()
-    await ctx.db
-      .insertInto('ai_call')
-      .values({
-        user_id: session.user.id,
-        kind: 'explain',
-        model: 'fake',
-        input_token: ctx.config.aiDailyTokenBudget - 10,
-        output_token: 10,
-        cache_read_token: 0,
-        stop_reason: 'end_turn',
-        latency_ms: 1
-      })
-      .execute()
+    await insertSpend(session.user.id, ctx.config.aiDailyTokenBudget - 10, 10)
     const { res } = await ask(session.cookie, threadId, 'hello')
     expect(res.status).toBe(429)
     expectContract(res, 'post', '/api/thread/{id}/message')
@@ -325,7 +347,7 @@ describe('limits and locks (AC09)', () => {
 
   it('blocks a second concurrent question while the first is streaming', async () => {
     const { session, threadId } = await setup()
-    const stream = await openSlowStream(session.cookie, threadId)
+    const stream = await openSlowStream(session.cookie, threadId, session.user.id)
     try {
       const { res } = await ask(session.cookie, threadId, 'second')
       expect(res.status).toBe(409)
@@ -448,30 +470,55 @@ describe('failure outcomes (AC10)', () => {
 describe('client disconnect', () => {
   it('persists the partial answer as incomplete/aborted, releases the lock and records the call', async () => {
     const { session, threadId } = await setup()
-    const stream = await openSlowStream(session.cookie, threadId)
+    const stream = await openSlowStream(session.cookie, threadId, session.user.id)
     try {
       await stream.abortOnly()
-      let message: { status: string; stop_reason: string | null; content: string } | undefined
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        message = await ctx.db
-          .selectFrom('message')
-          .select(['status', 'stop_reason', 'content'])
-          .where('thread_id', '=', threadId)
-          .where('role', '=', 'assistant')
-          .executeTakeFirstOrThrow()
-        if (message.stop_reason !== null) break
-        await new Promise((resolve) => setTimeout(resolve, 50))
-      }
+      await waitSettled(session.user.id)
+      const message = await ctx.db
+        .selectFrom('message')
+        .select(['status', 'stop_reason', 'content'])
+        .where('thread_id', '=', threadId)
+        .where('role', '=', 'assistant')
+        .executeTakeFirstOrThrow()
       expect(message).toMatchObject({ status: 'incomplete', stop_reason: 'aborted' })
-      expect(message?.content).not.toBe('')
+      expect(message.content).not.toBe('')
       const { messages } = await detail(session.cookie, threadId)
       expect(messages[0]?.status).toBe('complete')
-      // The lock is released in the same step that records the call.
       expect(await lockOf(session.user.id)).toBeNull()
       expect(await aiCalls(session.user.id)).toMatchObject([{ stop_reason: 'aborted' }])
     } finally {
       await stream.close()
     }
+  })
+})
+
+describe('persistence failure', () => {
+  it('marks the turn failed, keeps the ai_call and releases the lock when persisting the outcome fails', async () => {
+    const { session, threadId } = await setup()
+    // Break only the success write: the failure fallback (status failed) still goes through.
+    await sql`
+      CREATE FUNCTION fail_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'forced persistence failure'; END $$`.execute(ctx.db)
+    await sql`
+      CREATE TRIGGER fail_complete BEFORE UPDATE ON message
+      FOR EACH ROW WHEN (NEW.status = 'complete' AND NEW.role = 'assistant')
+      EXECUTE FUNCTION fail_complete()`.execute(ctx.db)
+    try {
+      const { res, events } = await ask(session.cookie, threadId, 'hello')
+      expect(res.status).toBe(200)
+      expect(events.at(-1)?.event).toBe('error')
+      expect((events.at(-1)?.data as ErrorBody).error.code).toBe('internal_error')
+    } finally {
+      await sql`DROP TRIGGER fail_complete ON message`.execute(ctx.db)
+      await sql`DROP FUNCTION fail_complete()`.execute(ctx.db)
+    }
+    const { messages } = await detail(session.cookie, threadId)
+    expect(messages.map((m) => [m.role, m.status, m.stopReason])).toEqual([
+      ['user', 'failed', 'error'],
+      ['assistant', 'failed', 'error']
+    ])
+    expect(await lockOf(session.user.id)).toBeNull()
+    expect(await aiCalls(session.user.id)).toMatchObject([{ stop_reason: 'end_turn' }])
   })
 })
 

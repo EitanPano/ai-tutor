@@ -83,6 +83,7 @@ const sleep = (ms: number, signal: AbortSignal) =>
 
 export class FakeTutorProvider implements TutorProvider {
   /** Every call's input without the signal, so tests can assert history and prefixes. */
+  readonly model = 'fake'
   readonly calls: Omit<ExplainInput, 'signal'>[] = []
   private readonly delayMs: number
 

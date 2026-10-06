@@ -16,6 +16,8 @@ export type ExplainResult = {
 }
 
 export interface TutorProvider {
+  /** Model name recorded in the `ai_call` ledger, including for failed calls. */
+  readonly model: string
   /** Streams the answer through `onDelta` and resolves once the model stops. */
   explain(input: ExplainInput, onDelta: (text: string) => void): Promise<ExplainResult>
 }
