@@ -1,0 +1,69 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type pg from 'pg'
+import { afterAll, describe, expect, it } from 'vitest'
+import { createDb } from '../../src/lib/db/index.js'
+import { migrate, reset, rollback } from '../../src/lib/db/migrate.js'
+import { SCHEMA_CHECK_DATABASE_URL, TEST_DATABASE_URL } from '../global-setup.js'
+
+const SCHEMA_SQL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../db/schema.sql')
+
+const test = createDb(TEST_DATABASE_URL)
+const check = createDb(SCHEMA_CHECK_DATABASE_URL)
+
+afterAll(async () => {
+  await test.db.destroy()
+  await check.db.destroy()
+})
+
+async function snapshot(pool: pg.Pool) {
+  const columns = await pool.query(`
+    SELECT table_name, column_name, data_type, udt_name, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name <> 'schema_migration'
+    ORDER BY table_name, column_name`)
+  const indexes = await pool.query(`
+    SELECT tablename, indexdef FROM pg_indexes
+    WHERE schemaname = 'public' AND tablename <> 'schema_migration'
+    ORDER BY tablename, indexdef`)
+  const constraints = await pool.query(`
+    SELECT conrelid::regclass::text AS table_name, conname, pg_get_constraintdef(oid) AS def
+    FROM pg_constraint
+    WHERE connamespace = 'public'::regnamespace AND conrelid::regclass::text <> 'schema_migration'
+    ORDER BY table_name, conname`)
+  const extensions = await pool.query('SELECT extname FROM pg_extension ORDER BY extname')
+  return {
+    columns: columns.rows,
+    indexes: indexes.rows,
+    constraints: constraints.rows,
+    extensions: extensions.rows
+  }
+}
+
+describe('migrations', () => {
+  it('applies up, rolls back everything, and applies up again', async () => {
+    await reset(test.pool)
+    await rollback(test.pool, 1000)
+    const { rows: afterRollback } = await test.pool.query('SELECT name FROM schema_migration')
+    expect(afterRollback).toEqual([])
+    const applied = await migrate(test.pool)
+    expect(applied.length).toBeGreaterThan(0)
+    expect(await migrate(test.pool)).toEqual([])
+  })
+
+  it('rejects a migration file without a down section', async () => {
+    const { parseMigration } = await import('../../src/lib/db/migrate.js')
+    expect(() => parseMigration('x.sql', '-- migrate:up\nSELECT 1;')).toThrow(/migrate:down/)
+  })
+})
+
+describe('schema.sql', () => {
+  it('matches the schema produced by the migrations', async () => {
+    await reset(test.pool)
+    await check.pool.query('DROP SCHEMA public CASCADE')
+    await check.pool.query('CREATE SCHEMA public')
+    await check.pool.query(await readFile(SCHEMA_SQL, 'utf8'))
+    expect(await snapshot(check.pool)).toEqual(await snapshot(test.pool))
+  })
+})

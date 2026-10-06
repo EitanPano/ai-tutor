@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest'
+import { loadConfig } from '../../src/lib/config.js'
+
+describe('loadConfig', () => {
+  it('applies development defaults for an empty environment', () => {
+    const config = loadConfig({})
+    expect(config).toMatchObject({
+      nodeEnv: 'development',
+      port: 4000,
+      databaseUrl: 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor',
+      frontendUrl: 'http://localhost:3000',
+      logLevel: 'info',
+      aiProvider: 'fake',
+      aiModel: 'claude-haiku-4-5',
+      aiDailyTokenBudget: 50000,
+      aiEnabled: true
+    })
+    expect(config.anthropicApiKey).toBeUndefined()
+  })
+
+  it('refuses AI_PROVIDER=fake in production', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://x',
+        FRONTEND_URL: 'https://app.example.com',
+        AI_PROVIDER: 'fake'
+      })
+    ).toThrow(/AI_PROVIDER/)
+  })
+
+  it('requires DATABASE_URL in production', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        FRONTEND_URL: 'https://app.example.com',
+        AI_PROVIDER: 'anthropic',
+        ANTHROPIC_API_KEY: 'k'
+      })
+    ).toThrow(/DATABASE_URL/)
+  })
+
+  it('requires ANTHROPIC_API_KEY when AI_PROVIDER=anthropic', () => {
+    expect(() => loadConfig({ AI_PROVIDER: 'anthropic' })).toThrow(/ANTHROPIC_API_KEY/)
+  })
+
+  it('lists every invalid variable without echoing secret values', () => {
+    const secret = 'sk-super-secret'
+    let message = ''
+    try {
+      loadConfig({ PORT: 'abc', AI_DAILY_TOKEN_BUDGET: '-1', ANTHROPIC_API_KEY: secret })
+    } catch (err) {
+      message = (err as Error).message
+    }
+    expect(message).toMatch(/PORT/)
+    expect(message).toMatch(/AI_DAILY_TOKEN_BUDGET/)
+    expect(message).not.toContain(secret)
+  })
+
+  it('parses AI_ENABLED=false to false', () => {
+    expect(loadConfig({ AI_ENABLED: 'false' }).aiEnabled).toBe(false)
+  })
+})
