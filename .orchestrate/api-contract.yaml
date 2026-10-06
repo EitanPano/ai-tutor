@@ -63,6 +63,8 @@ paths:
                   status:
                     type: string
                     const: ok
+        '500':
+          $ref: '#/components/responses/InternalError'
   /ready:
     get:
       tags: [system]
@@ -87,6 +89,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/user:
     post:
       tags: [auth]
@@ -119,6 +123,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
     patch:
       tags: [auth]
       summary: Update the signed-in user's profile
@@ -142,6 +150,10 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/session:
     post:
       tags: [auth]
@@ -180,6 +192,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
     get:
       tags: [auth]
       summary: Get the current session's user
@@ -193,6 +209,8 @@ paths:
                 $ref: '#/components/schemas/UserResponse'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags: [auth]
       summary: Log out
@@ -207,6 +225,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/topic:
     get:
       tags: [topic]
@@ -220,6 +240,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TopicListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/thread:
     get:
       tags: [thread]
@@ -251,6 +273,8 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags: [thread]
       summary: Create a thread
@@ -275,6 +299,10 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/thread/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -293,6 +321,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     patch:
       tags: [thread]
       summary: Rename or re-topic a thread
@@ -318,6 +348,10 @@ paths:
           $ref: '#/components/responses/ForbiddenOrigin'
         '404':
           $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags: [thread]
       summary: Delete a thread
@@ -331,6 +365,8 @@ paths:
           $ref: '#/components/responses/ForbiddenOrigin'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/thread/{id}/message:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -387,6 +423,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/thread/{id}/guide:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -437,6 +477,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/guide/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -455,6 +497,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/guide/{id}/step/{stepId}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -488,6 +532,10 @@ paths:
           $ref: '#/components/responses/ForbiddenOrigin'
         '404':
           $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/quiz:
     post:
       tags: [quiz]
@@ -544,6 +592,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/quiz/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -562,6 +614,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/quiz/{id}/attempt:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -596,6 +650,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/quiz/{id}/attempt/{attemptId}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -619,6 +677,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/progress:
     get:
       tags: [progress]
@@ -633,6 +693,8 @@ paths:
                 $ref: '#/components/schemas/ProgressResponse'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   securitySchemes:
     cookieAuth:
@@ -667,6 +729,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     ValidationFailed:
       description: Invalid input (`validation_failed`, `malformed_json`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Request body exceeds the size limit (`payload_too_large`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server error (`internal_error`)
       content:
         application/json:
           schema:

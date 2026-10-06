@@ -62,4 +62,4 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error

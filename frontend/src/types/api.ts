@@ -639,6 +639,24 @@ export interface components {
         'application/json': components['schemas']['ErrorResponse']
       }
     }
+    /** @description Request body exceeds the size limit (`payload_too_large`) */
+    PayloadTooLarge: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/json': components['schemas']['ErrorResponse']
+      }
+    }
+    /** @description Unexpected server error (`internal_error`) */
+    InternalError: {
+      headers: {
+        [name: string]: unknown
+      }
+      content: {
+        'application/json': components['schemas']['ErrorResponse']
+      }
+    }
     /** @description Foreign Origin on a state-changing request (`forbidden_origin`) */
     ForbiddenOrigin: {
       headers: {
@@ -683,6 +701,7 @@ export interface operations {
           }
         }
       }
+      500: components['responses']['InternalError']
     }
   }
   getReady: {
@@ -706,6 +725,7 @@ export interface operations {
           }
         }
       }
+      500: components['responses']['InternalError']
       /** @description The database is not reachable (`db_unavailable`) */
       503: {
         headers: {
@@ -751,6 +771,8 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      413: components['responses']['PayloadTooLarge']
+      500: components['responses']['InternalError']
     }
   }
   updateUser: {
@@ -778,6 +800,8 @@ export interface operations {
       400: components['responses']['ValidationFailed']
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
+      413: components['responses']['PayloadTooLarge']
+      500: components['responses']['InternalError']
     }
   }
   getSession: {
@@ -799,6 +823,7 @@ export interface operations {
         }
       }
       401: components['responses']['Unauthenticated']
+      500: components['responses']['InternalError']
     }
   }
   createSession: {
@@ -835,6 +860,7 @@ export interface operations {
         }
       }
       403: components['responses']['ForbiddenOrigin']
+      413: components['responses']['PayloadTooLarge']
       /** @description Too many login attempts (`rate_limited`) */
       429: {
         headers: {
@@ -844,6 +870,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      500: components['responses']['InternalError']
     }
   }
   deleteSession: {
@@ -865,6 +892,7 @@ export interface operations {
       }
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
+      500: components['responses']['InternalError']
     }
   }
   listTopics: {
@@ -885,6 +913,7 @@ export interface operations {
           'application/json': components['schemas']['TopicListResponse']
         }
       }
+      500: components['responses']['InternalError']
     }
   }
   listThreads: {
@@ -911,6 +940,7 @@ export interface operations {
       }
       400: components['responses']['ValidationFailed']
       401: components['responses']['Unauthenticated']
+      500: components['responses']['InternalError']
     }
   }
   createThread: {
@@ -938,6 +968,8 @@ export interface operations {
       400: components['responses']['ValidationFailed']
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
+      413: components['responses']['PayloadTooLarge']
+      500: components['responses']['InternalError']
     }
   }
   getThread: {
@@ -963,6 +995,7 @@ export interface operations {
       }
       401: components['responses']['Unauthenticated']
       404: components['responses']['NotFound']
+      500: components['responses']['InternalError']
     }
   }
   deleteThread: {
@@ -987,6 +1020,7 @@ export interface operations {
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
       404: components['responses']['NotFound']
+      500: components['responses']['InternalError']
     }
   }
   updateThread: {
@@ -1018,6 +1052,8 @@ export interface operations {
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
       404: components['responses']['NotFound']
+      413: components['responses']['PayloadTooLarge']
+      500: components['responses']['InternalError']
     }
   }
   askQuestion: {
@@ -1058,6 +1094,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      413: components['responses']['PayloadTooLarge']
       /** @description AI usage budget exhausted (`ai_budget_exceeded`) */
       429: {
         headers: {
@@ -1067,6 +1104,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      500: components['responses']['InternalError']
       /** @description AI is unavailable (`ai_unavailable`) */
       503: {
         headers: {
@@ -1129,6 +1167,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      500: components['responses']['InternalError']
       /** @description The AI output was invalid or the provider failed (`ai_invalid_output`, `ai_provider_error`) */
       502: {
         headers: {
@@ -1172,6 +1211,7 @@ export interface operations {
       }
       401: components['responses']['Unauthenticated']
       404: components['responses']['NotFound']
+      500: components['responses']['InternalError']
     }
   }
   updateStep: {
@@ -1204,6 +1244,8 @@ export interface operations {
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
       404: components['responses']['NotFound']
+      413: components['responses']['PayloadTooLarge']
+      500: components['responses']['InternalError']
     }
   }
   createQuiz: {
@@ -1241,6 +1283,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      413: components['responses']['PayloadTooLarge']
       /** @description The model refused (`ai_refused`) */
       422: {
         headers: {
@@ -1259,6 +1302,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      500: components['responses']['InternalError']
       /** @description The AI output was invalid or the provider failed (`ai_invalid_output`, `ai_provider_error`) */
       502: {
         headers: {
@@ -1302,6 +1346,7 @@ export interface operations {
       }
       401: components['responses']['Unauthenticated']
       404: components['responses']['NotFound']
+      500: components['responses']['InternalError']
     }
   }
   submitAttempt: {
@@ -1333,6 +1378,7 @@ export interface operations {
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
       404: components['responses']['NotFound']
+      413: components['responses']['PayloadTooLarge']
       /** @description Not every item was answered (`attempt_incomplete`) */
       422: {
         headers: {
@@ -1342,6 +1388,7 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      500: components['responses']['InternalError']
     }
   }
   getAttempt: {
@@ -1368,6 +1415,7 @@ export interface operations {
       }
       401: components['responses']['Unauthenticated']
       404: components['responses']['NotFound']
+      500: components['responses']['InternalError']
     }
   }
   getProgress: {
@@ -1389,6 +1437,7 @@ export interface operations {
         }
       }
       401: components['responses']['Unauthenticated']
+      500: components['responses']['InternalError']
     }
   }
 }
