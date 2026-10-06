@@ -1,7 +1,7 @@
 import { sql } from 'kysely'
 import type { Db } from '../lib/db/index.js'
 import type { MessageRow } from '../lib/db/schema.js'
-import { badRequest } from '../lib/error.js'
+import { badRequest, conflict } from '../lib/error.js'
 import { ownedBy, requireFound, type Auth } from './ownership.js'
 import { requireTopic } from './topic.service.js'
 
@@ -39,7 +39,7 @@ export type ThreadDetailDto = {
     doneCount: number
     createdAt: string
   }[]
-  /** Filled by the quiz task; typed to the contract's QuizSummary. */
+  /** The contract's QuizSummary, newest first. */
   quizzes: {
     id: string
     difficulty: 'easy' | 'medium' | 'hard'
@@ -117,6 +117,25 @@ export async function requireThread(
 ): Promise<{ id: string; topicId: string; title: string; messageCount: number }> {
   const row = await loadThread(db, auth, id)
   return { id: row.id, topicId: row.topic_id, title: row.title, messageCount: row.message_count }
+}
+
+/** The thread needs at least one answer to build a guide from. */
+export async function assertThreadHasAnswer(db: Db, auth: Auth, threadId: string): Promise<void> {
+  const row = await db
+    .selectFrom('message')
+    .select('id')
+    .where('thread_id', '=', threadId)
+    .where(ownedBy('message', auth))
+    .where('role', '=', 'assistant')
+    .where('status', '=', 'complete')
+    .limit(1)
+    .executeTakeFirst()
+  if (!row) {
+    throw conflict(
+      'thread_empty',
+      'Ask a question first, then build a guide or quiz from the answer.'
+    )
+  }
 }
 
 export async function createThread(
@@ -249,7 +268,32 @@ export async function getThreadDetail(db: Db, auth: Auth, id: string): Promise<T
       doneCount: row.done_count,
       createdAt: row.created_at.toISOString()
     })),
-    quizzes: []
+    quizzes: (
+      await db
+        .selectFrom('quiz')
+        .select([
+          'quiz.id',
+          'quiz.difficulty',
+          'quiz.created_at',
+          sql<number>`(SELECT count(*)::int FROM quiz_item WHERE quiz_item.quiz_id = quiz.id)`.as(
+            'item_count'
+          ),
+          sql<number | null>`(
+            SELECT max(quiz_attempt.score) FROM quiz_attempt WHERE quiz_attempt.quiz_id = quiz.id
+          )`.as('best_score')
+        ])
+        .where('quiz.thread_id', '=', thread.id)
+        .where(ownedBy('quiz', auth))
+        .orderBy('quiz.created_at', 'desc')
+        .orderBy('quiz.id', 'desc')
+        .execute()
+    ).map((row) => ({
+      id: row.id,
+      difficulty: row.difficulty,
+      itemCount: row.item_count,
+      bestScore: row.best_score,
+      createdAt: row.created_at.toISOString()
+    }))
   }
 }
 

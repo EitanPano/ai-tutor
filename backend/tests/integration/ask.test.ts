@@ -22,7 +22,7 @@ type Session = Awaited<ReturnType<typeof signUp>>
 
 beforeEach(async () => {
   await truncateAll(ctx.db)
-  ctx.tutor.calls.length = 0
+  ctx.tutor.reset()
 })
 afterAll(() => ctx.close())
 

@@ -249,20 +249,4 @@ describe('DELETE /api/thread/:id', () => {
   })
 })
 
-describe('ownership (AC03)', () => {
-  it('answers 404, never 403, when another user touches the thread', async () => {
-    const a = await signUp(client)
-    const b = await signUp(client)
-    const thread = await newThread(a.cookie)
-    const path = `/api/thread/${thread.id}`
-    const get = await client.get(path).set('Cookie', b.cookie)
-    const patch = await client.patch(path).set('Cookie', b.cookie).send({ title: 'mine now' })
-    const del = await client.delete(path).set('Cookie', b.cookie)
-    expect([get.status, patch.status, del.status]).toEqual([404, 404, 404])
-    expectContract(get, 'get', '/api/thread/{id}')
-    expectContract(patch, 'patch', '/api/thread/{id}')
-    expectContract(del, 'delete', '/api/thread/{id}')
-    const still = await client.get(path).set('Cookie', a.cookie)
-    expect((still.body as { thread: ThreadBody }).thread.title).toBe('New thread')
-  })
-})
+// Cross-user ownership (AC03) is proven in ownership.test.ts.

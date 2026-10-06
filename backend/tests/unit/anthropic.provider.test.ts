@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createAnthropicProvider } from '../../src/lib/tutor/anthropic.provider.js'
 import { EXPLAIN_SYSTEM_PROMPT_V1 } from '../../src/lib/tutor/prompt/explain.v1.js'
 import { GUIDE_SYSTEM_PROMPT_V1 } from '../../src/lib/tutor/prompt/guide.v1.js'
+import { QUIZ_SYSTEM_PROMPT_V1 } from '../../src/lib/tutor/prompt/quiz.v1.js'
 import { TutorProviderError } from '../../src/lib/tutor/tutor.js'
 
 type Frame = [event: string, data: unknown]
@@ -392,5 +393,91 @@ describe('anthropic provider generateGuide', () => {
       expect(body).not.toHaveProperty(key)
     }
     expect(body.output_config).not.toHaveProperty('effort')
+  })
+})
+
+const QUIZ = {
+  items: [1, 2, 3, 4, 5].map((n) => ({
+    prompt: `Question ${n}`,
+    choices: ['a', 'b', 'c', 'd'],
+    answerIndex: n % 4,
+    explanation: `Because ${n}`
+  }))
+}
+
+describe('anthropic provider generateQuiz', () => {
+  it('returns the parsed output, usage and model', async () => {
+    const { provider } = providerWith(() => jsonMessage(JSON.stringify(QUIZ)))
+    const result = await provider.generateQuiz({ ...guideInput, difficulty: 'easy' })
+    expect(result).toEqual({
+      output: QUIZ,
+      stopReason: 'end_turn',
+      refusalCategory: null,
+      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4 },
+      model: 'claude-haiku-4-5'
+    })
+  })
+
+  it('maps a refusal, a truncation and non-JSON text to a null output', async () => {
+    const input = { ...guideInput, difficulty: 'easy' as const }
+    const refusal = providerWith(() =>
+      jsonMessage('', 'refusal', { stop_details: { type: 'refusal', category: 'cyber' } })
+    )
+    expect(await refusal.provider.generateQuiz(input)).toMatchObject({
+      output: null,
+      stopReason: 'refusal',
+      refusalCategory: 'cyber'
+    })
+    const truncated = providerWith(() => jsonMessage(JSON.stringify(QUIZ), 'max_tokens'))
+    expect(await truncated.provider.generateQuiz(input)).toMatchObject({
+      output: null,
+      stopReason: 'max_tokens'
+    })
+    const text = providerWith(() => jsonMessage('not json'))
+    expect(await text.provider.generateQuiz(input)).toMatchObject({ output: null })
+  })
+
+  it('throws TutorProviderError on a 500 without leaking the provider payload', async () => {
+    const { provider } = providerWith(
+      () =>
+        new Response(
+          JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'SECRET-DETAIL' } }),
+          { status: 500, headers: { 'content-type': 'application/json' } }
+        )
+    )
+    const error = await provider
+      .generateQuiz({ ...guideInput, difficulty: 'easy' })
+      .catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(TutorProviderError)
+    expect((error as Error).message).not.toContain('SECRET-DETAIL')
+  })
+
+  it('sends the structured-output request with the history and the difficulty turn', async () => {
+    const { provider, captured } = providerWith(() => jsonMessage(JSON.stringify(QUIZ)))
+    await provider.generateQuiz({ ...guideInput, difficulty: 'hard' })
+    const body = captured.body
+    expect(body.max_tokens).toBe(4096)
+    expect(body).not.toHaveProperty('stream')
+    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body.system).toEqual([{ type: 'text', text: QUIZ_SYSTEM_PROMPT_V1 }])
+    expect(body.messages).toEqual([
+      { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },
+      { role: 'assistant', content: 'Strict Mode.' },
+      { role: 'user', content: 'Write a hard quiz on this conversation.' }
+    ])
+    const format = (body.output_config as { format: { type: string; schema: object } }).format
+    expect(format.type).toBe('json_schema')
+    expect(format.schema).toMatchObject({ type: 'object', required: ['items'] })
+    for (const key of ['thinking', 'effort', 'temperature', 'output_format']) {
+      expect(body).not.toHaveProperty(key)
+    }
+  })
+
+  it('sends only the Topic-prefixed request for a topic-only quiz', async () => {
+    const { provider, captured } = providerWith(() => jsonMessage(JSON.stringify(QUIZ)))
+    await provider.generateQuiz({ topicName: 'SQL', difficulty: 'easy', history: null })
+    expect(captured.body.messages).toEqual([
+      { role: 'user', content: 'Topic: SQL\n\nWrite a easy quiz about SQL.' }
+    ])
   })
 })

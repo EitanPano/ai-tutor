@@ -1303,6 +1303,8 @@ components:
           format: date-time
         items:
           type: array
+          minItems: 5
+          maxItems: 5
           items:
             $ref: '#/components/schemas/GradedItem'
     AttemptResponse:

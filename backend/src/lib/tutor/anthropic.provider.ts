@@ -3,6 +3,8 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import type { z } from 'zod'
 import { GuideDraftSchema } from './guide.schema.js'
 import { GUIDE_SYSTEM_PROMPT_V1 } from './prompt/guide.v1.js'
+import { QUIZ_SYSTEM_PROMPT_V1 } from './prompt/quiz.v1.js'
+import { QuizDraftSchema } from './quiz.schema.js'
 import { EXPLAIN_SYSTEM_PROMPT_V1 } from './prompt/explain.v1.js'
 import {
   buildMessages,
@@ -11,6 +13,7 @@ import {
   type ExplainInput,
   type ExplainResult,
   type GuideInput,
+  type QuizInput,
   type StructuredResult,
   type TutorProvider,
   type TutorStopReason,
@@ -20,6 +23,13 @@ import {
 export const MAX_OUTPUT_TOKENS = 2048
 export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
 const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
+
+/** The final user turn of a quiz request. */
+function quizRequest(input: QuizInput): string {
+  return input.history === null
+    ? `Write a ${input.difficulty} quiz about ${input.topicName}.`
+    : `Write a ${input.difficulty} quiz on this conversation.`
+}
 
 export type AnthropicProviderOptions = {
   apiKey: string
@@ -166,6 +176,17 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
         GUIDE_SYSTEM_PROMPT_V1,
         buildMessages({ ...input, question: GUIDE_REQUEST }),
         GuideDraftSchema
+      )
+    },
+    generateQuiz(input: QuizInput): Promise<StructuredResult> {
+      return structured(
+        QUIZ_SYSTEM_PROMPT_V1,
+        buildMessages({
+          topicName: input.topicName,
+          history: input.history ?? [],
+          question: quizRequest(input)
+        }),
+        QuizDraftSchema
       )
     }
   }

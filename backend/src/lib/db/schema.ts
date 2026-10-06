@@ -103,6 +103,43 @@ export interface GuideStepTable {
   created_at: CreatedAt
 }
 
+export type QuizDifficulty = 'easy' | 'medium' | 'hard'
+
+export interface QuizTable {
+  id: Generated<string>
+  user_id: string
+  /** Null for a quiz generated from a topic. */
+  thread_id: string | null
+  topic_id: string
+  difficulty: QuizDifficulty
+  created_at: CreatedAt
+}
+
+export interface QuizItemTable {
+  id: Generated<string>
+  quiz_id: string
+  user_id: string
+  position: number
+  prompt: string
+  /** Array of 4 strings; inserted as a JSON string (pg would send a JS array as a PG array). */
+  choice: ColumnType<string[], string, never>
+  answer_index: number
+  explanation: string
+  created_at: CreatedAt
+}
+
+export interface QuizAttemptTable {
+  id: Generated<string>
+  quiz_id: string
+  user_id: string
+  /** Array of `{ itemId, choiceIndex }`. */
+  answer: ColumnType<{ itemId: string; choiceIndex: number }[], string, never>
+  score: number
+  total: number
+  submitted_at: ColumnType<Date, Date | string | undefined, never>
+  created_at: CreatedAt
+}
+
 export interface Database {
   app_user: AppUserTable
   session: SessionTable
@@ -113,6 +150,9 @@ export interface Database {
   ai_call: AiCallTable
   guide: GuideTable
   guide_step: GuideStepTable
+  quiz: QuizTable
+  quiz_item: QuizItemTable
+  quiz_attempt: QuizAttemptTable
 }
 
 export type AppUserRow = Selectable<AppUserTable>
@@ -124,3 +164,5 @@ export type MessageRow = Selectable<MessageTable>
 export type GuideRow = Selectable<GuideTable>
 export type GuideStepRow = Selectable<GuideStepTable>
 export type NewAiCall = Insertable<AiCallTable>
+export type QuizRow = Selectable<QuizTable>
+export type QuizAttemptRow = Selectable<QuizAttemptTable>

@@ -16,6 +16,13 @@ export type ExplainResult = {
 }
 
 export type GuideInput = { topicName: string; history: TutorTurn[] }
+export type QuizDifficultyName = 'easy' | 'medium' | 'hard'
+/** `history` is `null` for a quiz generated from a topic alone. */
+export type QuizInput = {
+  topicName: string
+  difficulty: QuizDifficultyName
+  history: TutorTurn[] | null
+}
 /**
  * Result of a structured-output call. `output` is whatever the model returned (parsed JSON, or
  * `null` when it was missing, truncated or not JSON): validating it is the caller's job.
@@ -35,6 +42,8 @@ export interface TutorProvider {
   explain(input: ExplainInput, onDelta: (text: string) => void): Promise<ExplainResult>
   /** One non-streaming call that returns a guide draft as structured output. */
   generateGuide(input: GuideInput): Promise<StructuredResult>
+  /** One non-streaming call that returns a 5-item quiz draft as structured output. */
+  generateQuiz(input: QuizInput): Promise<StructuredResult>
 }
 
 /** Upstream failure (network, 4xx/5xx from the API). The message never carries provider payloads. */

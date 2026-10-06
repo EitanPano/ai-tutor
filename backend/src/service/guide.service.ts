@@ -2,21 +2,17 @@ import { sql } from 'kysely'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import type { GuideRow, GuideStepRow } from '../lib/db/schema.js'
-import { badGateway, conflict, unprocessable } from '../lib/error.js'
 import type { Logger } from '../lib/logger.js'
 import { GuideDraftSchema, type GuideDraft } from '../lib/tutor/guide.schema.js'
 import type { TutorProvider } from '../lib/tutor/tutor.js'
-import { ZERO_USAGE } from '../lib/tutor/tutor.js'
-import { assertWithinBudget, recordAiCall } from './ai-budget.js'
+import { assertWithinBudget } from './ai-budget.js'
 import { assertAiEnabled } from './ai-guard.js'
 import { buildHistory } from './ask.service.js'
+import { generateValidated } from './generate-validated.js'
 import { acquireGenerationLock, releaseGenerationLock } from './generation-lock.js'
 import { ownedBy, requireFound, type Auth } from './ownership.js'
-import { requireThread } from './thread.service.js'
+import { assertThreadHasAnswer, requireThread } from './thread.service.js'
 import { requireTopic } from './topic.service.js'
-
-/** One attempt plus one retry when the output is unusable. */
-const MAX_ATTEMPTS = 2
 
 export type GuideDeps = {
   config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
@@ -70,27 +66,9 @@ export function toGuideDto(row: GuideRow, steps: GuideStepRow[]): GuideDto {
   }
 }
 
-/** The thread needs at least one answer to build a guide from. */
-async function assertHasAnswer(db: Db, auth: Auth, threadId: string): Promise<void> {
-  const row = await db
-    .selectFrom('message')
-    .select('id')
-    .where('thread_id', '=', threadId)
-    .where(ownedBy('message', auth))
-    .where('role', '=', 'assistant')
-    .where('status', '=', 'complete')
-    .limit(1)
-    .executeTakeFirst()
-  if (!row) {
-    throw conflict('thread_empty', 'Ask a question first, then turn the answer into a guide.')
-  }
-}
-
 /**
- * Generates a guide from a thread. Every provider call is recorded in `ai_call`, independently of
- * the persistence transaction, and the generation lock is always released. Unusable output (a
- * truncation or a draft that fails the schema) is retried once; a refusal or a provider error is
- * not retried (the SDK already retries transient errors).
+ * Generates a guide from a thread. The provider call, its retry and the `ai_call` rows live in
+ * `generateValidated`; the generation lock is always released here.
  */
 export async function createGuide(
   db: Db,
@@ -101,77 +79,23 @@ export async function createGuide(
   const { config, tutor, logger } = deps
   assertAiEnabled(config)
   const thread = await requireThread(db, auth, threadId)
-  await assertHasAnswer(db, auth, thread.id)
+  await assertThreadHasAnswer(db, auth, thread.id)
   await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
   const topic = await requireTopic(db, thread.topicId)
   const lockToken = await acquireGenerationLock(db, auth)
   try {
     const history = await buildHistory(db, auth, thread.id)
-    let draft: GuideDraft | undefined
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS && draft === undefined; attempt += 1) {
-      const startedAt = Date.now()
-      let result
-      try {
-        result = await tutor.generateGuide({ topicName: topic.name, history })
-      } catch (err) {
-        // Never log the conversation or the model output, only the failure.
-        logger.error({ err, threadId: thread.id }, 'guide generation failed')
-        await recordCall(db, auth, logger, {
-          model: tutor.model,
-          stopReason: 'error',
-          refusalCategory: null,
-          usage: ZERO_USAGE,
-          latencyMs: Date.now() - startedAt
-        })
-        throw badGateway('ai_provider_error', 'The AI service failed to answer. Retry in a moment.')
-      }
-      await recordCall(db, auth, logger, {
-        model: result.model,
-        stopReason: result.stopReason,
-        refusalCategory: result.refusalCategory,
-        usage: result.usage,
-        latencyMs: Date.now() - startedAt
-      })
-      if (result.stopReason === 'refusal') {
-        throw unprocessable('ai_refused', "The tutor can't help with that. Try rephrasing it.")
-      }
-      const parsed = GuideDraftSchema.safeParse(result.output)
-      if (parsed.success) draft = parsed.data
-    }
-    if (draft === undefined) {
-      throw badGateway('ai_invalid_output', 'The tutor produced an unusable guide. Try again.')
-    }
+    const draft = await generateValidated(db, auth, {
+      kind: 'guide',
+      schema: GuideDraftSchema,
+      call: () => tutor.generateGuide({ topicName: topic.name, history }),
+      model: tutor.model,
+      logger,
+      logContext: { threadId: thread.id }
+    })
     return await saveGuide(db, auth, { threadId: thread.id, topicId: topic.id, draft })
   } finally {
     await releaseGenerationLock(db, auth, lockToken)
-  }
-}
-
-async function recordCall(
-  db: Db,
-  auth: Auth,
-  logger: Pick<Logger, 'error'>,
-  call: {
-    model: string
-    stopReason: string
-    refusalCategory: string | null
-    usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number }
-    latencyMs: number
-  }
-): Promise<void> {
-  try {
-    await recordAiCall(db, auth, {
-      kind: 'guide',
-      model: call.model,
-      input_token: call.usage.inputTokens,
-      output_token: call.usage.outputTokens,
-      cache_read_token: call.usage.cacheReadTokens,
-      stop_reason: call.stopReason,
-      refusal_category: call.refusalCategory,
-      latency_ms: Math.max(0, Math.round(call.latencyMs))
-    })
-  } catch (err) {
-    logger.error({ err }, 'recording the ai_call failed')
   }
 }
 
@@ -218,9 +142,12 @@ export async function getGuide(db: Db, auth: Auth, id: string): Promise<GuideDto
   const guide = requireFound(
     await db
       .selectFrom('guide')
-      .selectAll()
-      .where('id', '=', id)
+      .innerJoin('thread', 'thread.id', 'guide.thread_id')
+      .selectAll('guide')
+      .where('guide.id', '=', id)
       .where(ownedBy('guide', auth))
+      // Content derived from a soft-deleted thread is hidden like the thread.
+      .where('thread.deleted_at', 'is', null)
       .executeTakeFirst()
   )
   const steps = await db
@@ -232,6 +159,13 @@ export async function getGuide(db: Db, auth: Auth, id: string): Promise<GuideDto
     .execute()
   return toGuideDto(guide, steps)
 }
+
+/** A step whose guide's thread is not soft-deleted (derived content is hidden with the thread). */
+const inLiveThread = sql<boolean>`guide_step.guide_id IN (
+  SELECT guide.id FROM guide
+  JOIN thread ON thread.id = guide.thread_id
+  WHERE thread.deleted_at IS NULL
+)`
 
 export async function updateStep(
   db: Db,
@@ -255,6 +189,7 @@ export async function updateStep(
           .where('id', '=', stepId)
           .where('guide_id', '=', guideId)
           .where(ownedBy('guide_step', auth))
+          .where(inLiveThread)
           .returningAll()
           .executeTakeFirst()
       : await db
@@ -263,6 +198,7 @@ export async function updateStep(
           .where('id', '=', stepId)
           .where('guide_id', '=', guideId)
           .where(ownedBy('guide_step', auth))
+          .where(inLiveThread)
           .executeTakeFirst()
   return toStepDto(requireFound(row))
 }

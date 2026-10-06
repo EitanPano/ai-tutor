@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 import { GuideDraftSchema } from '../../src/lib/tutor/guide.schema.js'
+import { QuizDraftSchema } from '../../src/lib/tutor/quiz.schema.js'
 import {
   TutorProviderError,
   type ExplainInput,
-  type GuideInput
+  type GuideInput,
+  type QuizInput
 } from '../../src/lib/tutor/tutor.js'
 
 function input(question: string, overrides: Partial<ExplainInput> = {}): ExplainInput {
@@ -253,6 +255,104 @@ describe('FakeTutorProvider generateGuide', () => {
       history: [
         { role: 'user', content: 'q' },
         { role: 'assistant', content: 'mentions [fake:guide-refuse]' }
+      ]
+    })
+    expect(result.stopReason).toBe('end_turn')
+  })
+})
+
+describe('FakeTutorProvider generateQuiz', () => {
+  const quizInput = (
+    question: string,
+    difficulty: QuizInput['difficulty'] = 'medium',
+    topicName = 'React'
+  ): QuizInput => ({
+    topicName,
+    difficulty,
+    history: [
+      { role: 'user', content: question },
+      { role: 'assistant', content: 'An answer.' }
+    ]
+  })
+
+  it('is deterministic and satisfies QuizDraftSchema with 5 varied, distinct items', async () => {
+    const first = await new FakeTutorProvider().generateQuiz(quizInput('Why?', 'hard'))
+    const second = await new FakeTutorProvider().generateQuiz(quizInput('Why?', 'hard'))
+    expect(second).toEqual(first)
+    const parsed = QuizDraftSchema.safeParse(first.output)
+    expect(parsed.success).toBe(true)
+    const items = parsed.success ? parsed.data.items : []
+    expect(items).toHaveLength(5)
+    expect(items.map((item) => item.answerIndex)).toEqual([3, 2, 1, 0, 3])
+    expect(
+      items.every((item) => item.prompt.includes('React') && item.prompt.includes('hard'))
+    ).toBe(true)
+    expect(first).toMatchObject({ stopReason: 'end_turn', refusalCategory: null, model: 'fake' })
+    expect(first.usage.outputTokens).toBeGreaterThan(0)
+  })
+
+  it('works without history (a topic-only quiz) and records the call', async () => {
+    const fake = new FakeTutorProvider()
+    const input: QuizInput = { topicName: 'SQL', difficulty: 'easy', history: null }
+    const result = await fake.generateQuiz(input)
+    expect(QuizDraftSchema.safeParse(result.output).success).toBe(true)
+    expect(fake.quizCalls).toEqual([input])
+  })
+
+  it('[fake:quiz-invalid] always fails the schema (duplicate choices)', async () => {
+    const fake = new FakeTutorProvider()
+    for (let call = 0; call < 3; call += 1) {
+      const result = await fake.generateQuiz(quizInput('q [fake:quiz-invalid]'))
+      expect(QuizDraftSchema.safeParse(result.output).success).toBe(false)
+      expect(result.stopReason).toBe('end_turn')
+    }
+  })
+
+  it('[fake:quiz-invalid-once] fails the first call per input, then succeeds, until reset', async () => {
+    const fake = new FakeTutorProvider()
+    const input = quizInput('q [fake:quiz-invalid-once]')
+    const valid = async () =>
+      QuizDraftSchema.safeParse((await fake.generateQuiz(input)).output).success
+    expect(await valid()).toBe(false)
+    expect(await valid()).toBe(true)
+    fake.reset()
+    expect(fake.quizCalls).toHaveLength(0)
+    expect(await valid()).toBe(false)
+  })
+
+  it('reset() also clears the guide once-counter and the recorded calls', async () => {
+    const fake = new FakeTutorProvider()
+    const input: GuideInput = {
+      topicName: 'React',
+      history: [{ role: 'user', content: 'q [fake:guide-invalid-once]' }]
+    }
+    const valid = async () =>
+      GuideDraftSchema.safeParse((await fake.generateGuide(input)).output).success
+    expect(await valid()).toBe(false)
+    expect(await valid()).toBe(true)
+    fake.reset()
+    expect(fake.guideCalls).toHaveLength(0)
+    expect(await valid()).toBe(false)
+  })
+
+  it('[fake:quiz-refuse] refuses with category cyber and no output', async () => {
+    const result = await new FakeTutorProvider().generateQuiz(quizInput('q [fake:quiz-refuse]'))
+    expect(result).toMatchObject({ output: null, stopReason: 'refusal', refusalCategory: 'cyber' })
+  })
+
+  it('[fake:quiz-error] throws TutorProviderError', async () => {
+    await expect(
+      new FakeTutorProvider().generateQuiz(quizInput('q [fake:quiz-error]'))
+    ).rejects.toThrow(TutorProviderError)
+  })
+
+  it('only reads markers from user turns', async () => {
+    const result = await new FakeTutorProvider().generateQuiz({
+      topicName: 'React',
+      difficulty: 'easy',
+      history: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: 'mentions [fake:quiz-refuse]' }
       ]
     })
     expect(result.stopReason).toBe('end_turn')

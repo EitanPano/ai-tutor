@@ -20,8 +20,7 @@ type Session = Awaited<ReturnType<typeof signUp>>
 
 beforeEach(async () => {
   await truncateAll(ctx.db)
-  ctx.tutor.calls.length = 0
-  ctx.tutor.guideCalls.length = 0
+  ctx.tutor.reset()
 })
 afterAll(() => ctx.close())
 
@@ -313,31 +312,30 @@ describe('guards', () => {
   })
 })
 
-describe('ownership (AC03)', () => {
-  it("answers 404 for another user's guide, step and thread", async () => {
+// Cross-user ownership (AC03) is proven in ownership.test.ts.
+describe('scoping and soft delete', () => {
+  it('hides the guide and its steps once the thread is soft-deleted', async () => {
     const { session, threadId } = await setup()
     const guide = await createdGuide(session, threadId)
-    const other = await signUp(client)
+    const del = await client.delete(`/api/thread/${threadId}`).set('Cookie', session.cookie)
+    expect(del.status).toBe(204)
 
-    const read = await client.get(`/api/guide/${guide.id}`).set('Cookie', other.cookie)
+    const read = await client.get(`/api/guide/${guide.id}`).set('Cookie', session.cookie)
     expect(read.status).toBe(404)
     expectContract(read, 'get', '/api/guide/{id}')
-
     const patch = await client
       .patch(`/api/guide/${guide.id}/step/${guide.steps[0]?.id}`)
-      .set('Cookie', other.cookie)
+      .set('Cookie', session.cookie)
       .send({ done: true })
     expect(patch.status).toBe(404)
     expectContract(patch, 'patch', '/api/guide/{id}/step/{stepId}')
-
-    const post = await generate(other, threadId)
-    expect(post.status).toBe(404)
-    expectContract(post, 'post', '/api/thread/{id}/guide')
-    expect(ctx.tutor.guideCalls).toHaveLength(1)
-    expect(await lockOf(other.user.id)).toBeNull()
-
-    const untouched = await client.get(`/api/guide/${guide.id}`).set('Cookie', session.cookie)
-    expect((untouched.body as { guide: GuideBody }).guide.steps[0]?.doneAt).toBeNull()
+    // The row is untouched.
+    const step = await ctx.db
+      .selectFrom('guide_step')
+      .select('done_at')
+      .where('id', '=', guide.steps[0]?.id ?? '')
+      .executeTakeFirstOrThrow()
+    expect(step.done_at).toBeNull()
   })
 
   it('answers 404 for a step that is not in the guide', async () => {
