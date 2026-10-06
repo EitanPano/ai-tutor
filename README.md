@@ -60,3 +60,7 @@ See the product definition in .doc/product-definition.md.
 - Generated, disposable artifacts:
   - .orchestrate/* (except .orchestrate/README.md, which documents the folder)
 
+
+## Troubleshooting
+
+- **Known issue:** On Windows with Node 24.15, running the backend and frontend Vitest suites concurrently under heavy CPU load can natively abort a test worker (exit code 3221226505). The root `bun run test` runs them sequentially to avoid it. Root cause unconfirmed (see the commit message for the investigation summary).
