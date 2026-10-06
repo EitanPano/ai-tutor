@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Secrets — only the committed template is allowed
+.env*
+!.env.example
+
+# Build and test output
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# Dev-loop output is generated and disposable (see AGENTS.md)
+.orchestrate/*
+!.orchestrate/README.md
+
+# Per-user Claude Code settings
+.claude/settings.local.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
