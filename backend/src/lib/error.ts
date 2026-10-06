@@ -42,7 +42,7 @@ export const notFoundHandler: RequestHandler = (_req, _res, next) => {
   next(notFound())
 }
 
-type BodyParserError = { type?: unknown }
+type BodyParserError = { type?: unknown; status?: unknown; expose?: unknown }
 
 function requestIdOf(locals: Record<string, unknown>): string {
   const id = locals.requestId
@@ -71,13 +71,32 @@ export const errorMiddleware: ErrorRequestHandler = (err: unknown, req, res, nex
     send(400, 'validation_failed', 'The request is invalid.', { issues })
     return
   }
-  const bodyType = (err as BodyParserError | null)?.type
+  const parserError = err as BodyParserError | null
+  const bodyType = parserError?.type
   if (err instanceof SyntaxError && bodyType === 'entity.parse.failed') {
     send(400, 'malformed_json', 'The request body is not valid JSON.')
     return
   }
   if (bodyType === 'entity.too.large') {
     send(413, 'payload_too_large', 'The request body is too large.')
+    return
+  }
+  // Other body-parser client errors (415 charset/encoding, 400 aborted/size mismatch) carry a
+  // 4xx status with expose: true. Map them by status instead of letting them become 500s.
+  const status = parserError?.status
+  if (
+    err instanceof Error &&
+    parserError?.expose === true &&
+    typeof status === 'number' &&
+    status >= 400 &&
+    status < 500
+  ) {
+    req.log.warn({ err, requestId }, 'client error')
+    if (status === 415) {
+      send(415, 'unsupported_media_type', 'The request content type or encoding is not supported.')
+    } else {
+      send(status, 'bad_request', 'The request could not be processed.')
+    }
     return
   }
   req.log.error({ err, requestId }, 'unhandled error')

@@ -18,9 +18,15 @@ const requestId: RequestHandler = (req, res, next) => {
   next()
 }
 
-export type AppDeps = { config: Config; db: Db; logger: Logger }
+export type AppDeps = {
+  config: Config
+  db: Db
+  logger: Logger
+  /** Test-only hook: mounts extra routes before the 404 and error handlers. */
+  extraRoutes?: (app: Express) => void
+}
 
-export function createApp({ config, db, logger }: AppDeps): Express {
+export function createApp({ config, db, logger, extraRoutes }: AppDeps): Express {
   const app = express()
   app.disable('x-powered-by')
   app.use(requestId)
@@ -42,6 +48,7 @@ export function createApp({ config, db, logger }: AppDeps): Express {
   app.use(cors({ origin: config.frontendUrl, credentials: true }))
   app.use(express.json({ limit: '256kb' }))
   app.use(healthRouter(db))
+  extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
   return app

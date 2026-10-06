@@ -8,11 +8,18 @@ import { createLogger } from '../../src/lib/logger.js'
 export type TestApp = { app: Express; config: Config; db: Db; close: () => Promise<void> }
 
 /** Builds the app against the real test database. Pass `databaseUrl` to point elsewhere. */
-export function createTestApp(overrides: { databaseUrl?: string } = {}): TestApp {
+export function createTestApp(
+  overrides: { databaseUrl?: string; extraRoutes?: (app: Express) => void } = {}
+): TestApp {
   const config = loadConfig(process.env)
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db } = createDb(databaseUrl)
-  const app = createApp({ config, db, logger: createLogger(config) })
+  const app = createApp({
+    config,
+    db,
+    logger: createLogger(config),
+    ...(overrides.extraRoutes ? { extraRoutes: overrides.extraRoutes } : {})
+  })
   return { app, config, db, close: () => db.destroy() }
 }
 

@@ -56,3 +56,11 @@ export function expectContract(
     `${label} ${res.status} body violates the contract: ${ajv.errorsText(validate.errors)}`
   ).toBe(true)
 }
+
+/** Validates `body` against `#/components/schemas/<name>` of the contract. */
+export function expectSchema(body: unknown, name: string): void {
+  const validate = validatorFor(`schema ${name}`, { $ref: `#/components/schemas/${name}` })
+  expect(validate(body), `body violates schema ${name}: ${ajv.errorsText(validate.errors)}`).toBe(
+    true
+  )
+}
