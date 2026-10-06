@@ -12,6 +12,8 @@ import { createLoginLimiter } from './lib/rate-limit.js'
 import { healthRouter } from './route/health.route.js'
 import { originCheck } from './route/middleware/origin-check.js'
 import { sessionRouter } from './route/session.route.js'
+import { threadRouter } from './route/thread.route.js'
+import { topicRouter } from './route/topic.route.js'
 import { userRouter } from './route/user.route.js'
 
 const SANE_REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/
@@ -60,6 +62,8 @@ export function createApp({ config, db, pool, logger, extraRoutes }: AppDeps): E
   app.use(healthRouter(db))
   app.use(userRouter(db, config))
   app.use(sessionRouter(db, config, createLoginLimiter(pool)))
+  app.use(topicRouter(db))
+  app.use(threadRouter(db, config))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)

@@ -19,6 +19,7 @@
     "user:reset-password": "tsx --env-file-if-exists=.env src/lib/db/cli.ts reset-password"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "argon2": "^0.45.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

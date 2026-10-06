@@ -24,11 +24,11 @@ export function createTestApp(
   return { app, config, db, close: () => db.destroy() }
 }
 
-/** Empties every table except `schema_migration`. */
+/** Empties every table except `schema_migration` and `topic` (reference data seeded by migration). */
 export async function truncateAll(db: Db): Promise<void> {
   const { rows } = await sql<{ tablename: string }>`
     SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> 'schema_migration'`.execute(db)
+    WHERE schemaname = 'public' AND tablename NOT IN ('schema_migration', 'topic')`.execute(db)
   if (rows.length === 0) return
   const names = rows.map((row) => `"${row.tablename}"`).join(', ')
   await sql.raw(`TRUNCATE ${names} RESTART IDENTITY CASCADE`).execute(db)

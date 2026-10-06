@@ -9,7 +9,8 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor_test',
-      LOG_LEVEL: 'silent'
+      LOG_LEVEL: 'silent',
+      AI_FAKE_DELAY_MS: '0'
     }
   }
 })

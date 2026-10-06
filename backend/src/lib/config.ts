@@ -20,7 +20,8 @@ const envSchema = z.object({
   AI_MODEL: z.string().min(1).default('claude-haiku-4-5'),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   AI_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().default(50000),
-  AI_ENABLED: boolString.default(true)
+  AI_ENABLED: boolString.default(true),
+  AI_FAKE_DELAY_MS: z.coerce.number().int().min(0).default(20)
 })
 
 export type Config = {
@@ -34,6 +35,7 @@ export type Config = {
   anthropicApiKey: string | undefined
   aiDailyTokenBudget: number
   aiEnabled: boolean
+  aiFakeDelayMs: number
 }
 
 /** Treat empty strings (e.g. an empty ANTHROPIC_API_KEY in a copied template) as unset. */
@@ -79,6 +81,7 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     aiModel: v.AI_MODEL,
     anthropicApiKey: v.ANTHROPIC_API_KEY,
     aiDailyTokenBudget: v.AI_DAILY_TOKEN_BUDGET,
-    aiEnabled: v.AI_ENABLED
+    aiEnabled: v.AI_ENABLED,
+    aiFakeDelayMs: v.AI_FAKE_DELAY_MS
   }
 }

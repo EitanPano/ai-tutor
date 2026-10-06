@@ -13,7 +13,8 @@ describe('loadConfig', () => {
       aiProvider: 'fake',
       aiModel: 'claude-haiku-4-5',
       aiDailyTokenBudget: 50000,
-      aiEnabled: true
+      aiEnabled: true,
+      aiFakeDelayMs: 20
     })
     expect(config.anthropicApiKey).toBeUndefined()
   })
@@ -55,6 +56,11 @@ describe('loadConfig', () => {
     expect(message).toMatch(/PORT/)
     expect(message).toMatch(/AI_DAILY_TOKEN_BUDGET/)
     expect(message).not.toContain(secret)
+  })
+
+  it('parses AI_FAKE_DELAY_MS and rejects a negative value', () => {
+    expect(loadConfig({ AI_FAKE_DELAY_MS: '0' }).aiFakeDelayMs).toBe(0)
+    expect(() => loadConfig({ AI_FAKE_DELAY_MS: '-1' })).toThrow(/AI_FAKE_DELAY_MS/)
   })
 
   it('parses AI_ENABLED=false to false', () => {

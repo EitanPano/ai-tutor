@@ -11,6 +11,8 @@ export interface AppUserTable {
   time_zone: string
   created_at: CreatedAt
   deleted_at: Date | null
+  /** Per-user generation lock; null when free. */
+  generation_started_at: Date | null
 }
 
 export interface SessionTable {
@@ -30,13 +32,67 @@ export interface RateLimitTable {
   created_at: CreatedAt
 }
 
+export interface TopicTable {
+  id: string
+  name: string
+  position: number
+  created_at: CreatedAt
+}
+
+export interface ThreadTable {
+  id: Generated<string>
+  user_id: string
+  topic_id: string
+  title: string
+  created_at: CreatedAt
+  updated_at: ColumnType<Date, Date | string | undefined, Date | string>
+  deleted_at: Date | null
+}
+
+export type MessageRole = 'user' | 'assistant'
+export type MessageStatus = 'complete' | 'incomplete' | 'failed'
+export type MessageStopReason =
+  'end_turn' | 'max_tokens' | 'stop_sequence' | 'refusal' | 'aborted' | 'error'
+
+export interface MessageTable {
+  id: Generated<string>
+  thread_id: string
+  user_id: string
+  role: MessageRole
+  content: string
+  status: MessageStatus
+  stop_reason: MessageStopReason | null
+  created_at: CreatedAt
+}
+
+export interface AiCallTable {
+  id: Generated<string>
+  user_id: string
+  kind: 'explain' | 'guide' | 'quiz'
+  model: string
+  input_token: number
+  output_token: number
+  cache_read_token: number
+  stop_reason: string | null
+  refusal_category: string | null
+  latency_ms: number
+  created_at: CreatedAt
+}
+
 export interface Database {
   app_user: AppUserTable
   session: SessionTable
   rate_limit: RateLimitTable
+  topic: TopicTable
+  thread: ThreadTable
+  message: MessageTable
+  ai_call: AiCallTable
 }
 
 export type AppUserRow = Selectable<AppUserTable>
 export type NewAppUser = Insertable<AppUserTable>
 export type AppUserUpdate = Updateable<AppUserTable>
 export type SessionRow = Selectable<SessionTable>
+export type ThreadRow = Selectable<ThreadTable>
+export type MessageRow = Selectable<MessageTable>
+export type NewAiCall = Insertable<AiCallTable>

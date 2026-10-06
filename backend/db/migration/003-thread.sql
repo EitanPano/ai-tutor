@@ -1,39 +1,4 @@
--- Full bootstrap schema for a fresh database.
--- This file MUST change together with backend/db/migration/*.sql. The migration test
--- (tests/integration/migration.test.ts) fails when the two drift apart.
-
-CREATE EXTENSION IF NOT EXISTS citext;
-
-CREATE TABLE app_user (
-  id text PRIMARY KEY DEFAULT uuidv7()::text,
-  email citext NOT NULL UNIQUE,
-  password_hash text NOT NULL,
-  display_name text NOT NULL,
-  time_zone text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz NULL,
-  -- Per-user generation lock: set while an AI generation runs, taken over after 5 minutes.
-  generation_started_at timestamptz NULL
-);
-
-CREATE TABLE session (
-  id text PRIMARY KEY DEFAULT uuidv7()::text,
-  user_id text NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-  token_hash text NOT NULL UNIQUE,
-  expires_at timestamptz NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX session_user_id_idx ON session (user_id);
-
--- Owned by rate-limiter-flexible (RateLimiterPostgres): key/points/expire is the shape the
--- library reads and writes, so this table has no id or user_id.
-CREATE TABLE rate_limit (
-  key varchar(255) PRIMARY KEY,
-  points integer NOT NULL DEFAULT 0,
-  expire bigint,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
+-- migrate:up
 CREATE TABLE topic (
   id text PRIMARY KEY,
   name text NOT NULL,
@@ -56,6 +21,9 @@ INSERT INTO topic (id, name, position) VALUES
   ('algorithms', 'Algorithms and data structures', 11),
   ('other', 'Other', 12)
 ON CONFLICT DO NOTHING;
+
+-- Per-user generation lock: set while an AI generation runs, taken over after 5 minutes.
+ALTER TABLE app_user ADD COLUMN generation_started_at timestamptz NULL;
 
 CREATE TABLE thread (
   id text PRIMARY KEY DEFAULT uuidv7()::text,
@@ -97,3 +65,10 @@ CREATE TABLE ai_call (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ai_call_user_created_idx ON ai_call (user_id, created_at);
+
+-- migrate:down
+DROP TABLE ai_call;
+DROP TABLE message;
+DROP TABLE thread;
+ALTER TABLE app_user DROP COLUMN generation_started_at;
+DROP TABLE topic;
