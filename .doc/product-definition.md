@@ -1,6 +1,10 @@
 # Product Definition
 
 ## Purpose
+- A study project: built to learn and practice, not to serve real users.
+- Cost wins over quality. API, CI and hosting costs stay at a minimum, and the quality of AI answers doesn't
+  matter (plan `001`, assumption A9).
+- It runs locally only. There is no hosted environment.
 
 ## Product Vision
 
