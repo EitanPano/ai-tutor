@@ -118,7 +118,8 @@
  */
 @utility prose-notebook {
   @apply prose;
-  max-width: none;
+  /* Reading width: about 72 characters, code blocks included so they stay aligned. */
+  max-width: 72ch;
   --tw-prose-body: var(--ink);
   --tw-prose-headings: var(--ink);
   --tw-prose-lead: var(--ink-muted);

@@ -1,7 +1,10 @@
 'use client'
 
 import {
+  createContext,
   isValidElement,
+  memo,
+  useContext,
   type ComponentPropsWithoutRef,
   type ReactElement,
   type ReactNode
@@ -30,36 +33,49 @@ function textOf(node: ReactNode): string {
   return ''
 }
 
-export function Markdown({ children, streaming = false, className = '' }: MarkdownProps) {
-  const components: Components = {
-    pre({ children: preChildren }) {
-      const code = isValidElement(preChildren)
-        ? (preChildren as ReactElement<ComponentPropsWithoutRef<'code'>>)
-        : undefined
-      const language = /language-([^\s]+)/.exec(code?.props.className ?? '')?.[1]
-      return <CodeBlock code={textOf(preChildren)} language={language} streaming={streaming} />
-    },
-    a({ href, children: linkChildren }) {
-      // A URL react-markdown refused (such as `javascript:`) arrives empty: show it as text.
-      if (!href) return <span>{linkChildren}</span>
-      const external = /^https?:\/\//i.test(href)
-      return (
-        <a href={href} {...(external && { target: '_blank', rel: 'noopener noreferrer' })}>
-          {linkChildren}
-        </a>
-      )
-    },
-    // Remote images in model output are a tracking and exfiltration channel: show the alt text.
-    img({ alt }) {
-      return <span>{alt ? `[image: ${alt}]` : '[image]'}</span>
-    }
-  }
+const StreamingContext = createContext(false)
 
+function Pre({ children }: ComponentPropsWithoutRef<'pre'>) {
+  const streaming = useContext(StreamingContext)
+  const code = isValidElement(children)
+    ? (children as ReactElement<ComponentPropsWithoutRef<'code'>>)
+    : undefined
+  const language = /language-([^\s]+)/.exec(code?.props.className ?? '')?.[1]
+  return <CodeBlock code={textOf(children)} language={language} streaming={streaming} />
+}
+
+function Anchor({ href, children }: ComponentPropsWithoutRef<'a'>) {
+  // A URL react-markdown refused (such as `javascript:`) arrives empty: show it as text.
+  if (!href) return <span>{children}</span>
+  const external = /^https?:\/\//i.test(href)
   return (
-    <div className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}>
-      <ReactMarkdown remarkPlugins={plugins} components={components}>
-        {children}
-      </ReactMarkdown>
-    </div>
+    <a href={href} {...(external && { target: '_blank', rel: 'noopener noreferrer' })}>
+      {children}
+    </a>
   )
 }
+
+// Remote images in model output are a tracking and exfiltration channel: show the alt text.
+function Image({ alt }: ComponentPropsWithoutRef<'img'>) {
+  return <span>{alt ? `[image: ${alt}]` : '[image]'}</span>
+}
+
+// Module scope on purpose: a new map per render would remount every code block, link and image
+// on each streamed delta, losing Copy clicks, text selection and the highlighted markup.
+const components: Components = { pre: Pre, a: Anchor, img: Image }
+
+export const Markdown = memo(function Markdown({
+  children,
+  streaming = false,
+  className = ''
+}: MarkdownProps) {
+  return (
+    <StreamingContext value={streaming}>
+      <div className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}>
+        <ReactMarkdown remarkPlugins={plugins} components={components}>
+          {children}
+        </ReactMarkdown>
+      </div>
+    </StreamingContext>
+  )
+})

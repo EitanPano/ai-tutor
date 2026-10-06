@@ -65,4 +65,19 @@ describe('Markdown', () => {
 
     expect(screen.getByRole('table')).toBeInTheDocument()
   })
+
+  it('keeps code blocks and links mounted when the text around them changes', () => {
+    const text = '[docs](https://react.dev)\n\n```ts\nconst a = 1\n```'
+    const { container, rerender } = render(<Markdown streaming>{text}</Markdown>)
+    const figure = container.querySelector('figure')
+    const link = container.querySelector('a')
+    const copy = screen.getByRole('button', { name: 'Copy' })
+
+    rerender(<Markdown streaming>{`${text}\n\nA later paragraph.`}</Markdown>)
+
+    expect(container.querySelector('figure')).toBe(figure)
+    expect(container.querySelector('a')).toBe(link)
+    expect(screen.getByRole('button', { name: 'Copy' })).toBe(copy)
+    expect(container).toHaveTextContent('A later paragraph.')
+  })
 })
