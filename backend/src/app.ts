@@ -11,6 +11,7 @@ import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
+import { guideRouter } from './route/guide.route.js'
 import { healthRouter } from './route/health.route.js'
 import { originCheck } from './route/middleware/origin-check.js'
 import { messageRouter } from './route/message.route.js'
@@ -69,7 +70,9 @@ export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppD
   app.use(sessionRouter(db, config, createLoginLimiter(pool)))
   app.use(topicRouter(db))
   app.use(threadRouter(db, config))
-  app.use(messageRouter(db, config, tutor ?? createTutorProvider(config), logger))
+  const provider = tutor ?? createTutorProvider(config)
+  app.use(messageRouter(db, config, provider, logger))
+  app.use(guideRouter(db, config, provider, logger))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)

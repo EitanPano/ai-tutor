@@ -79,6 +79,30 @@ export interface AiCallTable {
   created_at: CreatedAt
 }
 
+export interface GuideTable {
+  id: Generated<string>
+  user_id: string
+  thread_id: string
+  topic_id: string
+  title: string
+  created_at: CreatedAt
+}
+
+export interface GuideStepTable {
+  id: Generated<string>
+  guide_id: string
+  user_id: string
+  position: number
+  title: string
+  body: string
+  code: string | null
+  code_language: string | null
+  hint: string
+  hint_revealed_at: Date | null
+  done_at: Date | null
+  created_at: CreatedAt
+}
+
 export interface Database {
   app_user: AppUserTable
   session: SessionTable
@@ -87,6 +111,8 @@ export interface Database {
   thread: ThreadTable
   message: MessageTable
   ai_call: AiCallTable
+  guide: GuideTable
+  guide_step: GuideStepTable
 }
 
 export type AppUserRow = Selectable<AppUserTable>
@@ -95,4 +121,6 @@ export type AppUserUpdate = Updateable<AppUserTable>
 export type SessionRow = Selectable<SessionTable>
 export type ThreadRow = Selectable<ThreadTable>
 export type MessageRow = Selectable<MessageTable>
+export type GuideRow = Selectable<GuideTable>
+export type GuideStepRow = Selectable<GuideStepTable>
 export type NewAiCall = Insertable<AiCallTable>

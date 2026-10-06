@@ -31,7 +31,7 @@ export type MessageDto = {
 export type ThreadDetailDto = {
   thread: ThreadDto
   messages: MessageDto[]
-  /** Filled by the guide task; typed to the contract's GuideSummary. */
+  /** The contract's GuideSummary, newest first. */
   guides: {
     id: string
     title: string
@@ -222,7 +222,33 @@ export async function getThreadDetail(db: Db, auth: Auth, id: string): Promise<T
   return {
     thread: toThreadDto(thread),
     messages: messages.map(toMessageDto),
-    guides: [],
+    guides: (
+      await db
+        .selectFrom('guide')
+        .select([
+          'guide.id',
+          'guide.title',
+          'guide.created_at',
+          sql<number>`(SELECT count(*)::int FROM guide_step WHERE guide_step.guide_id = guide.id)`.as(
+            'step_count'
+          ),
+          sql<number>`(
+            SELECT count(*)::int FROM guide_step
+            WHERE guide_step.guide_id = guide.id AND guide_step.done_at IS NOT NULL
+          )`.as('done_count')
+        ])
+        .where('guide.thread_id', '=', thread.id)
+        .where(ownedBy('guide', auth))
+        .orderBy('guide.created_at', 'desc')
+        .orderBy('guide.id', 'desc')
+        .execute()
+    ).map((row) => ({
+      id: row.id,
+      title: row.title,
+      stepCount: row.step_count,
+      doneCount: row.done_count,
+      createdAt: row.created_at.toISOString()
+    })),
     quizzes: []
   }
 }

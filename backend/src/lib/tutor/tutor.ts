@@ -15,11 +15,26 @@ export type ExplainResult = {
   model: string
 }
 
+export type GuideInput = { topicName: string; history: TutorTurn[] }
+/**
+ * Result of a structured-output call. `output` is whatever the model returned (parsed JSON, or
+ * `null` when it was missing, truncated or not JSON): validating it is the caller's job.
+ */
+export type StructuredResult = {
+  output: unknown
+  stopReason: TutorStopReason
+  refusalCategory: string | null
+  usage: TutorUsage
+  model: string
+}
+
 export interface TutorProvider {
   /** Model name recorded in the `ai_call` ledger, including for failed calls. */
   readonly model: string
   /** Streams the answer through `onDelta` and resolves once the model stops. */
   explain(input: ExplainInput, onDelta: (text: string) => void): Promise<ExplainResult>
+  /** One non-streaming call that returns a guide draft as structured output. */
+  generateGuide(input: GuideInput): Promise<StructuredResult>
 }
 
 /** Upstream failure (network, 4xx/5xx from the API). The message never carries provider payloads. */

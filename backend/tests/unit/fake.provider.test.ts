@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
-import { TutorProviderError, type ExplainInput } from '../../src/lib/tutor/tutor.js'
+import { GuideDraftSchema } from '../../src/lib/tutor/guide.schema.js'
+import {
+  TutorProviderError,
+  type ExplainInput,
+  type GuideInput
+} from '../../src/lib/tutor/tutor.js'
 
 function input(question: string, overrides: Partial<ExplainInput> = {}): ExplainInput {
   return {
@@ -156,5 +161,100 @@ describe('FakeTutorProvider', () => {
     const { result, deltas } = await run('hello', { signal: controller.signal })
     expect(deltas).toEqual([])
     expect(result).toMatchObject({ stopReason: 'aborted', text: '' })
+  })
+})
+
+describe('FakeTutorProvider generateGuide', () => {
+  const guideInput = (question: string, topicName = 'React'): GuideInput => ({
+    topicName,
+    history: [
+      { role: 'user', content: question },
+      { role: 'assistant', content: 'An answer.' }
+    ]
+  })
+
+  it('is deterministic and satisfies GuideDraftSchema with 4 steps naming the topic', async () => {
+    const first = await new FakeTutorProvider().generateGuide(guideInput('Why does it re-render?'))
+    const second = await new FakeTutorProvider().generateGuide(guideInput('Why does it re-render?'))
+    expect(second).toEqual(first)
+    const draft = GuideDraftSchema.parse(first.output)
+    expect(draft.steps).toHaveLength(4)
+    expect(draft.title).toContain('React')
+    expect(draft.title).toContain('Why does it re-render?')
+    expect(draft.steps.every((step) => step.title.includes('React'))).toBe(true)
+    expect(first).toMatchObject({ stopReason: 'end_turn', refusalCategory: null, model: 'fake' })
+    expect(first.usage.inputTokens).toBeGreaterThan(0)
+    expect(first.usage.outputTokens).toBeGreaterThan(0)
+  })
+
+  it('puts a snippet in the topic language on the fix step, and strips markers from the title', async () => {
+    const result = await new FakeTutorProvider().generateGuide(
+      guideInput('Why? [fake:other]', 'SQL')
+    )
+    const steps = (result.output as { title: string; steps: { code: string | null }[] }).steps
+    expect(steps.filter((step) => step.code !== null)).toHaveLength(1)
+    expect(
+      (result.output as { steps: { codeLanguage: string | null }[] }).steps.map(
+        (step) => step.codeLanguage
+      )
+    ).toContain('sql')
+    expect((result.output as { title: string }).title).not.toContain('[fake')
+  })
+
+  it('records each call', async () => {
+    const fake = new FakeTutorProvider()
+    await fake.generateGuide(guideInput('q'))
+    expect(fake.guideCalls).toEqual([guideInput('q')])
+  })
+
+  it('[fake:guide-invalid] always fails the schema', async () => {
+    const fake = new FakeTutorProvider()
+    for (let call = 0; call < 3; call += 1) {
+      const result = await fake.generateGuide(guideInput('q [fake:guide-invalid]'))
+      expect(GuideDraftSchema.safeParse(result.output).success).toBe(false)
+      expect(result.stopReason).toBe('end_turn')
+    }
+  })
+
+  it('[fake:guide-invalid-once] fails the first call per history, then succeeds', async () => {
+    const fake = new FakeTutorProvider()
+    const question = 'q [fake:guide-invalid-once]'
+    expect(
+      GuideDraftSchema.safeParse((await fake.generateGuide(guideInput(question))).output).success
+    ).toBe(false)
+    expect(
+      GuideDraftSchema.safeParse((await fake.generateGuide(guideInput(question))).output).success
+    ).toBe(true)
+    // A different history starts its own count.
+    expect(
+      GuideDraftSchema.safeParse((await fake.generateGuide(guideInput(`${question} 2`))).output)
+        .success
+    ).toBe(false)
+  })
+
+  it('[fake:guide-refuse] refuses with category cyber and no output', async () => {
+    const result = await new FakeTutorProvider().generateGuide(guideInput('q [fake:guide-refuse]'))
+    expect(result).toMatchObject({
+      output: null,
+      stopReason: 'refusal',
+      refusalCategory: 'cyber'
+    })
+  })
+
+  it('[fake:guide-error] throws TutorProviderError', async () => {
+    await expect(
+      new FakeTutorProvider().generateGuide(guideInput('q [fake:guide-error]'))
+    ).rejects.toThrow(TutorProviderError)
+  })
+
+  it('only reads markers from user turns', async () => {
+    const result = await new FakeTutorProvider().generateGuide({
+      topicName: 'React',
+      history: [
+        { role: 'user', content: 'q' },
+        { role: 'assistant', content: 'mentions [fake:guide-refuse]' }
+      ]
+    })
+    expect(result.stopReason).toBe('end_turn')
   })
 })

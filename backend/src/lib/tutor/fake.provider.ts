@@ -3,6 +3,8 @@ import {
   TutorProviderError,
   type ExplainInput,
   type ExplainResult,
+  type GuideInput,
+  type StructuredResult,
   type TutorProvider
 } from './tutor.js'
 
@@ -15,6 +17,11 @@ import {
  *   [fake:refuse]      emit 2 deltas, then stop with `refusal` (category `cyber`)
  *   [fake:max_tokens]  full stream, then stop with `max_tokens`
  *   [fake:slow]        wait 400 ms between deltas
+ * Markers in a user turn of the history drive `generateGuide`:
+ *   [fake:guide-invalid]       every call returns a draft that fails GuideDraftSchema
+ *   [fake:guide-invalid-once]  the first call for a given history is invalid, the next valid
+ *   [fake:guide-refuse]        refusal (category `cyber`)
+ *   [fake:guide-error]         throw TutorProviderError
  */
 
 const MIN_DELTAS = 8
@@ -30,6 +37,51 @@ const LANGUAGE_BY_TOPIC: Record<string, string> = {
   Docker: 'bash',
   CSS: 'css',
   Python: 'python'
+}
+
+const MARKER = /\[fake:[a-z_-]+\]/g
+
+function lastUserQuestion(history: GuideInput['history']): string {
+  const turn = history.findLast((entry) => entry.role === 'user')
+  const cleaned = (turn?.content ?? '').replace(MARKER, '').replace(/\s+/g, ' ').trim()
+  return cleaned.slice(0, QUOTE_CHARS) || 'your question'
+}
+
+function buildGuide(topicName: string, question: string) {
+  const language = LANGUAGE_BY_TOPIC[topicName] ?? 'js'
+  return {
+    title: `${topicName} guide: ${question}`.slice(0, 120),
+    steps: [
+      {
+        title: `Reproduce the ${topicName} problem`,
+        body: `Create the smallest ${topicName} example that shows **${question}** and confirm you can trigger it on demand.`,
+        code: null,
+        codeLanguage: null,
+        hint: 'Remove everything that is not needed to see the problem.'
+      },
+      {
+        title: `Read the key ${topicName} concept`,
+        body: `Find the rule in ${topicName} that explains the behavior and write it down in one sentence.`,
+        code: null,
+        codeLanguage: null,
+        hint: 'The official docs usually name the concept in a heading.'
+      },
+      {
+        title: `Apply the fix in ${topicName}`,
+        body: 'Change the example so it follows the rule, then compare it with the original.',
+        code: `// Fixed ${topicName} example\nconst answer = explain(question)`,
+        codeLanguage: language,
+        hint: 'Change one thing at a time so you know which change fixed it.'
+      },
+      {
+        title: `Verify the ${topicName} fix`,
+        body: 'Run the example again and add a small test that would fail without the fix.',
+        code: null,
+        codeLanguage: null,
+        hint: 'Write the test first and watch it fail.'
+      }
+    ]
+  }
 }
 
 function buildAnswer(topicName: string, question: string): string {
@@ -85,6 +137,10 @@ export class FakeTutorProvider implements TutorProvider {
   /** Every call's input without the signal, so tests can assert history and prefixes. */
   readonly model = 'fake'
   readonly calls: Omit<ExplainInput, 'signal'>[] = []
+  /** Every `generateGuide` input, in call order. */
+  readonly guideCalls: GuideInput[] = []
+  /** Calls seen per history, for `[fake:guide-invalid-once]`. */
+  private readonly guideAttempts = new Map<string, number>()
   private readonly delayMs: number
 
   constructor(options: { delayMs?: number } = {}) {
@@ -124,5 +180,49 @@ export class FakeTutorProvider implements TutorProvider {
       if (index === 1 && question.includes('[fake:refuse]')) return result(text, 'refusal')
     }
     return result(text, question.includes('[fake:max_tokens]') ? 'max_tokens' : 'end_turn')
+  }
+
+  generateGuide(input: GuideInput): Promise<StructuredResult> {
+    try {
+      return Promise.resolve(this.buildGuideResult(input))
+    } catch (err) {
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)))
+    }
+  }
+
+  private buildGuideResult(input: GuideInput): StructuredResult {
+    this.guideCalls.push(input)
+    const userText = input.history
+      .filter((turn) => turn.role === 'user')
+      .map((turn) => turn.content)
+      .join('\n')
+    if (userText.includes('[fake:guide-error]'))
+      throw new TutorProviderError('Fake provider error.')
+
+    const key = JSON.stringify([input.topicName, input.history])
+    const attempt = (this.guideAttempts.get(key) ?? 0) + 1
+    this.guideAttempts.set(key, attempt)
+
+    const guide = buildGuide(input.topicName, lastUserQuestion(input.history))
+    const refuse = userText.includes('[fake:guide-refuse]')
+    const invalid =
+      userText.includes('[fake:guide-invalid]') ||
+      (userText.includes('[fake:guide-invalid-once]') && attempt === 1)
+    const output = refuse ? null : invalid ? { ...guide, steps: guide.steps.slice(0, 2) } : guide
+    const inputChars = buildMessages({ ...input, question: '' }).reduce(
+      (sum, turn) => sum + turn.content.length,
+      0
+    )
+    return {
+      output,
+      stopReason: refuse ? 'refusal' : 'end_turn',
+      refusalCategory: refuse ? 'cyber' : null,
+      usage: {
+        inputTokens: Math.ceil(inputChars / 4),
+        outputTokens: Math.ceil(JSON.stringify(output).length / 4),
+        cacheReadTokens: 0
+      },
+      model: 'fake'
+    }
   }
 }

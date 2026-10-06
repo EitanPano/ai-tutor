@@ -43,7 +43,7 @@ function titleFrom(content: string): string {
  * failure both messages of the turn are `failed`), and so are assistant messages with no text.
  * `incomplete` answers are sent as they are.
  */
-async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<TutorTurn[]> {
+export async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<TutorTurn[]> {
   const rows = await db
     .selectFrom('message')
     .select(['role', 'content'])

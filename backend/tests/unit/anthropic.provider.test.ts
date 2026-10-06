@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAnthropicProvider } from '../../src/lib/tutor/anthropic.provider.js'
 import { EXPLAIN_SYSTEM_PROMPT_V1 } from '../../src/lib/tutor/prompt/explain.v1.js'
+import { GUIDE_SYSTEM_PROMPT_V1 } from '../../src/lib/tutor/prompt/guide.v1.js'
 import { TutorProviderError } from '../../src/lib/tutor/tutor.js'
 
 type Frame = [event: string, data: unknown]
@@ -272,5 +273,124 @@ describe('anthropic provider', () => {
     expect(captured.body.messages).toEqual([
       { role: 'user', content: 'Topic: TypeScript\n\nShow an example' }
     ])
+  })
+})
+
+const GUIDE = {
+  title: 'Fix the double effect',
+  steps: [
+    { title: 'One', body: 'Do one', code: null, codeLanguage: null, hint: 'Think' },
+    { title: 'Two', body: 'Do two', code: 'x', codeLanguage: 'ts', hint: 'Look' },
+    { title: 'Three', body: 'Do three', code: null, codeLanguage: null, hint: 'Check' }
+  ]
+}
+
+function jsonMessage(
+  text: string,
+  stopReason = 'end_turn',
+  extra: Record<string, unknown> = {}
+): Response {
+  return new Response(
+    JSON.stringify({
+      id: 'msg_1',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-haiku-4-5',
+      content: text === '' ? [] : [{ type: 'text', text }],
+      stop_reason: stopReason,
+      stop_sequence: null,
+      usage: { input_tokens: 30, output_tokens: 90, cache_read_input_tokens: 4 },
+      ...extra
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } }
+  )
+}
+
+const guideInput = {
+  topicName: 'React',
+  history: [
+    { role: 'user' as const, content: 'Why does useEffect run twice?' },
+    { role: 'assistant' as const, content: 'Strict Mode.' }
+  ]
+}
+
+describe('anthropic provider generateGuide', () => {
+  it('returns the parsed output, usage and model', async () => {
+    const { provider } = providerWith(() => jsonMessage(JSON.stringify(GUIDE)))
+    const result = await provider.generateGuide(guideInput)
+    expect(result).toEqual({
+      output: GUIDE,
+      stopReason: 'end_turn',
+      refusalCategory: null,
+      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4 },
+      model: 'claude-haiku-4-5'
+    })
+  })
+
+  it('hands back output that does not satisfy the schema; validating is the caller job', async () => {
+    const { provider } = providerWith(() => jsonMessage(JSON.stringify({ title: 'x', steps: [] })))
+    const result = await provider.generateGuide(guideInput)
+    expect(result.output).toEqual({ title: 'x', steps: [] })
+  })
+
+  it('returns a null output for text that is not JSON', async () => {
+    const { provider } = providerWith(() => jsonMessage('not json'))
+    const result = await provider.generateGuide(guideInput)
+    expect(result).toMatchObject({ output: null, stopReason: 'end_turn' })
+  })
+
+  it('maps a refusal with its category and no output', async () => {
+    const { provider } = providerWith(() =>
+      jsonMessage('', 'refusal', { stop_details: { type: 'refusal', category: 'cyber' } })
+    )
+    const result = await provider.generateGuide(guideInput)
+    expect(result).toMatchObject({
+      output: null,
+      stopReason: 'refusal',
+      refusalCategory: 'cyber'
+    })
+  })
+
+  it('treats max_tokens as no output even when the text is parseable', async () => {
+    const { provider } = providerWith(() => jsonMessage(JSON.stringify(GUIDE), 'max_tokens'))
+    const result = await provider.generateGuide(guideInput)
+    expect(result).toMatchObject({ output: null, stopReason: 'max_tokens' })
+  })
+
+  it('throws TutorProviderError on a 500 without leaking the provider payload', async () => {
+    const { provider } = providerWith(
+      () =>
+        new Response(
+          JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'SECRET-DETAIL' } }),
+          { status: 500, headers: { 'content-type': 'application/json' } }
+        )
+    )
+    const error = await provider.generateGuide(guideInput).catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(TutorProviderError)
+    expect((error as Error).message).not.toContain('SECRET-DETAIL')
+  })
+
+  it('sends the documented non-streaming structured-output request', async () => {
+    const { provider, captured } = providerWith(() => jsonMessage(JSON.stringify(GUIDE)))
+    await provider.generateGuide(guideInput)
+    const body = captured.body
+    expect(body.model).toBe('claude-haiku-4-5')
+    expect(body.max_tokens).toBe(4096)
+    expect(body).not.toHaveProperty('stream')
+    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body.system).toEqual([{ type: 'text', text: GUIDE_SYSTEM_PROMPT_V1 }])
+    expect(body.messages).toEqual([
+      { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },
+      { role: 'assistant', content: 'Strict Mode.' },
+      { role: 'user', content: 'Write the step-by-step guide for this conversation.' }
+    ])
+    const format = (body.output_config as { format: { type: string; schema: object } }).format
+    expect(format.type).toBe('json_schema')
+    expect(format.schema).toMatchObject({ type: 'object', required: ['title', 'steps'] })
+    expect(format).not.toHaveProperty('parse')
+    for (const key of ['thinking', 'effort', 'temperature', 'output_format']) {
+      expect(body).not.toHaveProperty(key)
+    }
+    expect(body.output_config).not.toHaveProperty('effort')
   })
 })
