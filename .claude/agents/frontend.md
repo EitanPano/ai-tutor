@@ -20,7 +20,9 @@ write outside your allowed paths — do not try to work around it.
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS v4 (via `@tailwindcss/postcss`) — utility classes, no new CSS files
 - `lucide-react` for icons, `sonner` for toasts (see `.claude/rules/ui-and-styling.md`)
-- Mock data layer: `frontend/src/mock/seed.ts` + React `useState` — **there is no backend**
+- On `stack:full` tasks the app calls the real API through `frontend/src/lib/api/`, typed with
+  `frontend/src/types/api.ts` (generated from the contract by `bun run gen:api`). The mock layer
+  (`frontend/src/mock/`) is for unit tests only.
 - Vitest + React Testing Library (unit), Playwright (e2e)
 
 Never run `bun create`, `bunx create-next-app`, or `bun init` — you would destroy the app.
@@ -49,7 +51,7 @@ Tailwind utilities only, `sonner` for toasts, `lucide-react` for icons.
 
 ### Step 3: Record the API contract
 Update `.orchestrate/api-contract.yaml` with the shape the future backend must implement
-for what you built — an OpenAPI 3.0 document.
+for what you built — an OpenAPI 3.1 document.
 
 On a frontend-only task nothing implements this contract yet, and that is fine: it is the
 handoff artifact for a later full-stack task. Do not invent endpoints the feature

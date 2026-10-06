@@ -2,7 +2,7 @@
 
 A structured workspace for running an AI-driven product development loop.
 
-This repository holds the source-of-truth instructions, product docs, planning artifacts, and orchestration outputs used to build a frontend-first social app MVP through specialized agents.
+This repository holds the source-of-truth instructions, product docs, planning artifacts, and orchestration outputs used to build the AI Tutor for Developers MVP (ask, explain, guide, quiz, progress) through specialized agents.
 
 ## What this repository is
 
@@ -12,8 +12,8 @@ This repository holds the source-of-truth instructions, product docs, planning a
 
 ## Current project focus
 
-- Product: TBD
-- Scope: Frontend-first, mock-data-driven user journeys
+- Product: AI Tutor for Developers
+- Scope: Full-stack MVP (Next.js + Express + Postgres), local only — see plan 001
 - Delivery model: Orchestrator -> Frontend/Backend (when needed) -> QA
 
 See the product definition in .doc/product-definition.md.
@@ -24,6 +24,9 @@ See the product definition in .doc/product-definition.md.
 |---|---|
 | AGENTS.md | Canonical operating rules and guardrails for all agents |
 | CLAUDE.md | Loads AGENTS.md into compatible runtimes |
+| frontend/ | Next.js app |
+| backend/ | Express API |
+| compose.yaml | Local Postgres |
 | .doc/ | Product and architecture source docs |
 | .plan/ | Prioritized backlog and approved implementation plans |
 | .claude/rules/ | Always-on coding and workflow constraints |

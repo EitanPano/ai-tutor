@@ -15,6 +15,7 @@ test-results/
 # Dev-loop output is generated and disposable (see AGENTS.md)
 .orchestrate/*
 !.orchestrate/README.md
+!.orchestrate/api-contract.yaml
 
 # Per-user Claude Code settings
 .claude/settings.local.json
