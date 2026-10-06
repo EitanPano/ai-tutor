@@ -1,23 +1,133 @@
 @import 'tailwindcss';
 
+/* Lab notebook palette: graph-paper canvas, paper sheets, blue-black ink, one highlighter. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --canvas: #e9eef4;
+  --sheet: #fafbfc;
+  --ink: #16233b;
+  --ink-muted: #56637a;
+  --rule: #ccd5e1;
+  --pen: #1f4fd1;
+  --highlight: #ffe45c;
+  --correct: #1e7a4c;
+  --wrong: #c23b22;
+  --code: #16233b;
+  --code-ink: #e6edf5;
+  --marker-ink: #16233b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #0d1626;
+    --sheet: #121d31;
+    --ink: #e3eaf4;
+    --ink-muted: #9aa8bd;
+    --rule: #26344d;
+    --pen: #7fa2ff;
+    --highlight: #e8c93a;
+    --correct: #4cc38a;
+    --wrong: #f07a62;
+    --code: #0a111d;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-sheet: var(--sheet);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-rule: var(--rule);
+  --color-pen: var(--pen);
+  --color-highlight: var(--highlight);
+  --color-correct: var(--correct);
+  --color-wrong: var(--wrong);
+  --color-code: var(--code);
+  --color-code-ink: var(--code-ink);
+  --color-marker-ink: var(--marker-ink);
+
+  --font-sans: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, 'Cascadia Code', monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+  --text-lead: 1.25rem;
+  --text-lead--line-height: 1.5;
+  --text-title: 1.75rem;
+  --text-title--line-height: 1.2;
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.1;
+
+  --animate-spin-slow: spin 0.8s linear infinite;
+}
+
+/*
+ * Marker swipe: the single highlighter flourish. The text is always dark ink, so on the dark
+ * canvas the swipe covers the full line height; a half swipe would leave the top of the
+ * letters dark on dark.
+ */
+@utility marker {
+  background-image: linear-gradient(transparent 50%, var(--highlight) 50%);
+  color: var(--marker-ink);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+
+  @media (prefers-color-scheme: dark) {
+    background-image: linear-gradient(var(--highlight), var(--highlight));
+  }
+}
+
+/* A faint 24px grid of rules on the canvas. */
+@utility graph-paper {
+  background-color: var(--canvas);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--rule) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rule) 55%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  a {
+    color: var(--pen);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--pen);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--highlight);
+    color: var(--marker-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
