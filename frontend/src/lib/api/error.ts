@@ -41,6 +41,8 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   ai_refused: "The tutor can't help with that question. Try rephrasing it.",
   ai_provider_error: 'The AI service failed to answer. Retry in a moment.',
   ai_unavailable: 'AI features are turned off right now.',
+  thread_empty: 'Ask a question first, then turn the answer into a guide.',
+  ai_invalid_output: 'The tutor produced something unusable. Try again.',
   stream_interrupted: 'The answer stopped unexpectedly. Retry to ask again.'
 }
 

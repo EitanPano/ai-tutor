@@ -10,6 +10,7 @@ import { describeError, isApiError } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
 import { Composer } from './composer'
+import { GuideTools } from './guide-tools'
 import { takePendingQuestion } from './pending-question'
 import { ThreadHeader } from './thread-header'
 import { Transcript } from './transcript'
@@ -133,7 +134,8 @@ export function Conversation({ threadId }: { threadId: string }) {
     )
   }
 
-  const { thread, messages } = detail.data
+  const { thread, messages, guides } = detail.data
+  const hasAnswer = messages.some((m) => m.role === 'assistant' && m.status === 'complete')
   const full = threadFull || thread.messageCount + 2 > MAX_MESSAGES
   const busy = !!asking || (!!unfinishedId && !stalled)
   const locked = budgetSpent || full
@@ -158,8 +160,8 @@ export function Conversation({ threadId }: { threadId: string }) {
 
       <ThreadHeader thread={thread} />
 
-      {/* Slot for the study tools (guide, quiz) that later tasks add. */}
-      <div role="toolbar" aria-label="Study tools" className="flex flex-wrap gap-2 empty:hidden" />
+      {/* The study tools (guide now, quiz in a later task). */}
+      <GuideTools threadId={threadId} hasAnswer={hasAnswer} busy={busy} guides={guides} />
 
       <Sheet className="p-5 md:p-8">
         {messages.length === 0 && !busy ? (

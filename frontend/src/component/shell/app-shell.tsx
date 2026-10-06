@@ -98,7 +98,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="graph-paper min-w-0 flex-1 px-4 py-8 md:px-10 md:py-10">
         <div
-          className={`mx-auto w-full ${pathname.startsWith('/thread') ? 'max-w-[76rem]' : 'max-w-[72ch]'}`}
+          className={`mx-auto w-full ${
+            pathname.startsWith('/thread') || pathname.startsWith('/guide')
+              ? 'max-w-[76rem]'
+              : 'max-w-[72ch]'
+          }`}
         >
           {session.isError ? (
             isApiError(session.error) && session.error.code === 'unauthenticated' ? null : (
