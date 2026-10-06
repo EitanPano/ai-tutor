@@ -14,16 +14,40 @@ const DOWN_MARKER = '-- migrate:down'
 type Migration = { name: string; up: string; down: string }
 type Log = (message: string) => void
 
+/** Markers must be whole lines; a marker mentioned inside a comment or string does not count. */
 export function parseMigration(name: string, sql: string): Migration {
-  const upAt = sql.indexOf(UP_MARKER)
-  const downAt = sql.indexOf(DOWN_MARKER)
-  if (upAt === -1 || downAt === -1 || downAt < upAt) {
-    throw new Error(`Migration ${name} needs a "${UP_MARKER}" section followed by "${DOWN_MARKER}"`)
+  const lines = sql.split(/\r?\n/)
+  const markerLines = (marker: string) =>
+    lines.flatMap((line, index) => (line.trim() === marker ? [index] : []))
+  const ups = markerLines(UP_MARKER)
+  const downs = markerLines(DOWN_MARKER)
+  const upAt = ups[0]
+  const downAt = downs[0]
+  if (
+    ups.length !== 1 ||
+    downs.length !== 1 ||
+    upAt === undefined ||
+    downAt === undefined ||
+    downAt < upAt
+  ) {
+    throw new Error(
+      `Migration ${name} needs exactly one "${UP_MARKER}" line followed by one "${DOWN_MARKER}" line`
+    )
+  }
+  const preamble = lines.slice(0, upAt).filter((line) => line.trim() !== '')
+  if (preamble.some((line) => !line.trim().startsWith('--'))) {
+    throw new Error(`Migration ${name} has non-comment text before "${UP_MARKER}"`)
   }
   return {
     name,
-    up: sql.slice(upAt + UP_MARKER.length, downAt).trim(),
-    down: sql.slice(downAt + DOWN_MARKER.length).trim()
+    up: lines
+      .slice(upAt + 1, downAt)
+      .join('\n')
+      .trim(),
+    down: lines
+      .slice(downAt + 1)
+      .join('\n')
+      .trim()
   }
 }
 

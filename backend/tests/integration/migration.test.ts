@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type pg from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createDb } from '../../src/lib/db/index.js'
-import { migrate, reset, rollback } from '../../src/lib/db/migrate.js'
+import { migrate, parseMigration, reset, rollback } from '../../src/lib/db/migrate.js'
 import { SCHEMA_CHECK_DATABASE_URL, TEST_DATABASE_URL } from '../global-setup.js'
 
 const SCHEMA_SQL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../db/schema.sql')
@@ -41,20 +41,57 @@ async function snapshot(pool: pg.Pool) {
   }
 }
 
+/** Tables (other than the tracking table) and extensions (other than plpgsql) that exist. */
+async function migratedObjects(pool: pg.Pool) {
+  const tables = await pool.query<{ tablename: string }>(
+    `SELECT tablename FROM pg_tables
+     WHERE schemaname = 'public' AND tablename <> 'schema_migration' ORDER BY tablename`
+  )
+  const extensions = await pool.query<{ extname: string }>(
+    `SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY extname`
+  )
+  return {
+    tables: tables.rows.map((row) => row.tablename),
+    extensions: extensions.rows.map((row) => row.extname)
+  }
+}
+
 describe('migrations', () => {
   it('applies up, rolls back everything, and applies up again', async () => {
     await reset(test.pool)
     await rollback(test.pool, 1000)
     const { rows: afterRollback } = await test.pool.query('SELECT name FROM schema_migration')
     expect(afterRollback).toEqual([])
+    expect(await migratedObjects(test.pool)).toEqual({ tables: [], extensions: [] })
     const applied = await migrate(test.pool)
     expect(applied.length).toBeGreaterThan(0)
+    expect((await migratedObjects(test.pool)).extensions).toEqual(['citext'])
     expect(await migrate(test.pool)).toEqual([])
   })
 
-  it('rejects a migration file without a down section', async () => {
-    const { parseMigration } = await import('../../src/lib/db/migrate.js')
+  it('rejects a migration file without a down section', () => {
     expect(() => parseMigration('x.sql', '-- migrate:up\nSELECT 1;')).toThrow(/migrate:down/)
+  })
+
+  it('only treats whole-line markers as markers', () => {
+    const parsed = parseMigration(
+      'x.sql',
+      '-- header comment\n-- migrate:up\nSELECT 1; -- migrate:down is mentioned here\n\n-- migrate:down\nSELECT 2;\n'
+    )
+    expect(parsed.up).toBe('SELECT 1; -- migrate:down is mentioned here')
+    expect(parsed.down).toBe('SELECT 2;')
+  })
+
+  it('rejects non-comment text before the up marker', () => {
+    expect(() =>
+      parseMigration('x.sql', 'SELECT 0;\n-- migrate:up\nSELECT 1;\n-- migrate:down\nSELECT 2;')
+    ).toThrow(/before "-- migrate:up"/)
+  })
+
+  it('rejects duplicate markers', () => {
+    expect(() =>
+      parseMigration('x.sql', '-- migrate:up\nSELECT 1;\n-- migrate:up\n-- migrate:down\nSELECT 2;')
+    ).toThrow(/exactly one/)
   })
 })
 

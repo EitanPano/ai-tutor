@@ -9,7 +9,12 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   DATABASE_URL: z.string().min(1).optional(),
-  FRONTEND_URL: z.url().optional(),
+  FRONTEND_URL: z
+    .url()
+    .refine((value) => new URL(value).origin === value, {
+      message: 'must be an exact origin like https://app.example.com (no trailing slash or path)'
+    })
+    .optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   AI_PROVIDER: z.enum(['fake', 'anthropic']).default('fake'),
   AI_MODEL: z.string().min(1).default('claude-haiku-4-5'),

@@ -60,4 +60,17 @@ describe('loadConfig', () => {
   it('parses AI_ENABLED=false to false', () => {
     expect(loadConfig({ AI_ENABLED: 'false' }).aiEnabled).toBe(false)
   })
+
+  it.each(['http://localhost:3000/', 'https://app.example.com/app', 'https://app.example.com?x=1'])(
+    'rejects FRONTEND_URL that is not an exact origin: %s',
+    (value) => {
+      expect(() => loadConfig({ FRONTEND_URL: value })).toThrow(/FRONTEND_URL.*exact origin/)
+    }
+  )
+
+  it('accepts an exact FRONTEND_URL origin', () => {
+    expect(loadConfig({ FRONTEND_URL: 'https://app.example.com' }).frontendUrl).toBe(
+      'https://app.example.com'
+    )
+  })
 })

@@ -38,7 +38,7 @@ export function createApp({ config, db, logger, extraRoutes }: AppDeps): Express
       serializers: {
         req: (req: { method: string; url: string; id: string }) => ({
           method: req.method,
-          url: req.url,
+          url: req.url.split('?')[0],
           requestId: req.id
         }),
         res: (res: { statusCode: number }) => ({ status: res.statusCode })
