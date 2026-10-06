@@ -1,0 +1,13 @@
+bun.lock
+node_modules
+.next
+dist
+coverage
+playwright-report
+test-results
+.superpowers
+.orchestrate
+.plan
+.doc
+.claude
+*.md

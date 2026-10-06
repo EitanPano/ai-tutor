@@ -1,0 +1,24 @@
+{
+  "name": "ai-tutor",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "bun run --filter '*' lint",
+    "test": "bun run --filter '*' test",
+    "test:e2e": "bun run --filter frontend test:e2e",
+    "gen:api": "bun run --filter frontend gen:api",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9"
+  }
+}
