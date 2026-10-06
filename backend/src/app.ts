@@ -9,8 +9,11 @@ import type { Db } from './lib/db/index.js'
 import { errorMiddleware, notFoundHandler } from './lib/error.js'
 import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
+import { createTutorProvider } from './lib/tutor/factory.js'
+import type { TutorProvider } from './lib/tutor/tutor.js'
 import { healthRouter } from './route/health.route.js'
 import { originCheck } from './route/middleware/origin-check.js'
+import { messageRouter } from './route/message.route.js'
 import { sessionRouter } from './route/session.route.js'
 import { threadRouter } from './route/thread.route.js'
 import { topicRouter } from './route/topic.route.js'
@@ -32,11 +35,13 @@ export type AppDeps = {
   /** The pool behind `db`; the login limiter stores its counters through it. */
   pool: pg.Pool
   logger: Logger
+  /** Defaults to the provider selected by `config.aiProvider`; tests inject the fake. */
+  tutor?: TutorProvider
   /** Test-only hook: mounts extra routes before the 404 and error handlers. */
   extraRoutes?: (app: Express) => void
 }
 
-export function createApp({ config, db, pool, logger, extraRoutes }: AppDeps): Express {
+export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppDeps): Express {
   const app = express()
   app.disable('x-powered-by')
   app.use(requestId)
@@ -64,6 +69,7 @@ export function createApp({ config, db, pool, logger, extraRoutes }: AppDeps): E
   app.use(sessionRouter(db, config, createLoginLimiter(pool)))
   app.use(topicRouter(db))
   app.use(threadRouter(db, config))
+  app.use(messageRouter(db, config, tutor ?? createTutorProvider(config), logger))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)

@@ -4,14 +4,27 @@ import { createApp } from '../../src/app.js'
 import { loadConfig, type Config } from '../../src/lib/config.js'
 import { createDb, type Db } from '../../src/lib/db/index.js'
 import { createLogger } from '../../src/lib/logger.js'
+import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 
-export type TestApp = { app: Express; config: Config; db: Db; close: () => Promise<void> }
+export type TestApp = {
+  app: Express
+  config: Config
+  db: Db
+  /** The fake tutor wired into the app; `tutor.calls` records every explain input. */
+  tutor: FakeTutorProvider
+  close: () => Promise<void>
+}
 
 /** Builds the app against the real test database. Pass `databaseUrl` to point elsewhere. */
 export function createTestApp(
-  overrides: { databaseUrl?: string; extraRoutes?: (app: Express) => void } = {}
+  overrides: {
+    databaseUrl?: string
+    extraRoutes?: (app: Express) => void
+    config?: Partial<Config>
+  } = {}
 ): TestApp {
-  const config = loadConfig(process.env)
+  const config = { ...loadConfig(process.env), ...overrides.config }
+  const tutor = new FakeTutorProvider({ delayMs: 0 })
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
   const app = createApp({
@@ -19,9 +32,10 @@ export function createTestApp(
     db,
     pool,
     logger: createLogger(config),
+    tutor,
     ...(overrides.extraRoutes ? { extraRoutes: overrides.extraRoutes } : {})
   })
-  return { app, config, db, close: () => db.destroy() }
+  return { app, config, db, tutor, close: () => db.destroy() }
 }
 
 /** Empties every table except `schema_migration` and `topic` (reference data seeded by migration). */
