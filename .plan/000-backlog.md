@@ -8,7 +8,6 @@ Format:
 
 Current queue:
 - [ ] ai tutor mvp | stack:full
-- [ ] profile page
 
 
 
