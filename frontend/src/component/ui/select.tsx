@@ -1,0 +1,35 @@
+import { useId, type SelectHTMLAttributes } from 'react'
+
+type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & {
+  label: string
+  /** Hide the label visually when the surrounding layout already names the control. */
+  hideLabel?: boolean
+  id?: string
+}
+
+/** A native `<select>` in the notebook tokens: keyboard and mobile pickers come for free. */
+export function Select({
+  label,
+  hideLabel = false,
+  id: idProp,
+  className = '',
+  children,
+  ...rest
+}: SelectProps) {
+  const generated = useId()
+  const id = idProp ?? generated
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-semibold'}>
+        {label}
+      </label>
+      <select
+        id={id}
+        className={`h-10 rounded-md border border-rule bg-sheet px-3 text-base text-ink hover:border-ink-muted disabled:cursor-not-allowed disabled:opacity-60 ${className}`.trim()}
+        {...rest}
+      >
+        {children}
+      </select>
+    </div>
+  )
+}

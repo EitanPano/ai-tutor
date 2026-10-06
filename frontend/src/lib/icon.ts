@@ -11,5 +11,9 @@ export {
   Copy as CopyIcon,
   Square as StopIcon,
   Send as SendIcon,
-  RotateCcw as RetryIcon
+  RotateCcw as RetryIcon,
+  Plus as NewIcon,
+  Pencil as RenameIcon,
+  Trash2 as DeleteIcon,
+  ArrowLeft as BackIcon
 } from 'lucide-react'

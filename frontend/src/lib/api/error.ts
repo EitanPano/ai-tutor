@@ -33,8 +33,15 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   email_taken: 'An account with this email already exists. Log in instead.',
   validation_failed: 'Some fields need fixing. Check them and try again.',
   forbidden: 'The server refused this request. Reload the page and try again.',
-  not_found: "That item doesn't exist or was deleted.",
-  upstream_unavailable: 'The AI provider is unavailable. Try again in a moment.'
+  not_found: "This thread doesn't exist or was deleted.",
+  upstream_unavailable: 'The AI provider is unavailable. Try again in a moment.',
+  ai_budget_exceeded: "You've used today's AI budget. It resets at midnight in your time zone.",
+  generation_in_progress: 'Another answer is still being generated. Wait for it to finish.',
+  thread_full: 'This thread is full. Start a new thread to keep going.',
+  ai_refused: "The tutor can't help with that question. Try rephrasing it.",
+  ai_provider_error: 'The AI service failed to answer. Retry in a moment.',
+  ai_unavailable: 'AI features are turned off right now.',
+  stream_interrupted: 'The answer stopped unexpectedly. Retry to ask again.'
 }
 
 /** One user-facing sentence for any thrown value. Says what happened and what to do. */

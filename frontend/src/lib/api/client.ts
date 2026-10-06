@@ -11,7 +11,7 @@ type ApiFetchOptions = {
   signal?: AbortSignal | undefined
 }
 
-function isErrorResponse(value: unknown): value is ErrorResponse {
+export function isErrorResponse(value: unknown): value is ErrorResponse {
   if (typeof value !== 'object' || value === null) return false
   const error = (value as { error?: unknown }).error
   if (typeof error !== 'object' || error === null) return false
@@ -19,7 +19,7 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
   return typeof code === 'string' && typeof message === 'string'
 }
 
-async function toApiError(response: Response): Promise<ApiError> {
+export async function toApiError(response: Response): Promise<ApiError> {
   let parsed: unknown
   try {
     parsed = await response.json()
