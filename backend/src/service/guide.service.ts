@@ -161,10 +161,10 @@ export async function getGuide(db: Db, auth: Auth, id: string): Promise<GuideDto
 }
 
 /** A step whose guide's thread is not soft-deleted (derived content is hidden with the thread). */
-const inLiveThread = sql<boolean>`guide_step.guide_id IN (
-  SELECT guide.id FROM guide
+const inLiveThread = sql<boolean>`EXISTS (
+  SELECT 1 FROM guide
   JOIN thread ON thread.id = guide.thread_id
-  WHERE thread.deleted_at IS NULL
+  WHERE guide.id = guide_step.guide_id AND thread.deleted_at IS NULL
 )`
 
 export async function updateStep(

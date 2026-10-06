@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
+import { updateStep } from '../../src/service/guide.service.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
@@ -336,6 +337,21 @@ describe('scoping and soft delete', () => {
       .where('id', '=', guide.steps[0]?.id ?? '')
       .executeTakeFirstOrThrow()
     expect(step.done_at).toBeNull()
+  })
+
+  it('answers 404 from the no-change branch of updateStep on a soft-deleted thread', async () => {
+    const { session, threadId } = await setup()
+    const guide = await createdGuide(session, threadId)
+    const stepId = guide.steps[0]?.id ?? ''
+    const auth = { userId: session.user.id }
+    // The route rejects an empty body, so the read-only branch is exercised through the service.
+    await expect(updateStep(ctx.db, auth, guide.id, stepId, {})).resolves.toMatchObject({
+      id: stepId
+    })
+    await client.delete(`/api/thread/${threadId}`).set('Cookie', session.cookie)
+    await expect(updateStep(ctx.db, auth, guide.id, stepId, {})).rejects.toMatchObject({
+      status: 404
+    })
   })
 
   it('answers 404 for a step that is not in the guide', async () => {

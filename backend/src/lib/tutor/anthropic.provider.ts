@@ -26,9 +26,10 @@ const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
 
 /** The final user turn of a quiz request. */
 function quizRequest(input: QuizInput): string {
+  const article = input.difficulty === 'easy' ? 'an' : 'a'
   return input.history === null
-    ? `Write a ${input.difficulty} quiz about ${input.topicName}.`
-    : `Write a ${input.difficulty} quiz on this conversation.`
+    ? `Write ${article} ${input.difficulty} quiz about ${input.topicName}.`
+    : `Write ${article} ${input.difficulty} quiz on this conversation.`
 }
 
 export type AnthropicProviderOptions = {

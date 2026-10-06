@@ -263,7 +263,11 @@ function toAttemptDto(
     total: attempt.total,
     submittedAt: attempt.submitted_at.toISOString(),
     items: items.map((item) => {
-      const choiceIndex = chosen.get(item.id) ?? -1
+      const choiceIndex = chosen.get(item.id)
+      // Grading stores one answer per item; a gap is corrupted data, not a contract value.
+      if (choiceIndex === undefined) {
+        throw new Error(`Attempt ${attempt.id} has no answer for item ${item.id}`)
+      }
       return {
         itemId: item.id,
         position: item.position,

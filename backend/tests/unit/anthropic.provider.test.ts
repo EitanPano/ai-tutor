@@ -477,7 +477,7 @@ describe('anthropic provider generateQuiz', () => {
     const { provider, captured } = providerWith(() => jsonMessage(JSON.stringify(QUIZ)))
     await provider.generateQuiz({ topicName: 'SQL', difficulty: 'easy', history: null })
     expect(captured.body.messages).toEqual([
-      { role: 'user', content: 'Topic: SQL\n\nWrite a easy quiz about SQL.' }
+      { role: 'user', content: 'Topic: SQL\n\nWrite an easy quiz about SQL.' }
     ])
   })
 })
