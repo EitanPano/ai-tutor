@@ -20,6 +20,7 @@
   `bunx <bin>`. Never use npm, npx, yarn or pnpm. `bun.lock` is the only lockfile.
 - Run package scripts with `bun run test`, never `bun test`: `bun test` starts Bun's own
   test runner and skips the project's Vitest setup.
+- Next.js 16 docs are bundled at `frontend/node_modules/next/dist/docs/`; read them before using a Next API.
 
 ## Repository Layout
 - `.doc/` — hand-written product and architecture docs.
