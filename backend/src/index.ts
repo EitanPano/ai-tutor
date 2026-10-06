@@ -7,8 +7,8 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const config = loadConfig()
 const logger = createLogger(config)
-const { db } = createDb(config.databaseUrl, logger)
-const app = createApp({ config, db, logger })
+const { db, pool } = createDb(config.databaseUrl, logger)
+const app = createApp({ config, db, pool, logger })
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port }, 'backend listening')

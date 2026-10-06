@@ -13,10 +13,11 @@ export function createTestApp(
 ): TestApp {
   const config = loadConfig(process.env)
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
-  const { db } = createDb(databaseUrl)
+  const { db, pool } = createDb(databaseUrl)
   const app = createApp({
     config,
     db,
+    pool,
     logger: createLogger(config),
     ...(overrides.extraRoutes ? { extraRoutes: overrides.extraRoutes } : {})
   })

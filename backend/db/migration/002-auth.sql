@@ -1,9 +1,4 @@
--- Full bootstrap schema for a fresh database.
--- This file MUST change together with backend/db/migration/*.sql. The migration test
--- (tests/integration/migration.test.ts) fails when the two drift apart.
-
-CREATE EXTENSION IF NOT EXISTS citext;
-
+-- migrate:up
 CREATE TABLE app_user (
   id text PRIMARY KEY DEFAULT uuidv7()::text,
   email citext NOT NULL UNIQUE,
@@ -31,3 +26,8 @@ CREATE TABLE rate_limit (
   expire bigint,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- migrate:down
+DROP TABLE rate_limit;
+DROP TABLE session;
+DROP TABLE app_user;
