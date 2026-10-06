@@ -142,8 +142,8 @@ test('rename, change topic and delete a thread', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Delete' }).click()
   await page
-    .getByRole('group', { name: 'Confirm delete' })
-    .getByRole('button', { name: 'Delete' })
+    .getByRole('group', { name: 'Delete this thread?' })
+    .getByRole('button', { name: 'Confirm delete' })
     .click()
 
   await expect(page).toHaveURL(/\/thread$/)

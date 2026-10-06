@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { Markdown } from '@/component/markdown/markdown'
 import { Button } from '@/component/ui/button'
 import { isPending, type Message } from '@/lib/api/thread'
@@ -42,15 +42,19 @@ function noteFor(message: Message): string | null {
 
 function Answer({
   message,
+  stalled,
   onRetry
 }: {
   message: Message
+  /** The server never finished this answer: show it as failed instead of waiting on it. */
+  stalled: boolean
   /** Present only for a failed answer that can be asked again. */
   onRetry?: (() => void) | undefined
 }) {
-  const note = noteFor(message)
-  const failed = message.status === 'failed'
-  if (isPending(message)) {
+  const pending = isPending(message)
+  const note = pending && stalled ? 'This answer failed.' : noteFor(message)
+  const failed = message.status === 'failed' || (pending && stalled)
+  if (pending && !stalled) {
     return (
       <article aria-label="Tutor answer" aria-busy="true">
         <Thinking />
@@ -98,12 +102,19 @@ function Thinking() {
 type TranscriptProps = {
   messages: Message[]
   asking: Asking | undefined
+  /** An unfinished answer has stopped changing for too long: treat it as failed. */
+  stalled?: boolean
   /** Ask the same question again. Undefined while asking is not possible. */
   onRetry?: ((question: string) => void) | undefined
 }
 
 /** Oldest first, notebook style: a ruled question, then the answer as prose on the sheet. */
-export function Transcript({ messages, asking, onRetry }: TranscriptProps) {
+export const Transcript = memo(function Transcript({
+  messages,
+  asking,
+  stalled = false,
+  onRetry
+}: TranscriptProps) {
   const saved = (id: string | undefined) => !!id && messages.some((m) => m.id === id)
   // The saved copy of the answer being streamed is an empty placeholder until the server
   // finishes: keep showing the streamed text until the real one replaces it.
@@ -131,6 +142,7 @@ export function Transcript({ messages, asking, onRetry }: TranscriptProps) {
           <Answer
             key={message.id}
             message={message}
+            stalled={stalled}
             onRetry={onRetry && question ? () => onRetry(question) : undefined}
           />
         )
@@ -147,4 +159,4 @@ export function Transcript({ messages, asking, onRetry }: TranscriptProps) {
       )}
     </div>
   )
-}
+})

@@ -29,7 +29,15 @@ export type AskResult = {
 }
 
 /** Owns the stream state of the one answer that may be in flight for a thread. */
-export function useAsk(threadId: string) {
+export function useAsk(
+  threadId: string,
+  {
+    onRetryAccepted
+  }: {
+    /** A toast Retry was accepted by the server: the question is no longer a draft. */
+    onRetryAccepted?: (question: string) => void
+  } = {}
+) {
   const queryClient = useQueryClient()
   const [asking, setAsking] = useState<Asking>()
   const [announcement, setAnnouncement] = useState('')
@@ -37,21 +45,33 @@ export function useAsk(threadId: string) {
   const [threadFull, setThreadFull] = useState(false)
   const controller = useRef<AbortController | undefined>(undefined)
   const mounted = useRef(true)
-  const askRef = useRef<(question: string) => Promise<AskResult>>(undefined)
+  const askRef =
+    useRef<(question: string, onAccepted?: () => void) => Promise<AskResult>>(undefined)
+  const retryAccepted = useRef(onRetryAccepted)
+  const toastIds = useRef(new Set<string | number>())
+
+  useEffect(() => {
+    retryAccepted.current = onRetryAccepted
+  }, [onRetryAccepted])
 
   useEffect(() => {
     mounted.current = true
+    const ids = toastIds.current
     return () => {
       mounted.current = false
       // Deferred so React's dev-only unmount/remount does not cancel a stream that just started.
       setTimeout(() => {
-        if (!mounted.current) controller.current?.abort()
+        if (mounted.current) return
+        controller.current?.abort()
+        // A toast's Retry must not outlive the page it belongs to.
+        for (const id of ids) toast.dismiss(id)
+        ids.clear()
       })
     }
   }, [])
 
   const ask = useCallback(
-    async (question: string): Promise<AskResult> => {
+    async (question: string, onAccepted?: () => void): Promise<AskResult> => {
       if (controller.current) return { started: false, outcome: 'failed' }
       const abort = new AbortController()
       controller.current = abort
@@ -75,8 +95,11 @@ export function useAsk(threadId: string) {
           signal: abort.signal,
           onStart: ({ userMessageId, assistantMessageId }) => {
             started = true
+            onAccepted?.()
             answerId = assistantMessageId
             update((a) => ({ ...a, userMessageId, assistantMessageId }))
+            // The thread was just saved with its first question: refresh its title and the list.
+            void queryClient.invalidateQueries({ queryKey: threadKey.all })
           },
           onDelta: (text) => update((a) => ({ ...a, phase: 'streaming', text: a.text + text })),
           onComplete: () => update((a) => ({ ...a, phase: 'finalizing' }))
@@ -88,11 +111,18 @@ export function useAsk(threadId: string) {
           const code = isApiError(err) ? err.code : ''
           if (code === 'ai_budget_exceeded') setBudgetSpent(true)
           if (code === 'thread_full') setThreadFull(true)
-          toast.error(describeError(err), {
+          const id = toast.error(describeError(err), {
             ...(RETRYABLE.has(code) && {
-              action: { label: 'Retry', onClick: () => void askRef.current?.(question) }
+              action: {
+                label: 'Retry',
+                onClick: () => {
+                  if (!mounted.current) return
+                  void askRef.current?.(question, () => retryAccepted.current?.(question))
+                }
+              }
             })
           })
+          if (id !== undefined) toastIds.current.add(id)
         }
       } finally {
         if (mounted.current) setAsking((a) => (a ? { ...a, phase: 'finalizing' } : a))

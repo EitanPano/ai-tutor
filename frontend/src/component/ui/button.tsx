@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentProps } from 'react'
 import { Spinner } from './spinner'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -27,7 +27,7 @@ export const buttonClass = ({
 }: { variant?: ButtonVariant; size?: ButtonSize } = {}) =>
   `${base} ${variants[variant]} ${sizes[size]}`
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentProps<'button'> & {
   variant?: ButtonVariant
   size?: ButtonSize
   loading?: boolean

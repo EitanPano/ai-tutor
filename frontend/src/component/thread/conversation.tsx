@@ -30,18 +30,39 @@ function Banner({ children, action }: { children: string; action?: ReactNode }) 
   )
 }
 
+/** How long an unfinished answer may go unchanged before it is shown as failed. */
+const STALL_MS = 60_000
+
+const scrollToEnd = () =>
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' })
+
 export function Conversation({ threadId }: { threadId: string }) {
+  const [draft, setDraft] = useState('')
+  const { asking, ask, stop, announcement, budgetSpent, threadFull } = useAsk(threadId, {
+    // A Retry from the toast re-asked the text the composer got back: do not leave it to be sent twice.
+    onRetryAccepted: (question) => setDraft((d) => (d.trim() === question.trim() ? '' : d))
+  })
+  const [stalledId, setStalledId] = useState<string>()
   const detail = useQuery({
     queryKey: threadKey.detail(threadId),
     queryFn: ({ signal }) => getThread(threadId, signal),
-    // An answer still being written (here, in another tab, or just stopped) finishes on the
-    // server a moment later: look again until it has.
-    refetchInterval: (query) => (query.state.data?.messages.some(isPending) ? 1500 : false)
+    // An answer still being written (in another tab, or just stopped) finishes on the server a
+    // moment later: look again until it has. Not while this page is streaming one itself, and
+    // not forever: a crashed server would leave it unfinished.
+    refetchInterval: (query) => {
+      const unfinished = query.state.data?.messages.find(isPending)
+      return !asking && unfinished && unfinished.id !== stalledId ? 1500 : false
+    }
   })
-  const { asking, ask, stop, announcement, budgetSpent, threadFull } = useAsk(threadId)
-  const [draft, setDraft] = useState('')
-  const endRef = useRef<HTMLDivElement>(null)
   const parked = useRef(false)
+
+  const unfinishedId = detail.data?.messages.find(isPending)?.id
+  useEffect(() => {
+    if (!unfinishedId || asking) return
+    const timer = setTimeout(() => setStalledId(unfinishedId), STALL_MS)
+    return () => clearTimeout(timer)
+  }, [unfinishedId, asking])
+  const stalled = !!unfinishedId && unfinishedId === stalledId
 
   /** Asks, and hands the text back to the composer when the server never took the question. */
   const submit = useCallback(
@@ -51,6 +72,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     },
     [ask]
   )
+  const retry = useCallback((question: string) => void submit(question), [submit])
 
   // A question parked by the new-question page is asked as soon as the thread opens.
   useEffect(() => {
@@ -63,18 +85,19 @@ export function Conversation({ threadId }: { threadId: string }) {
     if (question) void submit(question)
   }, [threadId, submit])
 
-  // Keep the newest text in view while it streams, unless the reader scrolled up.
+  // Keep the newest text in view while it streams, unless the reader scrolled up. Scrolling to
+  // the very end leaves the composer in its natural place below the transcript.
   const textLength = asking?.text.length ?? 0
   useEffect(() => {
     if (!textLength) return
     const nearEnd =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240
-    if (nearEnd) endRef.current?.scrollIntoView?.({ block: 'end' })
+    if (nearEnd) scrollToEnd()
   }, [textLength])
 
   const loaded = !!detail.data
   useEffect(() => {
-    if (loaded) endRef.current?.scrollIntoView?.({ block: 'end' })
+    if (loaded) scrollToEnd()
   }, [loaded])
 
   if (detail.isPending) {
@@ -112,8 +135,7 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   const { thread, messages } = detail.data
   const full = threadFull || thread.messageCount + 2 > MAX_MESSAGES
-  const unfinished = messages.some(isPending)
-  const busy = !!asking || unfinished
+  const busy = !!asking || (!!unfinishedId && !stalled)
   const locked = budgetSpent || full
   const streaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
 
@@ -146,17 +168,18 @@ export function Conversation({ threadId }: { threadId: string }) {
           <Transcript
             messages={messages}
             asking={asking}
-            onRetry={locked || busy ? undefined : (question) => void submit(question)}
+            stalled={stalled}
+            onRetry={locked || busy ? undefined : retry}
           />
         )}
-        <div ref={endRef} className="scroll-mb-72" />
       </Sheet>
 
       <div role="status" aria-live="polite" className="sr-only">
         {announcement}
       </div>
 
-      <div className="sticky bottom-4 flex flex-col gap-3">
+      {/* Solid canvas behind the composer so transcript text never shows around it. */}
+      <div className="sticky bottom-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-canvas before:to-transparent">
         {budgetSpent && (
           <Banner>
             You&apos;ve used today&apos;s AI budget. It resets at midnight in your time zone.

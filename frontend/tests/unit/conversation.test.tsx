@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
   deleteThread: vi.fn(),
   listTopics: vi.fn()
 }))
-const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn() }))
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), dismiss: vi.fn() }))
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
 
 vi.mock('@/lib/api/ask', () => ({ askQuestion: api.askQuestion }))
@@ -234,7 +234,7 @@ describe('Conversation', () => {
     await open()
     const typist = userEvent.setup()
 
-    await typist.type(screen.getByLabelText('Your question'), 'Hello there')
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Hello there')
     await typist.click(screen.getByRole('button', { name: 'Ask' }))
 
     expect(
@@ -242,8 +242,8 @@ describe('Conversation', () => {
         "You've used today's AI budget. It resets at midnight in your time zone."
       )
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Your question')).toBeDisabled()
-    expect(screen.getByLabelText('Your question')).toHaveValue('Hello there')
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Hello there')
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('AI budget'), {})
   })
 
@@ -254,7 +254,7 @@ describe('Conversation', () => {
     await open()
     const typist = userEvent.setup()
 
-    await typist.type(screen.getByLabelText('Your question'), 'Hello')
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Hello')
     await typist.click(screen.getByRole('button', { name: 'Ask' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
@@ -271,7 +271,7 @@ describe('Conversation', () => {
       name: 'New thread'
     })
     expect(link).toHaveAttribute('href', '/thread?topic=react')
-    expect(screen.getByLabelText('Your question')).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toBeDisabled()
   })
 
   it('stays open for questions one turn below the limit', async () => {
@@ -279,7 +279,7 @@ describe('Conversation', () => {
     await open()
 
     expect(screen.queryByText(/This thread is full/)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Your question')).toBeEnabled()
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toBeEnabled()
   })
 
   it('shows a not-found message with a way back', async () => {
@@ -288,5 +288,197 @@ describe('Conversation', () => {
 
     expect(await screen.findByText("This thread doesn't exist or was deleted.")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to threads' })).toHaveAttribute('href', '/thread')
+  })
+
+  it('keeps a streamed code block mounted while typing and while more text arrives', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Show code')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Intro\n\n```ts\nconst a = 1\n```\n\n')
+
+    const block = screen.getByRole('figure')
+    const copy = within(block).getByRole('button', { name: 'Copy' })
+    await userEvent.setup().type(screen.getByRole('textbox', { name: 'Your question' }), 'next one')
+    await ask.delta('More text after the block')
+
+    expect(screen.getByRole('figure')).toBe(block)
+    expect(within(block).getByRole('button', { name: 'Copy' })).toBe(copy)
+    expect(screen.getByText('More text after the block')).toBeInTheDocument()
+  })
+
+  it('blocks a second submit while an answer is in flight', async () => {
+    controlledAsk()
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'first')
+    await typist.keyboard('{Control>}{Enter}{/Control}')
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'second')
+    await typist.keyboard('{Control>}{Enter}{/Control}')
+
+    expect(api.askQuestion).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Ask' })).not.toBeInTheDocument()
+  })
+
+  it('aborts the request on unmount without state warnings', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    const view = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await act(async () => {
+      view.unmount()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(ask.signal()?.aborted).toBe(true)
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
+  })
+
+  it('re-polls after Stop until the server has saved the partial answer', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    const asked = message({ id: 'u2', role: 'user', content: 'Why?' })
+    const placeholder = message({
+      id: 'a2',
+      role: 'assistant',
+      content: '',
+      status: 'incomplete',
+      stopReason: null
+    })
+    const saved = message({
+      id: 'a2',
+      role: 'assistant',
+      content: 'Partial',
+      status: 'incomplete',
+      stopReason: 'aborted'
+    })
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Partial')
+
+    serve(thread({ messageCount: 2 }), [asked, placeholder])
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Stop' }))
+    // The first look after Stop still finds the empty placeholder; a later one finds the answer.
+    await waitFor(() => expect(api.getThread.mock.calls.length).toBeGreaterThan(2))
+    serve(thread({ messageCount: 2 }), [asked, saved])
+
+    expect(await screen.findByText('Stopped before the answer finished.')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toBeEnabled()
+  })
+
+  it('shows the full banner when the server answers thread_full', async () => {
+    api.askQuestion.mockRejectedValue(
+      new ApiError({ status: 409, code: 'thread_full', message: 'x' })
+    )
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'One more')
+    await typist.click(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(
+      await screen.findByText('This thread is full. Start a new thread to keep going.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toBeDisabled()
+    expect(toast.error).toHaveBeenCalledWith(
+      'This thread is full. Start a new thread to keep going.',
+      {}
+    )
+  })
+
+  it('refreshes the thread when the stream starts and does not poll while streaming', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    const before = api.getThread.mock.calls.length
+
+    serve(thread({ title: 'Why?', messageCount: 2 }), [
+      message({ id: 'u2', role: 'user', content: 'Why?' }),
+      message({ id: 'a2', role: 'assistant', content: '', status: 'incomplete', stopReason: null })
+    ])
+    await ask.start()
+
+    expect(await screen.findByRole('button', { name: 'Rename thread: Why?' })).toBeInTheDocument()
+    const after = api.getThread.mock.calls.length
+    expect(after).toBeGreaterThan(before)
+    // The placeholder would normally be polled every 1.5 s; this page's own stream suppresses it.
+    await new Promise((resolve) => setTimeout(resolve, 1700))
+    expect(api.getThread.mock.calls.length).toBe(after)
+  })
+
+  it('gives up on an answer that never finishes and offers Retry', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      serve(thread({ messageCount: 2 }), [
+        message({ id: 'u1', role: 'user', content: 'Explain closures' }),
+        message({
+          id: 'a1',
+          role: 'assistant',
+          content: '',
+          status: 'incomplete',
+          stopReason: null
+        })
+      ])
+      await open()
+      expect(screen.getByText('Thinking…')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+
+      await act(() => vi.advanceTimersByTimeAsync(61_000))
+
+      expect(screen.getByText('This answer failed.')).toBeInTheDocument()
+      expect(screen.queryByText('Thinking…')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('clears the draft once a toast Retry is accepted, so it cannot be sent twice', async () => {
+    api.askQuestion.mockRejectedValueOnce(
+      new ApiError({ status: 0, code: 'ai_provider_error', message: 'x' })
+    )
+    await open()
+    const typist = userEvent.setup()
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Hello')
+    await typist.click(screen.getByRole('button', { name: 'Ask' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Hello')
+
+    const retryAsk = controlledAsk()
+    const options = toast.error.mock.calls[0]?.[1] as { action: { onClick: () => void } }
+    act(() => options.action.onClick())
+    await waitFor(() => expect(api.askQuestion).toHaveBeenCalledTimes(2))
+    await retryAsk.start()
+
+    expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('')
+  })
+
+  it('dismisses error toasts and ignores their Retry after leaving the page', async () => {
+    toast.error.mockReturnValue('toast-1')
+    api.askQuestion.mockRejectedValue(
+      new ApiError({ status: 0, code: 'ai_provider_error', message: 'x' })
+    )
+    const view = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByRole('button', { name: /Rename thread/ })
+    const typist = userEvent.setup()
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Hello')
+    await typist.click(screen.getByRole('button', { name: 'Ask' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    const options = toast.error.mock.calls[0]?.[1] as { action: { onClick: () => void } }
+
+    view.unmount()
+    await waitFor(() => expect(toast.dismiss).toHaveBeenCalledWith('toast-1'))
+    options.action.onClick()
+
+    expect(api.askQuestion).toHaveBeenCalledTimes(1)
   })
 })

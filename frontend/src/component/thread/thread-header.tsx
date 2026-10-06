@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/component/ui/button'
 import { Select } from '@/component/ui/select'
@@ -78,18 +78,26 @@ function Title({ thread }: { thread: Thread }) {
         <span className="min-w-0 break-words">{shown}</span>
         <RenameIcon
           aria-hidden="true"
-          className="size-4 shrink-0 text-ink-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+          className="size-4 shrink-0 text-ink-muted opacity-50 group-hover:opacity-100 group-focus-visible:opacity-100"
         />
       </button>
     </h1>
   )
 }
 
-export function ThreadHeader({ thread }: { thread: Thread }) {
+export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thread }) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const topics = useTopics()
   const [confirming, setConfirming] = useState(false)
+  const deleteButton = useRef<HTMLButtonElement>(null)
+  const wasConfirming = useRef(false)
+  // Focus follows the swap: onto the safe choice when asking, back onto Delete when dismissed.
+  const focusCancel = useCallback((el: HTMLButtonElement | null) => el?.focus(), [])
+  useEffect(() => {
+    if (!confirming && wasConfirming.current) deleteButton.current?.focus()
+    wasConfirming.current = confirming
+  }, [confirming])
 
   const changeTopic = useMutation({
     mutationFn: (topicId: string) => updateThread(thread.id, { topicId }),
@@ -99,9 +107,9 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
   const remove = useMutation({
     mutationFn: () => deleteThread(thread.id),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: threadKey.detail(thread.id) })
-      void queryClient.invalidateQueries({ queryKey: threadKey.list })
+      // Leave first: touching the still-mounted detail query would flash "doesn't exist".
       router.replace('/thread')
+      void queryClient.invalidateQueries({ queryKey: threadKey.list })
       toast('Thread deleted')
     },
     onError: (err) => {
@@ -135,19 +143,29 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
         {confirming ? (
           <div
             role="group"
-            aria-label="Confirm delete"
+            aria-label="Delete this thread?"
             className="flex flex-wrap items-center gap-2"
           >
             <p className="font-semibold">Delete this thread?</p>
-            <Button variant="danger" onClick={() => remove.mutate()} loading={remove.isPending}>
+            <Button
+              variant="danger"
+              aria-label="Confirm delete"
+              onClick={() => remove.mutate()}
+              loading={remove.isPending}
+            >
               Delete
             </Button>
-            <Button variant="secondary" onClick={() => setConfirming(false)}>
+            <Button variant="secondary" ref={focusCancel} onClick={() => setConfirming(false)}>
               Cancel
             </Button>
           </div>
         ) : (
-          <Button variant="danger" onClick={() => setConfirming(true)}>
+          <Button
+            ref={deleteButton}
+            variant="ghost"
+            className="text-wrong hover:bg-wrong/10"
+            onClick={() => setConfirming(true)}
+          >
             <DeleteIcon aria-hidden="true" className="size-4" />
             Delete
           </Button>
@@ -155,4 +173,4 @@ export function ThreadHeader({ thread }: { thread: Thread }) {
       </div>
     </header>
   )
-}
+})

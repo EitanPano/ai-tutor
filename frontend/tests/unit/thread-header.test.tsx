@@ -87,12 +87,16 @@ describe('ThreadHeader', () => {
     await typist.click(screen.getByRole('button', { name: 'Delete' }))
     expect(screen.getByText('Delete this thread?')).toBeInTheDocument()
     expect(api.deleteThread).not.toHaveBeenCalled()
+    // Focus moves onto the safe choice, and the two actions have distinct names.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
 
     await typist.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText('Delete this thread?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus()
 
     await typist.click(screen.getByRole('button', { name: 'Delete' }))
-    await typist.click(screen.getByRole('button', { name: 'Delete' }))
+    await typist.click(screen.getByRole('button', { name: 'Confirm delete' }))
 
     await waitFor(() => expect(api.deleteThread).toHaveBeenCalledWith('t1'))
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/thread'))
