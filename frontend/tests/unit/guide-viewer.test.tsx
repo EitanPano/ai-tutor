@@ -6,7 +6,8 @@ import { ApiError } from '@/lib/api/error'
 import type { Guide, Step } from '@/lib/api/guide'
 import { renderWithQuery } from './test-utils'
 
-const api = vi.hoisted(() => ({ getGuide: vi.fn(), updateStep: vi.fn() }))
+const api = vi.hoisted(() => ({ getGuide: vi.fn(), updateStep: vi.fn(), createQuiz: vi.fn() }))
+const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
 const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), dismiss: vi.fn() }))
 
 vi.mock('@/lib/api/guide', async (importOriginal) => ({
@@ -14,6 +15,11 @@ vi.mock('@/lib/api/guide', async (importOriginal) => ({
   getGuide: api.getGuide,
   updateStep: api.updateStep
 }))
+vi.mock('@/lib/api/quiz', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/quiz')>()),
+  createQuiz: api.createQuiz
+}))
+vi.mock('next/navigation', () => ({ useRouter: () => router }))
 vi.mock('sonner', () => ({ toast }))
 // Highlighting is a nicety that loads Shiki: the plain block is enough here.
 vi.mock('@/component/markdown/code-block', () => ({
@@ -200,6 +206,27 @@ describe('GuideViewer', () => {
 
     await typist.click(screen.getByRole('button', { name: 'Review the steps' }))
     expect(heading()).toHaveTextContent('Step title 1')
+  })
+
+  it('offers a quiz on the thread from the completion state', async () => {
+    serve([step(1, { doneAt: NOW }), step(2, { doneAt: NOW })])
+    api.createQuiz.mockResolvedValue({
+      quiz: {
+        id: 'q7',
+        threadId: 't1',
+        topicId: 'react',
+        difficulty: 'medium',
+        createdAt: NOW,
+        items: [],
+        attempts: []
+      }
+    })
+    const typist = await open()
+
+    await typist.click(screen.getByRole('button', { name: 'Quiz me on this' }))
+
+    expect(api.createQuiz).toHaveBeenCalledWith({ threadId: 't1' })
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q7'))
   })
 
   it('opens straight on the completion state when everything was already done', async () => {

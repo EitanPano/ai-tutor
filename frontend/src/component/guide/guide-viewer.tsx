@@ -3,12 +3,13 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button, buttonClass } from '@/component/ui/button'
 import { EmptyState } from '@/component/ui/empty-state'
 import { Sheet } from '@/component/ui/sheet'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getGuide, guideKey, type Guide } from '@/lib/api/guide'
-import { BackIcon, GuideIcon, RetryIcon } from '@/lib/icon'
+import { BackIcon, GuideIcon, QuizIcon, RetryIcon } from '@/lib/icon'
 import { ProgressBar } from './progress-bar'
 import { StepList } from './step-list'
 import { StepPanel } from './step-panel'
@@ -36,6 +37,7 @@ function Complete({
   onReview: () => void
 }) {
   const title = useRef<HTMLHeadingElement>(null)
+  const quiz = useCreateQuiz()
   useEffect(() => {
     if (focusTitle) title.current?.focus()
   }, [focusTitle])
@@ -49,10 +51,13 @@ function Complete({
         </h2>
         <p className="text-lead text-ink-muted">Test yourself to see what stuck.</p>
         <div className="flex flex-wrap items-center gap-3">
-          {/* Quiz slot: the quiz task adds its "Quiz me" action here, first in this row. */}
+          <Button loading={quiz.isPending} onClick={() => quiz.create({ threadId })}>
+            {!quiz.isPending && <QuizIcon aria-hidden="true" className="size-4" />}
+            {quiz.isPending ? 'Writing your quiz�' : 'Quiz me on this'}
+          </Button>
           <Link
             href={`/thread/${encodeURIComponent(threadId)}`}
-            className={buttonClass({ variant: 'primary' })}
+            className={buttonClass({ variant: 'secondary' })}
           >
             Back to the conversation
           </Link>

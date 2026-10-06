@@ -1,18 +1,23 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { GuideTools } from '@/component/thread/guide-tools'
+import { StudyTools } from '@/component/thread/study-tools'
 import { ApiError } from '@/lib/api/error'
 import type { GuideSummary } from '@/lib/api/guide'
+import type { QuizSummary } from '@/lib/api/quiz'
 import { renderWithQuery } from './test-utils'
 
-const api = vi.hoisted(() => ({ createGuide: vi.fn() }))
+const api = vi.hoisted(() => ({ createGuide: vi.fn(), createQuiz: vi.fn() }))
 const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), dismiss: vi.fn() }))
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }))
 
 vi.mock('@/lib/api/guide', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/guide')>()),
   createGuide: api.createGuide
+}))
+vi.mock('@/lib/api/quiz', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/quiz')>()),
+  createQuiz: api.createQuiz
 }))
 vi.mock('sonner', () => ({ toast }))
 vi.mock('next/navigation', () => ({ useRouter: () => router }))
@@ -29,12 +34,26 @@ const summary = (id: string, title: string, doneCount: number): GuideSummary => 
   createdAt: '2026-10-06T10:00:00Z'
 })
 
-function setup(props: Partial<Parameters<typeof GuideTools>[0]> = {}) {
-  renderWithQuery(<GuideTools threadId="t1" hasAnswer busy={false} guides={[]} {...props} />)
+const quizSummary = (
+  id: string,
+  difficulty: QuizSummary['difficulty'],
+  bestScore: number | null
+): QuizSummary => ({
+  id,
+  difficulty,
+  itemCount: 5,
+  bestScore,
+  createdAt: '2026-10-06T10:00:00Z'
+})
+
+function setup(props: Partial<Parameters<typeof StudyTools>[0]> = {}) {
+  renderWithQuery(
+    <StudyTools threadId="t1" hasAnswer busy={false} guides={[]} quizzes={[]} {...props} />
+  )
   return userEvent.setup()
 }
 
-describe('GuideTools', () => {
+describe('StudyTools guide action', () => {
   it('is disabled with a visible reason until there is an answer', () => {
     setup({ hasAnswer: false })
 
@@ -89,7 +108,7 @@ describe('GuideTools', () => {
 
   it.each([
     [422, 'ai_refused', "The tutor can't help with that question. Try rephrasing it."],
-    [409, 'thread_empty', 'Ask a question first, then turn the answer into a guide.']
+    [409, 'thread_empty', 'Ask a question first. A guide or quiz needs an answer to build on.']
   ])('toasts %i %s without a Retry', async (status, code, sentence) => {
     api.createGuide.mockRejectedValue(new ApiError({ status, code, message: 'x' }))
     const typist = setup()
@@ -111,5 +130,68 @@ describe('GuideTools', () => {
       'Open guide: Older guide (5 of 5 done)'
     ])
     expect(links[0]).toHaveAttribute('href', '/guide/g2')
+  })
+})
+
+describe('StudyTools quiz action', () => {
+  const quizResponse = (id: string) => ({
+    quiz: {
+      id,
+      threadId: 't1',
+      topicId: 'react',
+      difficulty: 'hard',
+      createdAt: '',
+      items: [],
+      attempts: []
+    }
+  })
+
+  it('is disabled with the same visible reason until there is an answer', () => {
+    setup({ hasAnswer: false })
+
+    const button = screen.getByRole('button', { name: 'Quiz me' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription('Ask a question first')
+    expect(screen.getByLabelText('Quiz difficulty')).toHaveValue('medium')
+  })
+
+  it('writes a medium quiz by default, then opens it', async () => {
+    let finish!: (value: unknown) => void
+    api.createQuiz.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const typist = setup()
+
+    await typist.click(screen.getByRole('button', { name: 'Quiz me' }))
+
+    const busy = await screen.findByRole('button', { name: 'Writing your quiz…' })
+    expect(busy).toBeDisabled()
+    // The guide waits: two generations at once would only race each other.
+    expect(screen.getByRole('button', { name: 'Guide me step by step' })).toBeDisabled()
+    expect(api.createQuiz).toHaveBeenCalledWith({ threadId: 't1', difficulty: 'medium' })
+
+    finish(quizResponse('q9'))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q9'))
+  })
+
+  it('asks for the chosen difficulty', async () => {
+    api.createQuiz.mockResolvedValue(quizResponse('q9'))
+    const typist = setup()
+
+    await typist.selectOptions(screen.getByLabelText('Quiz difficulty'), 'Hard')
+    await typist.click(screen.getByRole('button', { name: 'Quiz me' }))
+
+    await waitFor(() =>
+      expect(api.createQuiz).toHaveBeenCalledWith({ threadId: 't1', difficulty: 'hard' })
+    )
+  })
+
+  it('lists the existing quizzes, newest first, with their best score', () => {
+    setup({ quizzes: [quizSummary('q2', 'medium', 4), quizSummary('q1', 'hard', null)] })
+
+    const links = screen.getAllByRole('link')
+    expect(links.map((l) => l.textContent)).toEqual([
+      'Medium quiz, best 4 of 5',
+      'Hard quiz, not taken yet'
+    ])
+    expect(links[0]).toHaveAttribute('href', '/quiz/q2')
   })
 })

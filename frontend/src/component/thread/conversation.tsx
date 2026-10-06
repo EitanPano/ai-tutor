@@ -10,7 +10,7 @@ import { describeError, isApiError } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
 import { Composer } from './composer'
-import { GuideTools } from './guide-tools'
+import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
 import { ThreadHeader } from './thread-header'
 import { Transcript } from './transcript'
@@ -134,7 +134,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     )
   }
 
-  const { thread, messages, guides } = detail.data
+  const { thread, messages, guides, quizzes } = detail.data
   const hasAnswer = messages.some((m) => m.role === 'assistant' && m.status === 'complete')
   const full = threadFull || thread.messageCount + 2 > MAX_MESSAGES
   const busy = !!asking || (!!unfinishedId && !stalled)
@@ -160,8 +160,14 @@ export function Conversation({ threadId }: { threadId: string }) {
 
       <ThreadHeader thread={thread} />
 
-      {/* The study tools (guide now, quiz in a later task). */}
-      <GuideTools threadId={threadId} hasAnswer={hasAnswer} busy={busy} guides={guides} />
+      {/* The study tools: a guide, a quiz, and the ones already made. */}
+      <StudyTools
+        threadId={threadId}
+        hasAnswer={hasAnswer}
+        busy={busy}
+        guides={guides}
+        quizzes={quizzes}
+      />
 
       <Sheet className="p-5 md:p-8">
         {messages.length === 0 && !busy ? (

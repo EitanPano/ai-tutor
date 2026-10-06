@@ -17,5 +17,6 @@ export {
   Trash2 as DeleteIcon,
   ArrowLeft as BackIcon,
   ArrowRight as NextIcon,
-  Check as DoneIcon
+  Check as DoneIcon,
+  X as WrongIcon
 } from 'lucide-react'

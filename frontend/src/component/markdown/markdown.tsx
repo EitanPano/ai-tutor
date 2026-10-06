@@ -18,6 +18,8 @@ type MarkdownProps = {
   children: string
   /** True while the text is still arriving: code highlighting waits for the end. */
   streaming?: boolean
+  /** Phrasing content only (a `span`, no paragraphs), for text that lives inside a label or legend. */
+  inline?: boolean
   className?: string
 }
 
@@ -63,19 +65,25 @@ function Image({ alt }: ComponentPropsWithoutRef<'img'>) {
 // Module scope on purpose: a new map per render would remount every code block, link and image
 // on each streamed delta, losing Copy clicks, text selection and the highlighted markup.
 const components: Components = { pre: Pre, a: Anchor, img: Image }
+// Paragraphs dissolve into their text, so the markup stays valid inside a `label` or `legend`.
+const inlineComponents: Components = { ...components, p: ({ children }) => <>{children}</> }
 
 export const Markdown = memo(function Markdown({
   children,
   streaming = false,
+  inline = false,
   className = ''
 }: MarkdownProps) {
+  const Wrapper = inline ? 'span' : 'div'
   return (
     <StreamingContext value={streaming}>
-      <div className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}>
-        <ReactMarkdown remarkPlugins={plugins} components={components}>
+      <Wrapper
+        className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}
+      >
+        <ReactMarkdown remarkPlugins={plugins} components={inline ? inlineComponents : components}>
           {children}
         </ReactMarkdown>
-      </div>
+      </Wrapper>
     </StreamingContext>
   )
 })
