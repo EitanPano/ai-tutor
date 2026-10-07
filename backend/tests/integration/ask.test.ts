@@ -294,6 +294,40 @@ describe('follow-up context (AC05)', () => {
   })
 })
 
+describe('history cap', () => {
+  it('sends at most 64,000 characters of the newest history and the question in full', async () => {
+    const { session, threadId } = await setup()
+    const rows: { role: 'user' | 'assistant'; content: string }[] = []
+    for (let turn = 0; turn < 6; turn += 1) {
+      rows.push({ role: 'user', content: `${turn}`.repeat(20_000) })
+      rows.push({ role: 'assistant', content: `a${turn}`.repeat(500) })
+    }
+    for (const row of rows) {
+      await ctx.db
+        .insertInto('message')
+        .values({
+          thread_id: threadId,
+          user_id: session.user.id,
+          role: row.role,
+          content: row.content,
+          status: 'complete',
+          stop_reason: 'end_turn'
+        })
+        .execute()
+    }
+    const question = 'q'.repeat(20_000)
+    await ask(session.cookie, threadId, question)
+    const call = ctx.tutor.calls[0]!
+    const chars = call.history.reduce((sum, turn) => sum + turn.content.length, 0)
+    expect(chars).toBeLessThanOrEqual(64_000)
+    expect(call.history[0]?.role).toBe('user')
+    expect(call.history).toEqual(rows.slice(-call.history.length))
+    expect(call.history.at(-1)).toEqual(rows.at(-1))
+    expect(call.history.length).toBeLessThan(rows.length)
+    expect(call.question).toBe(question)
+  })
+})
+
 describe('limits and locks (AC09)', () => {
   it('answers 429 ai_budget_exceeded once today tokens reach the budget', async () => {
     const { session, threadId } = await setup()

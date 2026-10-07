@@ -8,6 +8,7 @@ import { QuizDraftSchema } from './quiz.schema.js'
 import { EXPLAIN_SYSTEM_PROMPT_V1 } from './prompt/explain.v1.js'
 import {
   buildMessages,
+  estimateInputTokens,
   estimateOutputTokens,
   TutorProviderError,
   ZERO_USAGE,
@@ -161,6 +162,9 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
     async explain(input: ExplainInput, onDelta): Promise<ExplainResult> {
       let text = ''
       let seenUsage: TutorUsage = ZERO_USAGE
+      // An abort before this call never reaches the SDK, so nothing was sent and nothing is owed.
+      const requestSent = !input.signal.aborted
+      const messages = buildMessages(input)
       // The watchdog is ours (idle or total timeout); `input.signal` is the caller's abort. Which
       // signal fired decides the outcome, not the error type the SDK surfaces.
       const watchdog = new AbortController()
@@ -175,7 +179,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
             max_tokens: MAX_OUTPUT_TOKENS,
             system: [{ type: 'text', text: EXPLAIN_SYSTEM_PROMPT_V1 }],
             cache_control: { type: 'ephemeral' },
-            messages: buildMessages(input)
+            messages
           },
           { signal: AbortSignal.any([input.signal, watchdog.signal]) }
         )
@@ -204,11 +208,19 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
           })
         }
         if (err instanceof Anthropic.APIUserAbortError || input.signal.aborted) {
+          const usage = partialUsage(seenUsage, text)
           return {
             text,
             stopReason: 'aborted',
             refusalCategory: null,
-            usage: partialUsage(seenUsage, text),
+            // The request is already dispatched, so it may be billed even if no usage arrived.
+            usage:
+              requestSent && usage.inputTokens === 0
+                ? {
+                    ...usage,
+                    inputTokens: estimateInputTokens(EXPLAIN_SYSTEM_PROMPT_V1, messages)
+                  }
+                : usage,
             model
           }
         }

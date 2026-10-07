@@ -344,6 +344,30 @@ describe('anthropic provider', () => {
     })
   })
 
+  it('records an estimated input when aborted after the request was sent but before message_start', async () => {
+    const controller = new AbortController()
+    const { provider } = providerWith((init) => {
+      // Headers never arrive; the request only ends when its signal aborts.
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        )
+        setTimeout(() => controller.abort(), 10)
+      })
+    })
+    const result = await provider.explain(baseInput(controller.signal), () => {})
+    const chars =
+      EXPLAIN_SYSTEM_PROMPT_V1.length +
+      `Topic: TypeScript
+
+What is a generic?`.length +
+      'A type parameter.'.length +
+      'Show an example'.length
+    expect(result).toMatchObject({ stopReason: 'aborted', text: '' })
+    expect(result.usage.inputTokens).toBe(Math.ceil(chars / 4))
+    expect(result.usage.outputTokens).toBe(0)
+  })
+
   it('returns aborted with zero usage when aborted before the request starts', async () => {
     const controller = new AbortController()
     controller.abort()

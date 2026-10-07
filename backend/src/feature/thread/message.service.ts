@@ -3,7 +3,7 @@ import type { Db } from '../../lib/db/index.js'
 import { conflict } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
 import type { ExplainResult, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
-import { ZERO_USAGE } from '../../lib/tutor/tutor.js'
+import { capHistory, ZERO_USAGE } from '../../lib/tutor/tutor.js'
 import type { AiApi, GenerationLockToken } from '../ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import { DEFAULT_TITLE, type ThreadService } from './thread.service.js'
@@ -54,7 +54,7 @@ async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<Tutor
     .orderBy('created_at')
     .orderBy('id')
     .execute()
-  return rows.filter((row) => row.role === 'user' || row.content !== '')
+  return capHistory(rows.filter((row) => row.role === 'user' || row.content !== ''))
 }
 
 /** Fallback after a persistence failure: never leave the turn looking in flight. */

@@ -71,6 +71,35 @@ export function estimateOutputTokens(text: string): number {
   return Math.ceil(text.length / 3)
 }
 
+/** Rough input-token estimate (characters / 4) for a request that was sent but never reported usage. */
+export function estimateInputTokens(
+  system: string,
+  messages: readonly { content: string }[]
+): number {
+  const chars = messages.reduce((sum, message) => sum + message.content.length, system.length)
+  return Math.ceil(chars / 4)
+}
+
+/** Most history characters sent per call: about 16k tokens, so one request cannot dwarf the budget. */
+export const HISTORY_CHAR_LIMIT = 64_000
+
+/**
+ * The newest turns whose total content fits in `HISTORY_CHAR_LIMIT`, oldest dropped first and
+ * order kept. A leading assistant turn is dropped so the model never sees a reply with no question.
+ */
+export function capHistory(history: TutorTurn[]): TutorTurn[] {
+  let total = 0
+  let start = history.length
+  while (start > 0) {
+    const size = history[start - 1]!.content.length
+    if (total + size > HISTORY_CHAR_LIMIT) break
+    total += size
+    start -= 1
+  }
+  while (start < history.length && history[start]!.role === 'assistant') start += 1
+  return history.slice(start)
+}
+
 export const ZERO_USAGE: TutorUsage = {
   inputTokens: 0,
   outputTokens: 0,
