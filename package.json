@@ -21,7 +21,8 @@
     "db:migrate": "bun run --filter backend db:migrate",
     "db:rollback": "bun run --filter backend db:rollback",
     "db:reset": "bun run --filter backend db:reset",
-    "db:seed": "bun run --filter backend db:seed"
+    "db:seed": "bun run --filter backend db:seed",
+    "check:bundle": "node scripts/check-bundle-secret.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.9"

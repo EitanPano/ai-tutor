@@ -54,9 +54,12 @@ jobs:
       - name: Install Playwright chromium
         working-directory: frontend
         run: bunx playwright install --with-deps chromium
-      - run: bun run test:e2e
+      - run: bun run --filter frontend build
+      - run: bun run check:bundle
+      - id: e2e
+        run: bun run test:e2e
       - name: Upload Playwright report
-        if: failure()
+        if: ${{ !cancelled() && steps.e2e.outcome == 'failure' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
