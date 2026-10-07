@@ -21,6 +21,7 @@ import { sessionRouter } from './route/session.route.js'
 import { threadRouter } from './route/thread.route.js'
 import { topicRouter } from './route/topic.route.js'
 import { userRouter } from './route/user.route.js'
+import { warmDummyHash } from './service/session.service.js'
 
 const SANE_REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/
 
@@ -47,6 +48,7 @@ export type AppDeps = {
 export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppDeps): Express {
   const app = express()
   app.disable('x-powered-by')
+  warmDummyHash()
   app.use(requestId)
   app.use(
     pinoHttp({

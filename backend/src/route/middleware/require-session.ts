@@ -3,16 +3,13 @@ import type { Config } from '../../lib/config.js'
 import {
   clearSessionCookieOptions,
   SESSION_COOKIE,
-  SESSION_TTL_MS,
   sessionCookieOptions
 } from '../../lib/cookie.js'
 import type { Db } from '../../lib/db/index.js'
 import { unauthorized } from '../../lib/error.js'
-import { extendSession, resolveSession } from '../../service/session.service.js'
+import { extendSession, resolveSession, slidingExpiry } from '../../service/session.service.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-// Extend only once the session has lost a day of its 30, so a session is written at most daily.
-const EXTEND_BELOW_MS = SESSION_TTL_MS - DAY_MS
 
 export function readSessionToken(cookies: unknown): string | undefined {
   const value = (cookies as Record<string, unknown> | undefined)?.[SESSION_COOKIE]
@@ -29,8 +26,10 @@ export function requireSession(db: Db, config: Pick<Config, 'nodeEnv'>): Request
       if (token) res.clearCookie(SESSION_COOKIE, clearSessionCookieOptions(config))
       throw unauthorized('Sign in to continue.', 'unauthenticated')
     }
-    if (session.expiresAt.getTime() - Date.now() < EXTEND_BELOW_MS) {
-      await extendSession(db, session.sessionId)
+    // Extend only once the session could gain a day, so it is written at most daily. Near the
+    // absolute cap the target stops moving, so it stops being written too.
+    if (slidingExpiry(session.createdAt).getTime() - session.expiresAt.getTime() > DAY_MS) {
+      await extendSession(db, session.sessionId, session.createdAt)
       res.cookie(SESSION_COOKIE, token, sessionCookieOptions(config))
     }
     req.auth = { userId: session.userId }

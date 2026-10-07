@@ -1,17 +1,29 @@
-import { SESSION_TTL_MS } from '../lib/cookie.js'
+import { SESSION_MAX_AGE_MS, SESSION_TTL_MS } from '../lib/cookie.js'
 import type { Db } from '../lib/db/index.js'
 import { unauthorized } from '../lib/error.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
 import { createSessionToken, hashSessionToken } from '../lib/session-token.js'
 import { toUserDto, type UserDto } from './user.service.js'
 
-export type ResolvedSession = { sessionId: string; userId: string; expiresAt: Date }
+export type ResolvedSession = {
+  sessionId: string
+  userId: string
+  expiresAt: Date
+  createdAt: Date
+}
 
 // Verified when the email is unknown so response time does not reveal which emails exist.
 let dummyHash: Promise<string> | undefined
 function getDummyHash(): Promise<string> {
   dummyHash ??= hashPassword('not-a-real-password')
   return dummyHash
+}
+
+/** Computes the dummy hash at startup so the first unknown-email login is not ~2x slower. */
+export function warmDummyHash(): void {
+  getDummyHash().catch(() => {
+    dummyHash = undefined
+  })
 }
 
 function invalidCredentials() {
@@ -21,6 +33,12 @@ function invalidCredentials() {
 /** Inserts a session for `userId` and returns the raw token (only its hash is stored). */
 export async function startSession(db: Db, userId: string): Promise<string> {
   const token = createSessionToken()
+  // Expired rows are never read again: purge this user's so the table does not grow unbounded.
+  await db
+    .deleteFrom('session')
+    .where('user_id', '=', userId)
+    .where('expires_at', '<', new Date())
+    .execute()
   await db
     .insertInto('session')
     .values({
@@ -66,17 +84,35 @@ export async function resolveSession(db: Db, token: string): Promise<ResolvedSes
   const row = await db
     .selectFrom('session')
     .innerJoin('app_user', 'app_user.id', 'session.user_id')
-    .select(['session.id as sessionId', 'session.user_id as userId', 'session.expires_at'])
+    .select([
+      'session.id as sessionId',
+      'session.user_id as userId',
+      'session.expires_at',
+      'session.created_at'
+    ])
     .where('session.token_hash', '=', hashSessionToken(token))
     .where('session.expires_at', '>', new Date())
+    .where('session.created_at', '>', new Date(Date.now() - SESSION_MAX_AGE_MS))
     .where('app_user.deleted_at', 'is', null)
     .executeTakeFirst()
-  return row && { sessionId: row.sessionId, userId: row.userId, expiresAt: row.expires_at }
+  return (
+    row && {
+      sessionId: row.sessionId,
+      userId: row.userId,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at
+    }
+  )
 }
 
-/** Pushes the session expiry to now + 30 days and returns the new expiry. */
-export async function extendSession(db: Db, sessionId: string): Promise<Date> {
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+/** The furthest a session created at `createdAt` may be extended to: now + 30 days, capped. */
+export function slidingExpiry(createdAt: Date): Date {
+  return new Date(Math.min(Date.now() + SESSION_TTL_MS, createdAt.getTime() + SESSION_MAX_AGE_MS))
+}
+
+/** Pushes the session expiry to `slidingExpiry` (never past the absolute cap) and returns it. */
+export async function extendSession(db: Db, sessionId: string, createdAt: Date): Promise<Date> {
+  const expiresAt = slidingExpiry(createdAt)
   await db
     .updateTable('session')
     .set({ expires_at: expiresAt })

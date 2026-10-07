@@ -191,3 +191,42 @@ describe('logout failures', () => {
     expectContract(res, 'delete', '/api/session')
   })
 })
+
+describe('absolute session lifetime', () => {
+  it('rejects a session created more than 90 days ago even if it has not expired', async () => {
+    const { cookie } = await signUp(client)
+    await sql`UPDATE session SET created_at = now() - interval '91 days',
+      expires_at = now() + interval '20 days'`.execute(ctx.db)
+    const res = await client.get('/api/session').set('Cookie', cookie)
+    expect(res.status).toBe(401)
+    expectContract(res, 'get', '/api/session')
+  })
+
+  it('never slides the expiry past 90 days after creation', async () => {
+    const { cookie } = await signUp(client)
+    await sql`UPDATE session SET created_at = now() - interval '80 days',
+      expires_at = now() + interval '1 day'`.execute(ctx.db)
+    const res = await client.get('/api/session').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const { rows } = await sql<{ days: number }>`
+      SELECT (extract(epoch FROM (expires_at - created_at)) / 86400)::float8 AS days FROM session`.execute(
+      ctx.db
+    )
+    expect(rows[0]?.days).toBeGreaterThan(89.99)
+    expect(rows[0]?.days).toBeLessThanOrEqual(90)
+  })
+})
+
+describe('expired session cleanup', () => {
+  it('purges the user expired sessions when a new session starts', async () => {
+    const { user, body } = await signUp(client)
+    await sql`UPDATE session SET expires_at = now() - interval '1 minute'`.execute(ctx.db)
+    const res = await client
+      .post('/api/session')
+      .send({ email: body.email, password: body.password })
+    expect(res.status).toBe(200)
+    const { rows } = await sql<{ n: string }>`
+      SELECT count(*)::text AS n FROM session WHERE user_id = ${user.id}`.execute(ctx.db)
+    expect(rows[0]?.n).toBe('1')
+  })
+})
