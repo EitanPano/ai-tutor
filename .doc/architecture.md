@@ -49,16 +49,16 @@ Rules:
 Enforcement:
 - dependency-cruiser (`backend/.dependency-cruiser.cjs`, run by `bun run lint`):
   - `no-circular` â€” no import cycles.
-  - `infra-is-leaf` — `src/lib/` and `src/http/` never import features or `app.ts`.
-  - `not-to-unresolvable` — every import must resolve.
-  - `cross-module-type-only` — a module imports another module only with type-only imports.
-  - `module-public-api-only` — a module reaches another only through its `index.ts`.
-  - `feature-values-own-or-infra` — a module imports values only from itself, `src/lib/` and `src/http/`, so a
+  - `infra-is-leaf` â€” `src/lib/` and `src/http/` never import features or `app.ts`.
+  - `not-to-unresolvable` â€” every import must resolve.
+  - `cross-module-type-only` â€” a module imports another module only with type-only imports.
+  - `module-public-api-only` â€” a module reaches another only through its `index.ts`.
+  - `feature-values-own-or-infra` â€” a module imports values only from itself, `src/lib/` and `src/http/`, so a
     re-export from a new folder or top-level file cannot launder another module's values.
-  - `outside-uses-public-api` — code outside `src/feature/` (`app.ts`, `index.ts`, any other folder) reaches a module
+  - `outside-uses-public-api` â€” code outside `src/feature/` (`app.ts`, `index.ts`, any other folder) reaches a module
     only through its `index.ts`.
-  - `index-exports-module-only` — an `index.ts` re-exports values only from its own `<m>.module.ts`.
-- ESLint `@typescript-eslint/no-import-type-side-effects` — type imports are written `import type { X }`, never
+  - `index-exports-module-only` â€” an `index.ts` re-exports values only from its own `<m>.module.ts`.
+- ESLint `@typescript-eslint/no-import-type-side-effects` â€” type imports are written `import type { X }`, never
   `import { type X }`: with `verbatimModuleSyntax` the inline form leaves a runtime import behind, which dependency-cruiser
   would report as type-only.
 - `OWNED` in `backend/tests/unit/architecture.test.ts` is the source of truth for write ownership; the test fails
