@@ -56,11 +56,13 @@ function serve(t: Thread, messages: Message[]) {
 function controlledAsk() {
   let handlers!: AskHandlers
   let finish!: (result: AskResult) => void
+  let fail!: (err: unknown) => void
   api.askQuestion.mockImplementation(
     (_id: string, _question: string, h: AskHandlers) =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         handlers = h
         finish = resolve
+        fail = reject
         h.signal?.addEventListener('abort', () => resolve('stopped'))
       })
   )
@@ -82,6 +84,8 @@ function controlledAsk() {
         })
         finish('completed')
       }),
+    /** Ends the stream with an error, as a dropped connection or a provider failure would. */
+    fail: (err: unknown) => act(async () => fail(err)),
     signal: () => handlers.signal
   }
 }
@@ -230,6 +234,67 @@ describe('Conversation', () => {
     expect(ask.signal()?.aborted).toBe(true)
     expect(await screen.findByText('Stopped before the answer finished.')).toBeInTheDocument()
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('keeps text still buffered when Stop is pressed, until the saved thread loads', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    // No frame: the delta is still in the buffer when Stop arrives.
+    await ask.delta('Not yet painted')
+    pastStopGrace()
+
+    api.getThread.mockImplementation(() => new Promise(() => undefined))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(ask.signal()?.aborted).toBe(true)
+    expect(await screen.findByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Not yet painted'
+    )
+  })
+
+  it('keeps text still buffered when the stream fails, until the failed turn replaces it', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Half an ans')
+
+    let loaded!: (value: Awaited<ReturnType<typeof api.getThread>>) => void
+    api.getThread.mockImplementation(
+      () => new Promise((resolve) => (loaded = resolve as typeof loaded))
+    )
+    await ask.fail(new ApiError({ status: 0, code: 'stream_interrupted', message: 'x' }))
+
+    // The saved thread has not arrived: the unpainted text is not lost.
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent('Half an ans')
+    expect(toast.error).toHaveBeenCalledWith(
+      'The answer stopped unexpectedly. Retry to ask again.',
+      expect.any(Object)
+    )
+
+    await act(async () =>
+      loaded({
+        thread: thread({ messageCount: 0 }),
+        messages: [
+          message({ id: 'u2', role: 'user', content: 'Why?', status: 'failed' }),
+          message({
+            id: 'a2',
+            role: 'assistant',
+            content: '',
+            status: 'failed',
+            stopReason: 'error'
+          })
+        ],
+        guides: [],
+        quizzes: []
+      })
+    )
+    expect(await screen.findByText('This answer failed.')).toBeInTheDocument()
+    expect(screen.queryByText(/Half an ans/)).toBeNull()
   })
 
   it('keeps the answer running when Ask is double-clicked', async () => {
