@@ -4,7 +4,7 @@ import { z } from 'zod'
 export const hasNoNul = (value: string): boolean => !value.includes('\u0000')
 const NUL_ISSUE = { message: 'Must not contain NUL characters.' }
 
-/** A Zod string that rejects U+0000. Use it for every text input in `src/route/`. */
+/** A Zod string that rejects U+0000. Use it for every text input in `src/feature/`. */
 export const text = () => z.string().refine(hasNoNul, NUL_ISSUE)
 
 /** A Zod email that rejects U+0000. */

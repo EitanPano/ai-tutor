@@ -5,7 +5,7 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
 import { parseSse, type SseEvent } from '../helper/sse.js'
-import { recoverStaleTurn } from '../../src/service/stale-turn.js'
+import { recoverStaleTurn } from '../../src/feature/thread/stale-turn.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)

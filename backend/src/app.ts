@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import express, { type Express, type RequestHandler } from 'express'
+import express, { type Express } from 'express'
 import helmet from 'helmet'
 import { pinoHttp } from 'pino-http'
 import type pg from 'pg'
@@ -13,27 +12,15 @@ import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
-import { guideRouter } from './route/guide.route.js'
-import { healthRouter } from './route/health.route.js'
-import { progressRouter } from './route/progress.route.js'
-import { quizRouter } from './route/quiz.route.js'
-import { originCheck } from './route/middleware/origin-check.js'
-import { messageRouter } from './route/message.route.js'
-import { sessionRouter } from './route/session.route.js'
-import { threadRouter } from './route/thread.route.js'
-import { topicRouter } from './route/topic.route.js'
-import { userRouter } from './route/user.route.js'
-import { warmDummyHash } from './service/session.service.js'
-
-const SANE_REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/
-
-const requestId: RequestHandler = (req, res, next) => {
-  const incoming = req.get('x-request-id')
-  const id = incoming && SANE_REQUEST_ID.test(incoming) ? incoming : randomUUID()
-  res.locals.requestId = id
-  res.setHeader('X-Request-Id', id)
-  next()
-}
+import { guideRouter } from './feature/guide/index.js'
+import { healthRouter } from './feature/health/index.js'
+import { progressRouter } from './feature/progress/index.js'
+import { quizRouter } from './feature/quiz/index.js'
+import { threadRouter, messageRouter } from './feature/thread/index.js'
+import { topicRouter } from './feature/topic/index.js'
+import { userRouter, sessionRouter, warmDummyHash } from './feature/user/index.js'
+import { originCheck } from './http/origin-check.js'
+import { requestId } from './http/request-id.js'
 
 export type AppDeps = {
   config: Config

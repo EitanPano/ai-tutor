@@ -7,7 +7,7 @@ import {
 } from 'kysely'
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../src/lib/db/schema.js'
-import { ownedBy, requireFound } from '../../src/service/ownership.js'
+import { ownedBy, requireFound } from '../../src/lib/ownership.js'
 
 const db = new Kysely<Database>({
   dialect: {

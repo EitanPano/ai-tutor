@@ -3,7 +3,7 @@ import { loadConfig } from './lib/config.js'
 import { createDb } from './lib/db/index.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import { createLogger } from './lib/logger.js'
-import { recoverStaleTurn } from './service/stale-turn.js'
+import { recoverStaleTurn } from './feature/thread/index.js'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 

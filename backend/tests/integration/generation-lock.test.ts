@@ -2,7 +2,10 @@ import { sql } from 'kysely'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
-import { acquireGenerationLock, releaseGenerationLock } from '../../src/service/generation-lock.js'
+import {
+  acquireGenerationLock,
+  releaseGenerationLock
+} from '../../src/feature/ai/generation-lock.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)

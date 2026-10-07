@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
-import { updateStep } from '../../src/service/guide.service.js'
+import { updateStep } from '../../src/feature/guide/guide.service.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)

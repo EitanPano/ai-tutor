@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { getProgress, computeStreak } from '../../src/service/progress.service.js'
+import { getProgress, computeStreak } from '../../src/feature/progress/progress.service.js'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
