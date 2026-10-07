@@ -17,5 +17,8 @@ export default defineConfig([
       }
     }
   },
+  {
+    rules: { '@typescript-eslint/no-import-type-side-effects': 'error' }
+  },
   prettier
 ])
