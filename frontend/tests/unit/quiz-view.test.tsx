@@ -228,4 +228,12 @@ describe('QuizView', () => {
 
     expect(await screen.findAllByRole('group')).toHaveLength(5)
   })
+
+  it('titles the page after the quiz difficulty and topic once they load', async () => {
+    setup(quiz({ difficulty: 'medium' }))
+
+    await screen.findAllByRole('group')
+
+    await waitFor(() => expect(document.title).toBe('Medium quiz on React | AI Tutor'))
+  })
 })

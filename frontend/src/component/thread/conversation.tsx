@@ -9,6 +9,7 @@ import { Sheet } from '@/component/ui/sheet'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { usePageTitle } from '@/lib/page-title'
 import { Composer } from './composer'
 import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
@@ -56,6 +57,7 @@ export function Conversation({ threadId }: { threadId: string }) {
       return !asking && unfinished && unfinished.id !== stalledId ? 1500 : false
     }
   })
+  usePageTitle(detail.data?.thread.title)
   const parked = useRef(false)
 
   const unfinishedId = detail.data?.messages.find(isPending)?.id

@@ -13,6 +13,7 @@ import { getQuiz, quizKey, submitAttempt, type Quiz, type QuizItem } from '@/lib
 import { threadKey } from '@/lib/api/thread'
 import { BackIcon, ProgressIcon } from '@/lib/icon'
 import { difficultyLabel, shortDate } from '@/lib/quiz'
+import { usePageTitle } from '@/lib/page-title'
 import { useTopics } from '@/lib/topic'
 import { QuizMissing, QuizSkeleton } from './quiz-state'
 import { describeQuizError } from './quiz-error'
@@ -60,6 +61,7 @@ const ItemField = memo(function ItemField({ item, value, onSelect }: ItemFieldPr
 function Header({ quiz }: { quiz: Quiz }) {
   const topics = useTopics()
   const topic = topics.data?.find((t) => t.id === quiz.topicId)
+  usePageTitle(`${difficultyLabel(quiz.difficulty)} quiz${topic ? ` on ${topic.name}` : ''}`)
   return (
     <header className="flex flex-col gap-4">
       {quiz.threadId ? (

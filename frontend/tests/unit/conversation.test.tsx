@@ -659,4 +659,12 @@ describe('Conversation', () => {
 
     expect(api.askQuestion).toHaveBeenCalledTimes(1)
   })
+
+  it('titles the page after the thread once it loads', async () => {
+    serve(thread({ title: 'Why does my effect run twice?' }), [])
+
+    await open()
+
+    await waitFor(() => expect(document.title).toBe('Why does my effect run twice? | AI Tutor'))
+  })
 })

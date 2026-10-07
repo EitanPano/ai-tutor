@@ -11,6 +11,7 @@ import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getGuide, guideKey, type Guide } from '@/lib/api/guide'
 import { BackIcon, GuideIcon, QuizIcon, RetryIcon } from '@/lib/icon'
+import { usePageTitle } from '@/lib/page-title'
 import { ProgressBar } from './progress-bar'
 import { StepList } from './step-list'
 import { StepPanel } from './step-panel'
@@ -162,6 +163,8 @@ export function GuideViewer({ guideId }: { guideId: string }) {
     staleTime: SEEDED_STALE_MS,
     select: (response) => response.guide
   })
+
+  usePageTitle(query.data?.title)
 
   if (query.isPending) return <GuideSkeleton />
 

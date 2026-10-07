@@ -302,4 +302,10 @@ describe('GuideViewer', () => {
       await screen.findByRole('heading', { level: 1, name: 'Understand closures' })
     ).toBeInTheDocument()
   })
+
+  it('titles the page after the guide once it loads', async () => {
+    await open()
+
+    await waitFor(() => expect(document.title).toBe('Understand closures | AI Tutor'))
+  })
 })
