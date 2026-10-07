@@ -8,7 +8,7 @@ import { FormError } from '@/component/ui/form-error'
 import { Select } from '@/component/ui/select'
 import { Sheet } from '@/component/ui/sheet'
 import { TextField } from '@/component/ui/text-field'
-import { describeError, fieldIssues } from '@/lib/api/error'
+import { describeError, fieldIssues, isApiError } from '@/lib/api/error'
 import { progressKey } from '@/lib/api/progress'
 import { updateUser } from '@/lib/api/user'
 import { SESSION_KEY } from '@/lib/session'
@@ -30,6 +30,15 @@ function timeZones(current: string) {
 
 const memberSince = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+
+/** When the next time zone change is allowed, in the user's locale and time; null if unusable. */
+function nextChangeLabel(details: Record<string, unknown> | undefined) {
+  const iso = details?.nextChangeAt
+  if (typeof iso !== 'string') return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
 
 export function ProfileForm({ user }: { user: User }) {
   const queryClient = useQueryClient()
@@ -62,6 +71,13 @@ export function ProfileForm({ user }: { user: User }) {
   })
 
   const issues = fieldIssues(save.error)
+  // The once-a-day limit is about the time zone field, though it is not a validation failure.
+  if (isApiError(save.error) && save.error.code === 'time_zone_recently_changed') {
+    const next = nextChangeLabel(save.error.details)
+    issues.timeZone = next
+      ? `You can change your time zone once a day. Try again after ${next}.`
+      : describeError(save.error)
+  }
   const formError =
     save.isError && Object.keys(issues).length === 0 ? describeError(save.error) : ''
 
@@ -109,7 +125,7 @@ export function ProfileForm({ user }: { user: User }) {
               ))}
             </Select>
             <p id="time-zone-hint" className="text-sm text-ink-muted">
-              Your streak counts days in this time zone.
+              Your streak counts days in this time zone. You can change it once a day.
             </p>
             {issues.timeZone && (
               <p id="time-zone-error" className="text-sm text-wrong">

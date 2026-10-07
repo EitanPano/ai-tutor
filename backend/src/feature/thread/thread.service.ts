@@ -4,7 +4,7 @@ import type { MessageRow } from '../../lib/db/schema.js'
 import { badRequest, conflict } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
-import { recoverStaleTurn } from './stale-turn.js'
+import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { AiApi } from '../ai/index.js'
 import type { TopicApi } from '../topic/index.js'
 
@@ -242,7 +242,12 @@ export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDe
     async getDetail(auth, id) {
       let thread = await loadThread(db, auth, id)
       // Recover a turn a crash left in flight, so the page never shows it pending for ever.
-      if ((await recoverStaleTurn(db, ai.lockTtlSeconds, { auth, threadId: thread.id })) > 0) {
+      if (
+        (await recoverStaleTurn(db, olderThanTtl(ai.lockTtlSeconds), {
+          auth,
+          threadId: thread.id
+        })) > 0
+      ) {
         thread = await loadThread(db, auth, id)
       }
       const messages = await db

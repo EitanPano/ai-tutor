@@ -10,9 +10,11 @@ CREATE TABLE app_user (
   password_hash text NOT NULL,
   display_name text NOT NULL,
   time_zone text NOT NULL,
+  -- When the time zone last changed (null: never). One change per 24 hours keeps the daily AI budget window from being reset.
+  time_zone_changed_at timestamptz NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz NULL,
-  -- Per-user generation lock: set while an AI generation runs, taken over after 5 minutes.
+  -- Per-user generation lock: set while an AI generation runs, taken over after 10 minutes.
   generation_started_at timestamptz NULL
 );
 
@@ -82,6 +84,8 @@ CREATE TABLE message (
 );
 CREATE INDEX message_thread_created_idx ON message (thread_id, created_at);
 CREATE INDEX message_user_created_idx ON message (user_id, created_at);
+CREATE INDEX message_in_flight_idx ON message (user_id, created_at)
+  WHERE role = 'assistant' AND status = 'incomplete' AND stop_reason IS NULL;
 
 CREATE TABLE ai_call (
   id text PRIMARY KEY DEFAULT uuidv7()::text,
@@ -98,6 +102,7 @@ CREATE TABLE ai_call (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ai_call_user_created_idx ON ai_call (user_id, created_at);
+CREATE INDEX ai_call_created_idx ON ai_call (created_at);
 
 CREATE TABLE guide (
   id text PRIMARY KEY DEFAULT uuidv7()::text,

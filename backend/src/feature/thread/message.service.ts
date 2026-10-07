@@ -3,11 +3,11 @@ import type { Db } from '../../lib/db/index.js'
 import { conflict } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
 import type { ExplainResult, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
-import { ZERO_USAGE } from '../../lib/tutor/tutor.js'
+import { capHistory, ZERO_USAGE } from '../../lib/tutor/tutor.js'
 import type { AiApi, GenerationLockToken } from '../ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import { DEFAULT_TITLE, type ThreadService } from './thread.service.js'
-import { recoverStaleTurn } from './stale-turn.js'
+import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { TopicApi } from '../topic/index.js'
 
 /** A thread holds at most 25 non-failed messages (ledger ruling 14). */
@@ -54,7 +54,7 @@ async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<Tutor
     .orderBy('created_at')
     .orderBy('id')
     .execute()
-  return rows.filter((row) => row.role === 'user' || row.content !== '')
+  return capHistory(rows.filter((row) => row.role === 'user' || row.content !== ''))
 }
 
 /** Fallback after a persistence failure: never leave the turn looking in flight. */
@@ -87,7 +87,7 @@ export type MessageServiceDeps = {
   topic: TopicApi
   ai: AiApi
   thread: ThreadService
-  logger: Pick<Logger, 'error'>
+  logger: Pick<Logger, 'error' | 'warn'>
 }
 
 export type MessageService = {
@@ -135,9 +135,10 @@ export function createMessageService({
 }: MessageServiceDeps): MessageService {
   return {
     async start(auth, threadId, content) {
+      // Backstop; the route checks first so the error order stays kill switch → body.
       ai.assertEnabled()
       // A crashed generation must not count toward the thread cap or hold the lock for ever.
-      await recoverStaleTurn(db, ai.lockTtlSeconds, { auth })
+      await recoverStaleTurn(db, olderThanTtl(ai.lockTtlSeconds), { auth })
       const thread = await threadService.require(auth, threadId)
       await ai.assertWithinBudget(auth)
       if (thread.messageCount + 2 > MAX_THREAD_MESSAGES) {
@@ -204,26 +205,31 @@ export function createMessageService({
           await ai.recordCall(auth, {
             kind: 'explain',
             model: outcome.kind === 'result' ? outcome.result.model : outcome.model,
-            input_token: usage.inputTokens,
-            output_token: usage.outputTokens,
-            cache_read_token: usage.cacheReadTokens,
-            cache_creation_token: usage.cacheCreationTokens,
-            stop_reason: stopReason,
-            refusal_category: result?.refusalCategory ?? null,
-            latency_ms: Math.max(0, Math.round(outcome.latencyMs))
+            usage,
+            stopReason,
+            refusalCategory: result?.refusalCategory ?? null,
+            latencyMs: outcome.latencyMs
           })
         } catch (err) {
           logger.error({ err, userMessageId: ctx.userMessageId }, 'recording the ai_call failed')
         }
         try {
           await db.transaction().execute(async (trx) => {
-            await trx
+            // `stop_reason IS NULL` = the placeholder is still in flight. A turn that lazy recovery
+            // already failed (this stream outlived the lock TTL) must not be overwritten.
+            const updated = await trx
               .updateTable('message')
               .set({ content: failed ? '' : (result?.text ?? ''), status, stop_reason: stopReason })
               .where('id', '=', ctx.assistantMessageId)
+              .where('stop_reason', 'is', null)
               .where(ownedBy('message', auth))
-              .execute()
-            if (failed) {
+              .executeTakeFirst()
+            if (updated.numUpdatedRows === 0n) {
+              logger.warn(
+                { userMessageId: ctx.userMessageId },
+                'the turn was recovered before it finished; keeping the recovered state'
+              )
+            } else if (failed) {
               await trx
                 .updateTable('message')
                 .set({ status: 'failed' })

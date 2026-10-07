@@ -9,6 +9,8 @@ export interface AppUserTable {
   password_hash: string
   display_name: string
   time_zone: string
+  /** Last time-zone change; null until the first one. Limits changes to one per 24 hours. */
+  time_zone_changed_at: Date | null
   created_at: CreatedAt
   deleted_at: Date | null
   /** Per-user generation lock; null when free. */

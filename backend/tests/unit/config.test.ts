@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadConfig, loadDbConfig } from '../../src/lib/config.js'
+import { configWarning, loadConfig, loadDbConfig } from '../../src/lib/config.js'
 
 describe('loadConfig', () => {
   it('applies development defaults for an empty environment', () => {
@@ -14,9 +14,12 @@ describe('loadConfig', () => {
       aiProvider: 'fake',
       aiModel: 'claude-haiku-4-5',
       aiDailyTokenBudget: 1_000_000,
+      aiGlobalDailyTokenBudget: 1_000_000_000,
       aiEnabled: true,
       aiFakeDelayMs: 20,
-      recoverStaleOnBoot: true
+      recoverStaleOnBoot: true,
+      signupRateLimit: 10,
+      loginIpRateLimit: 30
     })
     expect(config.anthropicApiKey).toBeUndefined()
   })
@@ -75,6 +78,37 @@ describe('loadConfig', () => {
     ).toBe(50_000)
   })
 
+  it('defaults the global daily budget per provider', () => {
+    expect(loadConfig({ AI_PROVIDER: 'fake' }).aiGlobalDailyTokenBudget).toBe(1_000_000_000)
+    expect(
+      loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }).aiGlobalDailyTokenBudget
+    ).toBe(500_000)
+  })
+
+  it('defaults TRUST_PROXY to 0, accepts a hop count and rejects anything else', () => {
+    expect(loadConfig({}).trustProxy).toBe(0)
+    expect(loadConfig({ TRUST_PROXY: '2' }).trustProxy).toBe(2)
+    for (const bad of ['-1', '1.5', 'true', 'abc']) {
+      expect(() => loadConfig({ TRUST_PROXY: bad })).toThrow(/TRUST_PROXY/)
+    }
+  })
+
+  it('lets SIGNUP_RATE_LIMIT and LOGIN_IP_RATE_LIMIT override the defaults and rejects non-positive values', () => {
+    const config = loadConfig({ SIGNUP_RATE_LIMIT: '3', LOGIN_IP_RATE_LIMIT: '7' })
+    expect(config.signupRateLimit).toBe(3)
+    expect(config.loginIpRateLimit).toBe(7)
+    expect(() => loadConfig({ SIGNUP_RATE_LIMIT: '0' })).toThrow(/SIGNUP_RATE_LIMIT/)
+    expect(() => loadConfig({ LOGIN_IP_RATE_LIMIT: '-1' })).toThrow(/LOGIN_IP_RATE_LIMIT/)
+    expect(() => loadConfig({ LOGIN_IP_RATE_LIMIT: '1.5' })).toThrow(/LOGIN_IP_RATE_LIMIT/)
+  })
+
+  it('lets AI_GLOBAL_DAILY_TOKEN_BUDGET override the default and rejects a non-positive value', () => {
+    expect(loadConfig({ AI_GLOBAL_DAILY_TOKEN_BUDGET: '777' }).aiGlobalDailyTokenBudget).toBe(777)
+    expect(() => loadConfig({ AI_GLOBAL_DAILY_TOKEN_BUDGET: '0' })).toThrow(
+      /AI_GLOBAL_DAILY_TOKEN_BUDGET/
+    )
+  })
+
   it('lets AI_DAILY_TOKEN_BUDGET override the default for either provider', () => {
     expect(loadConfig({ AI_DAILY_TOKEN_BUDGET: '1234' }).aiDailyTokenBudget).toBe(1234)
     expect(
@@ -123,5 +157,24 @@ describe('loadDbConfig', () => {
   it('requires DATABASE_URL in production and rejects a bad log level', () => {
     expect(() => loadDbConfig({ NODE_ENV: 'production' })).toThrow('DATABASE_URL')
     expect(() => loadDbConfig({ LOG_LEVEL: 'loud' })).toThrow('LOG_LEVEL')
+  })
+})
+
+describe('configWarning', () => {
+  it('warns when the global cap is below the per-user budget', () => {
+    const config = loadConfig({
+      AI_DAILY_TOKEN_BUDGET: '5000',
+      AI_GLOBAL_DAILY_TOKEN_BUDGET: '1000'
+    })
+    expect(configWarning(config)).toMatch(/AI_GLOBAL_DAILY_TOKEN_BUDGET.*AI_DAILY_TOKEN_BUDGET/)
+  })
+
+  it('stays quiet when the cap equals or exceeds the budget, and for the defaults', () => {
+    const equal = loadConfig({
+      AI_DAILY_TOKEN_BUDGET: '5000',
+      AI_GLOBAL_DAILY_TOKEN_BUDGET: '5000'
+    })
+    expect(configWarning(equal)).toBeUndefined()
+    expect(configWarning(loadConfig({}))).toBeUndefined()
   })
 })

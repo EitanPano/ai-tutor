@@ -1,3 +1,4 @@
+import { sql } from 'kysely'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp, signUpBody, type UserBody } from '../helper/client.js'
@@ -7,7 +8,11 @@ const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
 
 type ErrorBody = {
-  error: { code: string; message: string; details?: { issues: { path: unknown[] }[] } }
+  error: {
+    code: string
+    message: string
+    details?: { issues: { path: unknown[] }[]; nextChangeAt?: string }
+  }
 }
 
 beforeEach(() => truncateAll(ctx.db))
@@ -123,6 +128,103 @@ describe('PATCH /api/user', () => {
       .send({ timeZone: 'Nope/Zone' })
     expect(res.status).toBe(400)
     expectContract(res, 'patch', '/api/user')
+  })
+
+  describe('time zone change limit', () => {
+    const patchZone = (cookie: string, timeZone: string) =>
+      client.patch('/api/user').set('Cookie', cookie).send({ timeZone })
+
+    it('allows the first change after sign-up, then refuses another within 24 hours', async () => {
+      const { cookie } = await signUp(client)
+      const first = await patchZone(cookie, 'America/New_York')
+      expect(first.status).toBe(200)
+      expectContract(first, 'patch', '/api/user')
+
+      const second = await patchZone(cookie, 'Asia/Tokyo')
+      expect(second.status).toBe(409)
+      expectContract(second, 'patch', '/api/user')
+      const { error } = second.body as ErrorBody
+      expect(error.code).toBe('time_zone_recently_changed')
+      expect(error.message).toBe('You can change your time zone once a day. Try again later.')
+      const next = new Date(error.details?.nextChangeAt as string)
+      const wait = next.getTime() - Date.now()
+      // The database's now() and this host's clock can differ (Docker/WSL vs Windows): allow a minute.
+      const skew = 60_000
+      expect(wait).toBeGreaterThan(23.9 * 3_600_000 - skew)
+      expect(wait).toBeLessThanOrEqual(24 * 3_600_000 + skew)
+
+      const row = await ctx.db.selectFrom('app_user').select('time_zone').executeTakeFirst()
+      expect(row?.time_zone).toBe('America/New_York')
+    })
+
+    it('treats re-sending the current zone as no change, even spelled differently', async () => {
+      const { cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      expect((await patchZone(cookie, 'america/new_york')).status).toBe(200)
+      // The same-zone saves are not changes: the window is still the first change's.
+      expect((await patchZone(cookie, 'Asia/Tokyo')).status).toBe(409)
+    })
+
+    it('does not stamp a same-zone save', async () => {
+      const { cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'Europe/Paris')).status).toBe(200)
+      const row = await ctx.db
+        .selectFrom('app_user')
+        .select('time_zone_changed_at')
+        .executeTakeFirst()
+      expect(row?.time_zone_changed_at).toBeNull()
+      // Still the first change, so it is allowed.
+      expect((await patchZone(cookie, 'Asia/Tokyo')).status).toBe(200)
+    })
+
+    it('allows a change once the window has passed', async () => {
+      const { cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      await sql`UPDATE app_user SET time_zone_changed_at = now() - interval '24 hours 1 minute'`.execute(
+        ctx.db
+      )
+      const res = await patchZone(cookie, 'Asia/Tokyo')
+      expect(res.status).toBe(200)
+      expect((res.body as { user: UserBody }).user.timeZone).toBe('Asia/Tokyo')
+    })
+
+    it('saves a new display name while re-sending the same zone, inside the window', async () => {
+      const { user, cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      const res = await client
+        .patch('/api/user')
+        .set('Cookie', cookie)
+        .send({ displayName: 'Renamed', timeZone: 'America/New_York' })
+      expect(res.status).toBe(200)
+      expect((res.body as { user: UserBody }).user).toEqual({
+        ...user,
+        displayName: 'Renamed',
+        timeZone: 'America/New_York'
+      })
+    })
+
+    it('refuses a rename bundled with a blocked zone change, saving neither', async () => {
+      const { user, cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      const res = await client
+        .patch('/api/user')
+        .set('Cookie', cookie)
+        .send({ displayName: 'Renamed', timeZone: 'Asia/Tokyo' })
+      expect(res.status).toBe(409)
+      const row = await ctx.db.selectFrom('app_user').select('display_name').executeTakeFirst()
+      expect(row?.display_name).toBe(user.displayName)
+    })
+
+    it('updates a display name alone inside the window', async () => {
+      const { cookie } = await signUp(client)
+      expect((await patchZone(cookie, 'America/New_York')).status).toBe(200)
+      const res = await client
+        .patch('/api/user')
+        .set('Cookie', cookie)
+        .send({ displayName: 'Solo' })
+      expect(res.status).toBe(200)
+    })
   })
 
   it('answers 401 without a cookie', async () => {

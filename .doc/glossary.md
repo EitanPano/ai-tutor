@@ -19,6 +19,8 @@
 | `attempt` | One graded submission of a quiz (table `quiz_attempt`). |
 | `ai_call` | Ledger row for each model call: model, tokens, cache reads, stop reason, latency. |
 | `budget` | A user's daily AI token allowance (`AI_DAILY_TOKEN_BUDGET`), counted per calendar day in the user's time zone. |
+| `global budget` | The cap on AI tokens across all users together since UTC midnight (`AI_GLOBAL_DAILY_TOKEN_BUDGET`); reached: 503 `ai_unavailable`. |
+| `time zone change limit` | A user may change `time_zone` once per 24 h (409 `time_zone_recently_changed`), so the day boundary of the `budget` cannot be moved to reset it. |
 | `streak` | Consecutive days (user's time zone) with at least one question asked, step completed, or attempt submitted. |
 | `generation` | One in-flight AI call (explain, guide or quiz); a user has at most one at a time. |
 

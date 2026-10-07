@@ -1,3 +1,4 @@
+import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 import { badRequest, conflict } from '../../lib/error.js'
 import { hashPassword } from '../../lib/password.js'
@@ -5,6 +6,9 @@ import { normaliseTimeZone } from '../../lib/time-zone.js'
 import { requireFound, type Auth } from '../../lib/ownership.js'
 import { startSession } from './session.service.js'
 import { toUserDto, type UserDto } from './user.dto.js'
+
+/** A time-zone change moves the daily AI budget window, so it is limited to one per this window. */
+export const TIME_ZONE_CHANGE_WINDOW_HOURS = 24
 
 export type CreateUserInput = {
   email: string
@@ -82,17 +86,45 @@ export function createUserService({ db }: UserServiceDeps): UserService {
         input.timeZone === undefined ? undefined : await resolveTimeZone(db, input.timeZone)
       const changes = {
         ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
-        ...(timeZone !== undefined ? { time_zone: timeZone } : {})
+        ...(timeZone !== undefined
+          ? {
+              time_zone: timeZone,
+              // SET expressions see the old row: stamp only when the zone really changes.
+              time_zone_changed_at: sql<Date | null>`CASE WHEN time_zone <> ${timeZone} THEN now() ELSE time_zone_changed_at END`
+            }
+          : {})
       }
       if (Object.keys(changes).length === 0) return getUser(db, auth)
-      const row = await db
+      let query = db
         .updateTable('app_user')
         .set(changes)
         .where('id', '=', auth.userId)
         .where('deleted_at', 'is', null)
-        .returningAll()
+      // One conditional UPDATE, like the generation lock, so two concurrent changes cannot both pass.
+      if (timeZone !== undefined) {
+        query = query.where(
+          sql<boolean>`(time_zone = ${timeZone} OR time_zone_changed_at IS NULL OR time_zone_changed_at <= now() - make_interval(hours => ${TIME_ZONE_CHANGE_WINDOW_HOURS}))`
+        )
+      }
+      const row = await query.returningAll().executeTakeFirst()
+      if (row) return toUserDto(row)
+      // No row: the user is gone, or the change came too soon.
+      const current = await db
+        .selectFrom('app_user')
+        .select(
+          sql<Date>`time_zone_changed_at + make_interval(hours => ${TIME_ZONE_CHANGE_WINDOW_HOURS})`.as(
+            'next'
+          )
+        )
+        .where('id', '=', auth.userId)
+        .where('deleted_at', 'is', null)
         .executeTakeFirst()
-      return toUserDto(requireFound(row))
+      const { next } = requireFound(current)
+      throw conflict(
+        'time_zone_recently_changed',
+        'You can change your time zone once a day. Try again later.',
+        { nextChangeAt: next.toISOString() }
+      )
     }
   }
 }

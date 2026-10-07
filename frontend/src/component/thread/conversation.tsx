@@ -9,10 +9,12 @@ import { Sheet } from '@/component/ui/sheet'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { usePageTitle } from '@/lib/page-title'
 import { Composer } from './composer'
 import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
 import { ThreadHeader } from './thread-header'
+import { ThreadSkeleton } from './thread-skeleton'
 import { Transcript } from './transcript'
 import { useAsk } from './use-ask'
 
@@ -55,6 +57,7 @@ export function Conversation({ threadId }: { threadId: string }) {
       return !asking && unfinished && unfinished.id !== stalledId ? 1500 : false
     }
   })
+  usePageTitle(detail.data?.thread.title)
   const parked = useRef(false)
 
   const unfinishedId = detail.data?.messages.find(isPending)?.id
@@ -69,7 +72,7 @@ export function Conversation({ threadId }: { threadId: string }) {
   const submit = useCallback(
     async (question: string) => {
       const { started, outcome } = await ask(question)
-      if (!started && outcome === 'failed') setDraft((current) => current || question)
+      if (!started && outcome !== 'completed') setDraft((current) => current || question)
     },
     [ask]
   )
@@ -101,14 +104,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     if (loaded) scrollToEnd()
   }, [loaded])
 
-  if (detail.isPending) {
-    return (
-      <div aria-busy="true" aria-label="Loading thread" className="flex flex-col gap-4">
-        <div className="h-9 w-2/3 animate-pulse rounded-sm bg-rule" />
-        <div className="h-64 animate-pulse rounded-md border border-rule bg-sheet" />
-      </div>
-    )
-  }
+  if (detail.isPending) return <ThreadSkeleton />
 
   if (!detail.data) {
     const missing = isApiError(detail.error) && detail.error.code === 'not_found'

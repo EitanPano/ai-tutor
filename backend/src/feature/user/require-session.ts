@@ -18,7 +18,7 @@ export function readSessionToken(cookies: unknown): string | undefined {
 /** Resolves the `sid` cookie to `req.auth`, slides the expiry, or answers 401 `unauthenticated`. */
 export function requireSession(
   session: SessionService,
-  config: Pick<Config, 'nodeEnv'>
+  config: Pick<Config, 'nodeEnv' | 'frontendUrl'>
 ): RequestHandler {
   return async (req, res, next) => {
     const token = readSessionToken(req.cookies)

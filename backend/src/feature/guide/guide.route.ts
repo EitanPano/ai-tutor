@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from 'express'
+import type { AiApi } from '../ai/index.js'
 import { pathParam } from '../../lib/validation.js'
 import type { GuideService } from './guide.service.js'
 import { getAuth } from '../../http/get-auth.js'
@@ -7,11 +8,13 @@ import { updateStepSchema } from './guide.schema.js'
 
 export function guideRouter(
   service: GuideService,
-  { requireSession }: { requireSession: RequestHandler }
+  { requireSession, ai }: { requireSession: RequestHandler; ai: AiApi }
 ): Router {
   const router = Router()
 
   router.post('/api/thread/:id/guide', requireSession, async (req, res) => {
+    // The AI switch is the first check, before the request is looked at (same as the quiz and ask).
+    ai.assertEnabled()
     const guide = await service.create(getAuth(req), pathId(req))
     res.status(201).json({ guide })
   })

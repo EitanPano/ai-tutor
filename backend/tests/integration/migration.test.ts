@@ -19,6 +19,8 @@ const test = createDb(TEST_DATABASE_URL)
 const check = createDb(SCHEMA_CHECK_DATABASE_URL)
 
 afterAll(async () => {
+  // Leave the fully migrated schema behind: later files must not see an empty database.
+  await reset(test.pool)
   await test.db.destroy()
   await check.db.destroy()
 })

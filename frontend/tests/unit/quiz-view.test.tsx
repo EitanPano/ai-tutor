@@ -150,6 +150,24 @@ describe('QuizView', () => {
     ])
   })
 
+  it('stays on Grading and ignores a second submit while the page changes', async () => {
+    api.submitAttempt.mockResolvedValue({
+      attempt: { id: 'a1', quizId: 'q1', score: 5, total: 5, submittedAt: '', items: [] }
+    })
+    const typist = setup()
+    await screen.findAllByRole('group')
+
+    await answerAll(typist)
+    await typist.click(submit())
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q1/attempt/a1'))
+
+    const grading = screen.getByRole('button', { name: 'Grading…' })
+    expect(grading).toBeDisabled()
+    await typist.click(grading)
+    await typist.keyboard('{Enter}')
+    expect(api.submitAttempt).toHaveBeenCalledTimes(1)
+  })
+
   it('toasts a rejected submission, keeps the answers and returns focus to Submit', async () => {
     api.submitAttempt.mockRejectedValue(
       new ApiError({ status: 422, code: 'attempt_incomplete', message: 'x' })
@@ -209,5 +227,13 @@ describe('QuizView', () => {
     await typist.click(await screen.findByRole('button', { name: 'Retry' }))
 
     expect(await screen.findAllByRole('group')).toHaveLength(5)
+  })
+
+  it('titles the page after the quiz difficulty and topic once they load', async () => {
+    setup(quiz({ difficulty: 'medium' }))
+
+    await screen.findAllByRole('group')
+
+    await waitFor(() => expect(document.title).toBe('Medium quiz on React | AI Tutor'))
   })
 })

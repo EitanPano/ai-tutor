@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AttemptView } from '@/component/quiz/attempt-view'
 import { ApiError } from '@/lib/api/error'
-import type { Attempt, GradedItem } from '@/lib/api/quiz'
+import { quizKey, type Attempt, type GradedItem } from '@/lib/api/quiz'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({
@@ -65,6 +65,28 @@ function setup({ threadId = 't1' as string | null } = {}) {
 }
 
 describe('AttemptView', () => {
+  it('shows a seeded attempt as is, without fetching it again', async () => {
+    api.getQuiz.mockResolvedValue({
+      quiz: {
+        id: 'q1',
+        threadId: 't1',
+        topicId: 'react',
+        difficulty: 'hard',
+        createdAt: '',
+        items: [],
+        attempts: []
+      }
+    })
+    api.listTopics.mockResolvedValue({ topics: [{ id: 'react', name: 'React' }] })
+    renderWithQuery(<AttemptView quizId="q1" attemptId="a1" />, (client) =>
+      client.setQueryData(quizKey.attempt('q1', 'a1'), { attempt: attempt() })
+    )
+
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('2 of 5 correct')
+    await screen.findByText('Hard quiz on React')
+    expect(api.getAttempt).not.toHaveBeenCalled()
+  })
+
   it('leads with the score and names the quiz', async () => {
     setup()
 

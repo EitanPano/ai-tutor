@@ -65,7 +65,7 @@ function toGuideDto(row: GuideRow, steps: GuideStepRow[]): GuideDto {
 export type GuideService = {
   /**
    * Generates a guide from a thread. The provider call, its retry and the `ai_call` rows live in
-   * `generateValidated`; the generation lock is always released here.
+   * `generateValidated`; the generation lock is held and released by `ai.withGenerationLock`.
    */
   create(auth: Auth, threadId: string): Promise<GuideDto>
   get(auth: Auth, id: string): Promise<GuideDto>
@@ -127,13 +127,10 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
   const { db, tutor, ai } = deps
   return {
     async create(auth, threadId) {
-      ai.assertEnabled()
       const thread = await deps.thread.require(auth, threadId)
       await deps.thread.assertHasAnswer(auth, thread.id)
-      await ai.assertWithinBudget(auth)
       const topic = await deps.topic.require(thread.topicId)
-      const lockToken = await ai.acquireLock(auth)
-      try {
+      return ai.withGenerationLock(auth, async () => {
         const history = await deps.thread.history(auth, thread.id)
         const draft = await ai.generateValidated(auth, {
           kind: 'guide',
@@ -142,10 +139,8 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
           model: tutor.model,
           logContext: { threadId: thread.id }
         })
-        return await saveGuide(db, auth, { threadId: thread.id, topicId: topic.id, draft })
-      } finally {
-        await ai.releaseLock(auth, lockToken)
-      }
+        return saveGuide(db, auth, { threadId: thread.id, topicId: topic.id, draft })
+      })
     },
     async get(auth, id) {
       const guide = requireFound(

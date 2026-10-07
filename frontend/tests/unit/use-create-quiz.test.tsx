@@ -56,6 +56,16 @@ describe('useCreateQuiz', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: threadKey.detail('t1') })
   })
 
+  it('stays busy after the quiz is written, while the page changes', async () => {
+    api.createQuiz.mockResolvedValue(quiz('t1'))
+    const { result } = setup()
+
+    act(() => result.current.create({ threadId: 't1' }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q1'))
+
+    expect(result.current.isPending).toBe(true)
+  })
+
   it('serves a quiz on a topic, which has no thread to refresh', async () => {
     api.createQuiz.mockResolvedValue(quiz(null))
     const { result, invalidate } = setup()
@@ -84,6 +94,16 @@ describe('useCreateQuiz', () => {
     act(() => options.action.onClick())
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q1'))
     expect(api.createQuiz).toHaveBeenLastCalledWith({ threadId: 't1', difficulty: 'hard' })
+  })
+
+  it.each(['generation_in_progress', 'network_error'])('offers Retry on %s', async (code) => {
+    api.createQuiz.mockRejectedValue(new ApiError({ status: 409, code, message: 'x' }))
+    const { result } = setup()
+
+    act(() => result.current.create({ threadId: 't1', difficulty: 'hard' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect(toast.error.mock.calls[0]![1].action.label).toBe('Retry')
   })
 
   it('toasts a refusal without Retry and dismisses the toast when the page goes', async () => {

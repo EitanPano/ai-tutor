@@ -9,7 +9,7 @@ import type { Db } from './lib/db/index.js'
 import { errorMiddleware, notFoundHandler } from './lib/error.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
-import { createLoginLimiter } from './lib/rate-limit.js'
+import { createLoginIpLimiter, createLoginLimiter, createSignupLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './feature/guide/index.js'
@@ -26,7 +26,7 @@ import { requestId } from './http/request-id.js'
 export type AppDeps = {
   config: Config
   db: Db
-  /** The pool behind `db`; the login limiter stores its counters through it. */
+  /** The pool behind `db`; the rate limiters store their counters through it. */
   pool: pg.Pool
   logger: Logger
   /** Defaults to the provider selected by `config.aiProvider`; tests inject the fake. */
@@ -37,12 +37,17 @@ export type AppDeps = {
   inFlight?: InFlightRegistry
 }
 
-/** What index.ts and tests need besides HTTP: module APIs and the boot-time stale-turn sweep. */
+/** What index.ts and tests need besides HTTP: module APIs and the boot recovery. */
 export type AppModules = {
   topic: TopicApi
   ai: AiApi
   thread: ThreadApi
-  recoverStale: () => Promise<number>
+  /**
+   * Boot only, before the first request: fails every unfinished turn (whatever its age) and clears
+   * every generation lock. Assumes a single backend instance, so all of it belongs to a dead
+   * process. Turns first, then locks, so a freed user never meets their own orphan turn.
+   */
+  recoverAtBoot: () => Promise<{ turns: number; locks: number }>
 }
 
 export function createApp({
@@ -55,6 +60,9 @@ export function createApp({
   inFlight = new InFlightRegistry()
 }: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
+  // An explicit hop count, never `true`: req.ip (and so the per-IP rate limits) must not be spoofable
+  // through X-Forwarded-For, yet behind a proxy it must not collapse to the proxy's address.
+  if (config.trustProxy > 0) app.set('trust proxy', config.trustProxy)
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(
@@ -80,7 +88,15 @@ export function createApp({
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
-  const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
+  const user = createUserModule({
+    db,
+    config,
+    limiters: {
+      login: createLoginLimiter(pool),
+      loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
+      signup: createSignupLimiter(pool, config.signupRateLimit)
+    }
+  })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
   const provider = tutor ?? createTutorProvider(config)
@@ -127,6 +143,22 @@ export function createApp({
   app.use(errorMiddleware)
   return {
     app,
-    modules: { topic: topic.api, ai: ai.api, thread: thread.api, recoverStale: thread.recoverStale }
+    modules: {
+      topic: topic.api,
+      ai: ai.api,
+      thread: thread.api,
+      recoverAtBoot: async () => {
+        // A failed sweep must not leave users locked out: release the locks anyway, then let the
+        // sweep's error propagate so index.ts logs it.
+        let turns: number
+        let locks: number
+        try {
+          turns = await thread.recoverStale()
+        } finally {
+          locks = await ai.releaseAllLocks()
+        }
+        return { turns, locks }
+      }
+    }
   }
 }

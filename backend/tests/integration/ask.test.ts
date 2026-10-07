@@ -8,6 +8,10 @@ import { parseSse, type SseEvent } from '../helper/sse.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
+// A private app whose global daily cap is small enough to reach with a few rows.
+const GLOBAL_CAP = 1000
+const capped = createTestApp({ config: { aiGlobalDailyTokenBudget: GLOBAL_CAP } })
+const cappedClient = createClient(capped.app, capped.config)
 
 type ThreadBody = { id: string; title: string; messageCount: number; updatedAt: string }
 type MessageBody = {
@@ -24,7 +28,10 @@ beforeEach(async () => {
   await truncateAll(ctx.db)
   ctx.tutor.reset()
 })
-afterAll(() => ctx.close())
+afterAll(async () => {
+  await capped.close()
+  await ctx.close()
+})
 
 async function newThread(cookie: string, body: Record<string, unknown> = {}) {
   const res = await client.post('/api/thread').set('Cookie', cookie).send(body)
@@ -294,6 +301,40 @@ describe('follow-up context (AC05)', () => {
   })
 })
 
+describe('history cap', () => {
+  it('sends at most 64,000 characters of the newest history and the question in full', async () => {
+    const { session, threadId } = await setup()
+    const rows: { role: 'user' | 'assistant'; content: string }[] = []
+    for (let turn = 0; turn < 6; turn += 1) {
+      rows.push({ role: 'user', content: `${turn}`.repeat(20_000) })
+      rows.push({ role: 'assistant', content: `a${turn}`.repeat(500) })
+    }
+    for (const row of rows) {
+      await ctx.db
+        .insertInto('message')
+        .values({
+          thread_id: threadId,
+          user_id: session.user.id,
+          role: row.role,
+          content: row.content,
+          status: 'complete',
+          stop_reason: 'end_turn'
+        })
+        .execute()
+    }
+    const question = 'q'.repeat(20_000)
+    await ask(session.cookie, threadId, question)
+    const call = ctx.tutor.calls[0]!
+    const chars = call.history.reduce((sum, turn) => sum + turn.content.length, 0)
+    expect(chars).toBeLessThanOrEqual(64_000)
+    expect(call.history[0]?.role).toBe('user')
+    expect(call.history).toEqual(rows.slice(-call.history.length))
+    expect(call.history.at(-1)).toEqual(rows.at(-1))
+    expect(call.history.length).toBeLessThan(rows.length)
+    expect(call.question).toBe(question)
+  })
+})
+
 describe('limits and locks (AC09)', () => {
   it('answers 429 ai_budget_exceeded once today tokens reach the budget', async () => {
     const { session, threadId } = await setup()
@@ -544,6 +585,30 @@ describe('client disconnect', () => {
       await stream.close()
     }
   })
+  it('leaves a turn that was already recovered failed when the late finish arrives', async () => {
+    const { session, threadId } = await setup()
+    const stream = await openSlowStream(session.cookie, threadId, session.user.id)
+    try {
+      // Lazy recovery marked the in-flight placeholder failed while its stream was still alive.
+      await ctx.db
+        .updateTable('message')
+        .set({ status: 'failed', stop_reason: 'error' })
+        .where('thread_id', '=', threadId)
+        .where('role', '=', 'assistant')
+        .execute()
+      await stream.abortOnly()
+      await waitSettled(session.user.id)
+      const { messages } = await detail(session.cookie, threadId)
+      expect(messages.map((m) => [m.role, m.status, m.stopReason, m.content === ''])).toEqual([
+        ['user', 'complete', null, false],
+        ['assistant', 'failed', 'error', true]
+      ])
+      expect(await lockOf(session.user.id)).toBeNull()
+      expect(await aiCalls(session.user.id)).toMatchObject([{ stop_reason: 'aborted' }])
+    } finally {
+      await stream.close()
+    }
+  })
 })
 
 describe('persistence failure', () => {
@@ -765,7 +830,22 @@ describe('recovery of turns left in flight (I2)', () => {
       .where('role', '=', 'assistant')
       .executeTakeFirstOrThrow()
     expect(row.status).toBe('incomplete')
-    expect(await ctx.modules.recoverStale()).toBe(1)
+    expect((await ctx.modules.recoverAtBoot()).turns).toBe(1)
+  })
+
+  it('recovers a seconds-old turn and a held lock at boot, and the user can ask again', async () => {
+    const { session, threadId } = await setup()
+    await insertOrphanTurn(session.user.id, threadId, 5 / 60)
+    expect(await lockOf(session.user.id)).not.toBeNull()
+    expect(await ctx.modules.recoverAtBoot()).toMatchObject({ turns: 1 })
+    expect(await lockOf(session.user.id)).toBeNull()
+    const { messages } = await detail(session.cookie, threadId)
+    expect(messages.map((m) => [m.role, m.status])).toEqual([
+      ['user', 'failed'],
+      ['assistant', 'failed']
+    ])
+    const { res } = await ask(session.cookie, threadId, 'after the restart')
+    expect(res.status).toBe(200)
   })
 
   it('shutdown aborts a running generation; it persists aborted and releases the lock once', async () => {
@@ -790,5 +870,83 @@ describe('recovery of turns left in flight (I2)', () => {
       await stream.close()
       await own.close()
     }
+  })
+})
+
+describe('global daily cap', () => {
+  /**
+   * Inserts an ai_call for `userId`. 'now' lies inside every window that ends later today (the UTC
+   * day and any time zone's local day), so tests that also depend on the per-user window use it;
+   * 'utc-noon' is only inside the UTC day's window.
+   */
+  async function spendAt(
+    userId: string,
+    token: number,
+    at: 'utc-noon' | 'before-utc-midnight' | 'now'
+  ) {
+    const created =
+      at === 'now'
+        ? sql`now()`
+        : at === 'utc-noon'
+          ? sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '12 hours'`
+          : sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - interval '1 minute'`
+    await sql`
+      INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+        stop_reason, latency_ms, created_at)
+      VALUES (${userId}, 'explain', 'fake', ${token}, 0, 0, 'end_turn', 1, ${created})`.execute(
+      capped.db
+    )
+  }
+
+  async function cappedUser() {
+    const session = await signUp(cappedClient)
+    const thread = (await cappedClient.post('/api/thread').set('Cookie', session.cookie).send({}))
+      .body as { thread: ThreadBody }
+    return { session, threadId: thread.thread.id }
+  }
+
+  function askCapped(cookie: string, threadId: string) {
+    return cappedClient
+      .post(`/api/thread/${threadId}/message`)
+      .set('Cookie', cookie)
+      .send({ content: 'hello' })
+  }
+
+  it('answers 503 ai_unavailable once all users together reach the cap', async () => {
+    const first = await cappedUser()
+    const second = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP / 2, 'utc-noon')
+    await spendAt(second.session.user.id, GLOBAL_CAP / 2, 'utc-noon')
+    const third = await cappedUser()
+    const res = await askCapped(third.session.cookie, third.threadId)
+    expect(res.status).toBe(503)
+    expectContract(res, 'post', '/api/thread/{id}/message')
+    expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+    expect(capped.tutor.calls).toHaveLength(0)
+  })
+
+  it('stays open while the total is below the cap', async () => {
+    const first = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP - 1, 'utc-noon')
+    const second = await cappedUser()
+    const res = await askCapped(second.session.cookie, second.threadId)
+    expect(res.status).toBe(200)
+  })
+
+  it('does not count spend from before UTC midnight', async () => {
+    const first = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP * 10, 'before-utc-midnight')
+    const second = await cappedUser()
+    const res = await askCapped(second.session.cookie, second.threadId)
+    expect(res.status).toBe(200)
+  })
+
+  it('checks the per-user budget first: 429 even when the cap is reached too', async () => {
+    const { session, threadId } = await cappedUser()
+    // 'now', not 'utc-noon': the user's own day starts at local midnight, which can be after UTC noon.
+    await spendAt(session.user.id, capped.config.aiDailyTokenBudget, 'now')
+    const res = await askCapped(session.cookie, threadId)
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('ai_budget_exceeded')
   })
 })

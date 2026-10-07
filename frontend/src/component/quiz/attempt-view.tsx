@@ -153,6 +153,8 @@ export function AttemptView({ quizId, attemptId }: { quizId: string; attemptId: 
   const attempt = useQuery({
     queryKey: quizKey.attempt(quizId, attemptId),
     queryFn: ({ signal }) => getAttempt(quizId, attemptId, signal),
+    // A submitted attempt never changes.
+    staleTime: Infinity,
     select: (response) => response.attempt
   })
   // Only the thread link and the title need the quiz: the review itself never waits for it.

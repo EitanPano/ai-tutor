@@ -8,15 +8,12 @@ import { toast } from 'sonner'
 import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button } from '@/component/ui/button'
 import { Select } from '@/component/ui/select'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isRetryable } from '@/lib/api/error'
 import { createGuide, guideKey, type GuideSummary } from '@/lib/api/guide'
 import type { Difficulty, QuizSummary } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
 import { GuideIcon, QuizIcon } from '@/lib/icon'
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, difficultyLabel } from '@/lib/quiz'
-
-/** Failures worth a Retry: nothing about the thread itself is wrong. */
-const RETRYABLE = new Set(['ai_invalid_output', 'ai_provider_error'])
 
 type StudyToolsProps = {
   threadId: string
@@ -69,7 +66,7 @@ export const StudyTools = memo(function StudyTools({
       router.push(`/guide/${encodeURIComponent(guide.id)}`)
     },
     onError: (err) => {
-      const retryable = isApiError(err) && RETRYABLE.has(err.code)
+      const retryable = isRetryable(err, 'generate')
       toastId.current = toast.error(describeError(err), {
         ...(retryable && { action: { label: 'Retry', onClick: () => create.mutate() } })
       })
@@ -79,26 +76,28 @@ export const StudyTools = memo(function StudyTools({
   const reason = !hasAnswer ? 'Ask a question first' : busy ? 'Wait for the answer to finish' : ''
   const disabled = !!reason
   // One thing is written at a time: two generations would only race each other.
-  const working = create.isPending || quiz.isPending
+  // A success stays busy too: router.push only starts the navigation, the old page lingers.
+  const guiding = create.isPending || create.isSuccess
+  const working = guiding || quiz.isPending
   const describedBy = disabled ? 'study-reason' : undefined
 
   return (
     <div className="flex flex-col gap-3">
       <div role="toolbar" aria-label="Study tools" className="flex flex-wrap items-center gap-3">
         <Button
-          loading={create.isPending}
+          loading={guiding}
           disabled={disabled || quiz.isPending}
           aria-describedby={describedBy}
           onClick={() => create.mutate()}
         >
-          {!create.isPending && <GuideIcon aria-hidden="true" className="size-4" />}
-          {create.isPending ? 'Writing your guide…' : 'Guide me step by step'}
+          {!guiding && <GuideIcon aria-hidden="true" className="size-4" />}
+          {guiding ? 'Writing your guide…' : 'Guide me step by step'}
         </Button>
         <div role="group" aria-label="Quiz" className="flex items-center gap-2">
           <Button
             variant="secondary"
             loading={quiz.isPending}
-            disabled={disabled || create.isPending}
+            disabled={disabled || guiding}
             aria-describedby={describedBy}
             onClick={() => quiz.create({ threadId, difficulty })}
           >

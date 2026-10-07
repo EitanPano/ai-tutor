@@ -80,7 +80,8 @@ type Captured = { body: Record<string, unknown> }
 
 function providerWith(
   respond: (init?: RequestInit) => Response | Promise<Response>,
-  maxRetries = 0
+  maxRetries = 0,
+  timeouts: { explainIdleTimeoutMs?: number; explainTotalTimeoutMs?: number } = {}
 ) {
   const captured: Captured = { body: {} }
   const fetchStub = async (_url: unknown, init?: RequestInit) => {
@@ -91,6 +92,7 @@ function providerWith(
     apiKey: 'test-key',
     model: 'claude-haiku-4-5',
     maxRetries,
+    ...timeouts,
     fetch: fetchStub
   })
   return { provider, captured }
@@ -206,6 +208,64 @@ describe('anthropic provider', () => {
     await expect(provider.explain(baseInput(), () => {})).rejects.toThrow(TutorProviderError)
   })
 
+  it('fails with the usage seen so far when the stream goes idle', async () => {
+    const encoder = new TextEncoder()
+    const { provider } = providerWith(
+      (init) => {
+        const head = sseBody([messageStart(), ...textFrames(['z'.repeat(90)])])
+        const body = new ReadableStream<Uint8Array>({
+          start(stream) {
+            stream.enqueue(encoder.encode(head))
+            // Headers and one delta arrive, then nothing, until the request is aborted.
+            init?.signal?.addEventListener('abort', () =>
+              stream.error(new DOMException('The operation was aborted.', 'AbortError'))
+            )
+          }
+        })
+        return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+      },
+      0,
+      { explainIdleTimeoutMs: 50 }
+    )
+    const error = await provider.explain(baseInput(), () => {}).catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(TutorProviderError)
+    expect((error as TutorProviderError).usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 30,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0
+    })
+  })
+
+  it('fails when a stream that keeps sending events outlasts the total deadline', async () => {
+    const encoder = new TextEncoder()
+    let ticker: ReturnType<typeof setInterval> | undefined
+    const { provider } = providerWith(
+      (init) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(stream) {
+            stream.enqueue(encoder.encode(sseBody([messageStart(), ...textFrames([])])))
+            ticker = setInterval(() => {
+              stream.enqueue(encoder.encode(sseBody([['ping', { type: 'ping' }]])))
+            }, 10)
+            init?.signal?.addEventListener('abort', () => {
+              clearInterval(ticker)
+              stream.error(new DOMException('The operation was aborted.', 'AbortError'))
+            })
+          }
+        })
+        return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+      },
+      0,
+      { explainIdleTimeoutMs: 1_000, explainTotalTimeoutMs: 150 }
+    )
+    try {
+      await expect(provider.explain(baseInput(), () => {})).rejects.toThrow(TutorProviderError)
+    } finally {
+      clearInterval(ticker)
+    }
+  })
+
   it('returns aborted with the text so far when the signal aborts mid-stream', async () => {
     const controller = new AbortController()
     const encoder = new TextEncoder()
@@ -282,6 +342,30 @@ describe('anthropic provider', () => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0
     })
+  })
+
+  it('records an estimated input when aborted after the request was sent but before message_start', async () => {
+    const controller = new AbortController()
+    const { provider } = providerWith((init) => {
+      // Headers never arrive; the request only ends when its signal aborts.
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        )
+        setTimeout(() => controller.abort(), 10)
+      })
+    })
+    const result = await provider.explain(baseInput(controller.signal), () => {})
+    const chars =
+      EXPLAIN_SYSTEM_PROMPT_V1.length +
+      `Topic: TypeScript
+
+What is a generic?`.length +
+      'A type parameter.'.length +
+      'Show an example'.length
+    expect(result).toMatchObject({ stopReason: 'aborted', text: '' })
+    expect(result.usage.inputTokens).toBe(Math.ceil(chars / 4))
+    expect(result.usage.outputTokens).toBe(0)
   })
 
   it('returns aborted with zero usage when aborted before the request starts', async () => {
@@ -444,7 +528,7 @@ describe('anthropic provider generateGuide', () => {
     expect(body.model).toBe('claude-haiku-4-5')
     expect(body.max_tokens).toBe(4096)
     expect(body).not.toHaveProperty('stream')
-    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body).not.toHaveProperty('cache_control')
     expect(body.system).toEqual([{ type: 'text', text: GUIDE_SYSTEM_PROMPT_V1 }])
     expect(body.messages).toEqual([
       { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },
@@ -524,7 +608,7 @@ describe('anthropic provider generateQuiz', () => {
     const body = captured.body
     expect(body.max_tokens).toBe(4096)
     expect(body).not.toHaveProperty('stream')
-    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body).not.toHaveProperty('cache_control')
     expect(body.system).toEqual([{ type: 'text', text: QUIZ_SYSTEM_PROMPT_V1 }])
     expect(body.messages).toEqual([
       { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },

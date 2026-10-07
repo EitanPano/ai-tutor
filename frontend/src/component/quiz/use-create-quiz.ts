@@ -2,12 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isRetryable } from '@/lib/api/error'
 import { createQuiz, quizKey, type CreateQuizRequest } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
-
-/** Failures worth a Retry: nothing about the request itself is wrong. */
-const RETRYABLE = new Set(['ai_invalid_output', 'ai_provider_error'])
 
 /**
  * Writes a quiz and opens it. Shared by every "Quiz me" button (a thread, a guide, a topic).
@@ -37,12 +34,13 @@ export function useCreateQuiz() {
       router.push(`/quiz/${encodeURIComponent(quiz.id)}`)
     },
     onError: (err, body) => {
-      const retryable = isApiError(err) && RETRYABLE.has(err.code)
+      const retryable = isRetryable(err, 'generate')
       toastId.current = toast.error(describeError(err), {
         ...(retryable && { action: { label: 'Retry', onClick: () => mutation.mutate(body) } })
       })
     }
   })
 
-  return { create: mutation.mutate, isPending: mutation.isPending }
+  // router.push only starts the navigation: stay busy through success so the old page cannot start a second quiz.
+  return { create: mutation.mutate, isPending: mutation.isPending || mutation.isSuccess }
 }

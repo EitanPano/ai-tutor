@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { markPoolConnectError } from '../../src/lib/db/unavailable.js'
 import { AppError } from '../../src/lib/error.js'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createTestApp } from '../helper/app.js'
@@ -14,6 +15,19 @@ const errors = createTestApp({
     })
     app.get('/boom/zod', () => {
       z.object({ email: z.email() }).parse({ email: 'nope' })
+    })
+    app.get('/boom/db-down', () => {
+      const err = new Error('timeout exceeded when trying to connect')
+      markPoolConnectError(err)
+      throw err
+    })
+    app.get('/boom/other-network', () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9'), { code: 'ECONNREFUSED' })
+    })
+    app.get('/boom/statement-timeout', () => {
+      throw Object.assign(new Error('canceling statement due to statement timeout'), {
+        code: '57014'
+      })
     })
     app.get('/boom/plain', () => {
       throw new Error('secret internal detail')
@@ -108,6 +122,28 @@ describe('error handling', () => {
     expect(res.text).not.toContain('stack')
     expect(res.text).not.toContain('.ts:')
     expectSchema(res.body, 'ErrorResponse')
+  })
+
+  it('maps a database connection failure to 503 db_unavailable', async () => {
+    const res = await http(errors.app).get('/boom/db-down').set('X-Request-Id', 'req-db')
+    expect(res.status).toBe(503)
+    expect(res.body).toEqual({
+      error: { code: 'db_unavailable', message: 'The database is not reachable.' },
+      requestId: 'req-db'
+    })
+    expectSchema(res.body, 'ErrorResponse')
+  })
+
+  it('keeps a non-database network error as 500 internal_error', async () => {
+    const res = await http(errors.app).get('/boom/other-network')
+    expect(res.status).toBe(500)
+    expect((res.body as ErrorBody).error.code).toBe('internal_error')
+  })
+
+  it('keeps a statement timeout as 500 internal_error', async () => {
+    const res = await http(errors.app).get('/boom/statement-timeout')
+    expect(res.status).toBe(500)
+    expect((res.body as ErrorBody).error.code).toBe('internal_error')
   })
 
   it('returns 400 malformed_json for a broken JSON body', async () => {

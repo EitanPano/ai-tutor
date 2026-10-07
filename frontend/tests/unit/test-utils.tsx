@@ -16,7 +16,11 @@ export const errorResponse = (
 ) =>
   jsonResponse(status, { error: { code, message, ...(details && { details }) }, requestId: 'r1' })
 
-export function renderWithQuery(ui: ReactElement) {
+export function renderWithQuery(ui: ReactElement, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+  seed?.(client)
+  return {
+    ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>),
+    client
+  }
 }

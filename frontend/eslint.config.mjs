@@ -14,5 +14,21 @@ export default defineConfig([
     'playwright-report/**',
     'test-results/**'
   ]),
+  {
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@anthropic-ai/sdk', '@anthropic-ai/sdk/*'],
+              message:
+                'The Anthropic SDK is server-side only: call it from backend/, never from frontend/ (AC12).'
+            }
+          ]
+        }
+      ]
+    }
+  },
   prettier
 ])

@@ -1,5 +1,5 @@
 import { createApp } from './app.js'
-import { loadConfig } from './lib/config.js'
+import { configWarning, loadConfig } from './lib/config.js'
 import { createDb } from './lib/db/index.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import { createLogger } from './lib/logger.js'
@@ -8,18 +8,24 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const config = loadConfig()
 const logger = createLogger(config)
+const warning = configWarning(config)
+if (warning) logger.warn(warning)
 const { db, pool } = createDb(config.databaseUrl, logger)
 const inFlight = new InFlightRegistry()
 const { app, modules } = createApp({ config, db, pool, logger, inFlight })
 
-// A single instance runs, so a turn left in flight by a crash is recovered once at boot.
+// A single instance runs, so every turn and lock left by a previous run (a crash, a hard kill on
+// Windows) is dead. Recover them all before listening so the sweep cannot race a new request. A
+// database hiccup here must not keep the API down, so a failure is logged and boot continues.
 if (config.recoverStaleOnBoot) {
-  modules
-    .recoverStale()
-    .then((count) => {
-      if (count > 0) logger.warn({ count }, 'recovered turns left in flight by a previous run')
-    })
-    .catch((err: unknown) => logger.error({ err }, 'recovering stale turns failed'))
+  try {
+    const { turns, locks } = await modules.recoverAtBoot()
+    if (turns > 0 || locks > 0) {
+      logger.warn({ turns, locks }, 'recovered turns and locks left by a previous run')
+    }
+  } catch (err: unknown) {
+    logger.error({ err }, 'boot recovery failed')
+  }
 }
 
 const server = app.listen(config.port, config.host, () => {

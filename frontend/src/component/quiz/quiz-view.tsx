@@ -8,10 +8,12 @@ import { toast } from 'sonner'
 import { Markdown } from '@/component/markdown/markdown'
 import { Button } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
+import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { getQuiz, quizKey, submitAttempt, type Quiz, type QuizItem } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
 import { BackIcon, ProgressIcon } from '@/lib/icon'
 import { difficultyLabel, shortDate } from '@/lib/quiz'
+import { usePageTitle } from '@/lib/page-title'
 import { useTopics } from '@/lib/topic'
 import { QuizMissing, QuizSkeleton } from './quiz-state'
 import { describeQuizError } from './quiz-error'
@@ -59,6 +61,7 @@ const ItemField = memo(function ItemField({ item, value, onSelect }: ItemFieldPr
 function Header({ quiz }: { quiz: Quiz }) {
   const topics = useTopics()
   const topic = topics.data?.find((t) => t.id === quiz.topicId)
+  usePageTitle(`${difficultyLabel(quiz.difficulty)} quiz${topic ? ` on ${topic.name}` : ''}`)
   return (
     <header className="flex flex-col gap-4">
       {quiz.threadId ? (
@@ -150,9 +153,12 @@ function Taker({ quiz }: { quiz: Quiz }) {
     if (submit.isError) submitButton.current?.focus()
   }, [submit.isError])
 
+  // A success stays busy too: router.push only starts the navigation, the old page lingers.
+  const submitting = submit.isPending || submit.isSuccess
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (ready && !submit.isPending) submit.mutate()
+    if (ready && !submitting) submit.mutate()
   }
 
   return (
@@ -184,11 +190,11 @@ function Taker({ quiz }: { quiz: Quiz }) {
           <Button
             ref={submitButton}
             type="submit"
-            loading={submit.isPending}
+            loading={submitting}
             disabled={!ready}
             aria-describedby="quiz-progress"
           >
-            {submit.isPending ? 'Grading…' : 'Submit answers'}
+            {submitting ? 'Grading…' : 'Submit answers'}
           </Button>
         </Sheet>
       </div>
@@ -200,6 +206,7 @@ export function QuizView({ quizId }: { quizId: string }) {
   const query = useQuery({
     queryKey: quizKey.detail(quizId),
     queryFn: ({ signal }) => getQuiz(quizId, signal),
+    staleTime: SEEDED_STALE_MS,
     select: (response) => response.quiz
   })
 

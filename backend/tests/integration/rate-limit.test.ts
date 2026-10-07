@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
-import { createClient, signUp } from '../helper/client.js'
+import { createClient, signUp, signUpBody } from '../helper/client.js'
 import { expectContract } from '../helper/contract.js'
 
 const ctx = createTestApp()
@@ -54,8 +54,100 @@ describe('login rate limit (AC11)', () => {
     const { body } = await signUp(client)
     await wrong(body.email)
     const rows = await ctx.db.selectFrom('rate_limit').select('key').execute()
-    expect(rows).toHaveLength(1)
-    expect(rows[0]?.key).toMatch(/^login:/)
-    expect(rows[0]?.key).not.toContain(body.email)
+    // One counter per limiter: the sign-up, ip + email, and ip alone.
+    const keys = rows.map((row) => row.key)
+    expect(keys).toHaveLength(3)
+    expect(keys.filter((key) => key.startsWith('login:'))).toHaveLength(1)
+    expect(keys.filter((key) => key.startsWith('login-ip:'))).toHaveLength(1)
+    for (const key of keys) expect(key).not.toContain(body.email)
+  })
+})
+
+describe('per-IP limits', () => {
+  const small = createTestApp({ config: { signupRateLimit: 2, loginIpRateLimit: 3 } })
+  const smallClient = createClient(small.app, small.config)
+
+  beforeEach(() => truncateAll(small.db))
+  afterAll(() => small.close())
+
+  it('answers 429 rate_limited with Retry-After on the sign-up after the limit, and creates no user', async () => {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      expect((await smallClient.post('/api/user').send(signUpBody())).status).toBe(201)
+    }
+    const res = await smallClient.post('/api/user').send(signUpBody())
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('rate_limited')
+    const retryAfter = Number(res.headers['retry-after'])
+    expect(retryAfter).toBeGreaterThanOrEqual(1)
+    expect(retryAfter).toBeLessThanOrEqual(3600)
+    expectContract(res, 'post', '/api/user')
+    const users = await small.db.selectFrom('app_user').select('id').execute()
+    expect(users).toHaveLength(2)
+  })
+
+  it('counts a sign-up with an invalid body, because the limiter runs before validation', async () => {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await smallClient.post('/api/user').send(signUpBody())
+    }
+    const res = await smallClient.post('/api/user').send({ email: 'not-an-email' })
+    expect(res.status).toBe(429)
+  })
+
+  it('limits login attempts with different emails from one IP', async () => {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const res = await smallClient
+        .post('/api/session')
+        .send({ email: `nobody${attempt}@example.com`, password: 'wrong-pass' })
+      expect(res.status).toBe(401)
+    }
+    const res = await smallClient
+      .post('/api/session')
+      .send({ email: 'nobody4@example.com', password: 'wrong-pass' })
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('rate_limited')
+    expect(Number(res.headers['retry-after'])).toBeGreaterThanOrEqual(1)
+    expectContract(res, 'post', '/api/session')
+  })
+
+  it('stores the per-IP counters under their own key prefixes', async () => {
+    await smallClient.post('/api/user').send(signUpBody())
+    await smallClient
+      .post('/api/session')
+      .send({ email: 'nobody@example.com', password: 'wrong-pass' })
+    const keys = (await small.db.selectFrom('rate_limit').select('key').execute()).map((r) => r.key)
+    expect(keys.some((key) => key.startsWith('signup:'))).toBe(true)
+    expect(keys.some((key) => key.startsWith('login-ip:'))).toBe(true)
+    expect(keys.some((key) => key.startsWith('login:'))).toBe(true)
+  })
+})
+
+describe('trust proxy', () => {
+  const signupFrom = (client: ReturnType<typeof createClient>, forwardedFor: string) =>
+    client.post('/api/user').set('X-Forwarded-For', forwardedFor).send(signUpBody())
+
+  describe('with TRUST_PROXY=1', () => {
+    const trusting = createTestApp({ config: { signupRateLimit: 1, trustProxy: 1 } })
+    const trustingClient = createClient(trusting.app, trusting.config)
+    beforeEach(() => truncateAll(trusting.db))
+    afterAll(() => trusting.close())
+
+    it('counts different X-Forwarded-For addresses in different buckets', async () => {
+      expect((await signupFrom(trustingClient, '198.51.100.1')).status).toBe(201)
+      expect((await signupFrom(trustingClient, '198.51.100.2')).status).toBe(201)
+      expect((await signupFrom(trustingClient, '198.51.100.1')).status).toBe(429)
+    })
+  })
+
+  describe('with the default TRUST_PROXY=0', () => {
+    const plain = createTestApp({ config: { signupRateLimit: 1 } })
+    const plainClient = createClient(plain.app, plain.config)
+    beforeEach(() => truncateAll(plain.db))
+    afterAll(() => plain.close())
+
+    it('ignores X-Forwarded-For, so a spoofed header shares the socket address bucket', async () => {
+      expect(plain.config.trustProxy).toBe(0)
+      expect((await signupFrom(plainClient, '198.51.100.1')).status).toBe(201)
+      expect((await signupFrom(plainClient, '198.51.100.2')).status).toBe(429)
+    })
   })
 })

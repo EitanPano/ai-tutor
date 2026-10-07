@@ -7,9 +7,11 @@ import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button, buttonClass } from '@/component/ui/button'
 import { EmptyState } from '@/component/ui/empty-state'
 import { Sheet } from '@/component/ui/sheet'
+import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getGuide, guideKey, type Guide } from '@/lib/api/guide'
 import { BackIcon, GuideIcon, QuizIcon, RetryIcon } from '@/lib/icon'
+import { usePageTitle } from '@/lib/page-title'
 import { ProgressBar } from './progress-bar'
 import { StepList } from './step-list'
 import { StepPanel } from './step-panel'
@@ -17,7 +19,7 @@ import { useStepUpdate } from './use-step-update'
 
 const COMPLETE = 'complete'
 
-function Skeleton() {
+export function GuideSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading guide" className="flex flex-col gap-5">
       <div className="h-9 w-2/3 animate-pulse rounded-sm bg-rule" />
@@ -158,10 +160,13 @@ export function GuideViewer({ guideId }: { guideId: string }) {
   const query = useQuery({
     queryKey: guideKey.detail(guideId),
     queryFn: ({ signal }) => getGuide(guideId, signal),
+    staleTime: SEEDED_STALE_MS,
     select: (response) => response.guide
   })
 
-  if (query.isPending) return <Skeleton />
+  usePageTitle(query.data?.title)
+
+  if (query.isPending) return <GuideSkeleton />
 
   if (!query.data) {
     const missing = isApiError(query.error) && query.error.code === 'not_found'

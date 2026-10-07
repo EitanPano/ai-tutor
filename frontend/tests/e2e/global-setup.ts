@@ -5,7 +5,7 @@ import { E2E_BACKEND_ENV } from './e2e-env'
 const repoRoot = path.resolve(import.meta.dirname, '../../..')
 
 /**
- * Creates the `ai_tutor_e2e` database when missing, then drops and re-migrates it so every run
+ * Creates the per-checkout e2e database when missing, then drops and re-migrates it so every run
  * starts clean. Playwright may start the web servers before or after this runs; that is safe
  * because the backend never queries at boot and the servers are awaited on `/health`.
  */

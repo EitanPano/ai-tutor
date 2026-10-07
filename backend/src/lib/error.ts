@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express'
 import { ZodError } from 'zod'
+import { isDbUnavailableError } from './db/unavailable.js'
 
 type Details = Record<string, unknown>
 
@@ -97,6 +98,11 @@ export const errorMiddleware: ErrorRequestHandler = (err: unknown, req, res, nex
     } else {
       send(status, 'bad_request', 'The request could not be processed.')
     }
+    return
+  }
+  if (isDbUnavailableError(err)) {
+    req.log.error({ err, requestId }, 'database unavailable')
+    send(503, 'db_unavailable', 'The database is not reachable.')
     return
   }
   req.log.error({ err, requestId }, 'unhandled error')

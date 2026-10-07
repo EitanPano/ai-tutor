@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Conversation } from '@/component/thread/conversation'
 import type { AskHandlers, AskResult } from '@/lib/api/ask'
 import { ApiError } from '@/lib/api/error'
-import type { Message, Thread } from '@/lib/api/thread'
+import { threadKey, type Message, type Thread } from '@/lib/api/thread'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({
@@ -56,11 +56,13 @@ function serve(t: Thread, messages: Message[]) {
 function controlledAsk() {
   let handlers!: AskHandlers
   let finish!: (result: AskResult) => void
+  let fail!: (err: unknown) => void
   api.askQuestion.mockImplementation(
     (_id: string, _question: string, h: AskHandlers) =>
-      new Promise((resolve) => {
+      new Promise((resolve, reject) => {
         handlers = h
         finish = resolve
+        fail = reject
         h.signal?.addEventListener('abort', () => resolve('stopped'))
       })
   )
@@ -70,6 +72,8 @@ function controlledAsk() {
         handlers.onStart?.({ threadId: THREAD_ID, userMessageId: 'u2', assistantMessageId: 'a2' })
       ),
     delta: (text: string) => act(() => handlers.onDelta?.(text)),
+    /** Lets one animation frame pass, which is when buffered delta text reaches the screen. */
+    frame: () => act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))),
     complete: () =>
       act(async () => {
         handlers.onComplete?.({
@@ -80,6 +84,8 @@ function controlledAsk() {
         })
         finish('completed')
       }),
+    /** Ends the stream with an error, as a dropped connection or a provider failure would. */
+    fail: (err: unknown) => act(async () => fail(err)),
     signal: () => handlers.signal
   }
 }
@@ -95,9 +101,16 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   sessionStorage.clear()
 })
+
+/** Moves the clock past the grace period in which Stop ignores a click right after Ask. */
+function pastStopGrace() {
+  const realNow = Date.now.bind(Date)
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 1000)
+}
 
 async function open() {
   renderWithQuery(<Conversation threadId={THREAD_ID} />)
@@ -121,6 +134,7 @@ describe('Conversation', () => {
     await ask.start()
     await ask.delta('Strict Mode ')
     await ask.delta('mounts twice.')
+    await ask.frame()
 
     expect(screen.queryByText('Thinking…')).not.toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
@@ -150,6 +164,51 @@ describe('Conversation', () => {
     expect(screen.getAllByRole('article', { name: 'Your question' })).toHaveLength(1)
   })
 
+  it('shows deltas that arrive within one frame together, never one by one', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+
+    await ask.delta('Strict ')
+    await ask.delta('Mode ')
+    await ask.delta('mounts twice.')
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).not.toHaveTextContent('Strict')
+    expect(screen.getByText('Thinking…')).toBeInTheDocument()
+
+    await ask.frame()
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Strict Mode mounts twice.'
+    )
+
+    await ask.delta(' More.')
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).not.toHaveTextContent('More.')
+    await ask.frame()
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Strict Mode mounts twice. More.'
+    )
+  })
+
+  it('keeps text delivered right before complete, without a frame in between', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Before ')
+    await ask.frame()
+    await ask.delta('the end.')
+
+    // The saved thread has not arrived yet, so the streamed text is what is on screen.
+    api.getThread.mockImplementation(() => new Promise(() => undefined))
+    await ask.complete()
+
+    const answer = screen.getByRole('article', { name: 'Tutor answer' })
+    expect(answer).toHaveTextContent('Before the end.')
+    expect(answer.textContent).not.toContain('the end.the end.')
+  })
+
   it('aborts the request when Stop is pressed', async () => {
     sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
     const ask = controlledAsk()
@@ -157,6 +216,8 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Partial')
+    await ask.frame()
+    pastStopGrace()
 
     serve(thread({ messageCount: 2 }), [
       message({ id: 'u2', role: 'user', content: 'Why?' }),
@@ -173,6 +234,96 @@ describe('Conversation', () => {
     expect(ask.signal()?.aborted).toBe(true)
     expect(await screen.findByText('Stopped before the answer finished.')).toBeInTheDocument()
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('keeps text still buffered when Stop is pressed, until the saved thread loads', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    // No frame: the delta is still in the buffer when Stop arrives.
+    await ask.delta('Not yet painted')
+    pastStopGrace()
+
+    api.getThread.mockImplementation(() => new Promise(() => undefined))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(ask.signal()?.aborted).toBe(true)
+    expect(await screen.findByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Not yet painted'
+    )
+  })
+
+  it('keeps text still buffered when the stream fails, until the failed turn replaces it', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Half an ans')
+
+    let loaded!: (value: Awaited<ReturnType<typeof api.getThread>>) => void
+    api.getThread.mockImplementation(
+      () => new Promise((resolve) => (loaded = resolve as typeof loaded))
+    )
+    await ask.fail(new ApiError({ status: 0, code: 'stream_interrupted', message: 'x' }))
+
+    // The saved thread has not arrived: the unpainted text is not lost.
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent('Half an ans')
+    expect(toast.error).toHaveBeenCalledWith(
+      'The answer stopped unexpectedly. Retry to ask again.',
+      expect.any(Object)
+    )
+
+    await act(async () =>
+      loaded({
+        thread: thread({ messageCount: 0 }),
+        messages: [
+          message({ id: 'u2', role: 'user', content: 'Why?', status: 'failed' }),
+          message({
+            id: 'a2',
+            role: 'assistant',
+            content: '',
+            status: 'failed',
+            stopReason: 'error'
+          })
+        ],
+        guides: [],
+        quizzes: []
+      })
+    )
+    expect(await screen.findByText('This answer failed.')).toBeInTheDocument()
+    expect(screen.queryByText(/Half an ans/)).toBeNull()
+  })
+
+  it('keeps the answer running when Ask is double-clicked', async () => {
+    const ask = controlledAsk()
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+    await typist.dblClick(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(api.askQuestion).toHaveBeenCalledTimes(1)
+    expect(ask.signal()?.aborted).toBe(false)
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('gives the question back to the composer when it is stopped before the server took it', async () => {
+    const ask = controlledAsk()
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+    await typist.click(screen.getByRole('button', { name: 'Ask' }))
+    pastStopGrace()
+    await typist.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(ask.signal()?.aborted).toBe(true)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Why?')
+    )
   })
 
   it('shows the cut-off note for an answer that hit the length limit', async () => {
@@ -297,15 +448,67 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Intro\n\n```ts\nconst a = 1\n```\n\n')
+    await ask.frame()
 
     const block = screen.getByRole('figure')
     const copy = within(block).getByRole('button', { name: 'Copy' })
     await userEvent.setup().type(screen.getByRole('textbox', { name: 'Your question' }), 'next one')
     await ask.delta('More text after the block')
+    await ask.frame()
 
     expect(screen.getByRole('figure')).toBe(block)
     expect(within(block).getByRole('button', { name: 'Copy' })).toBe(copy)
     expect(screen.getByText('More text after the block')).toBeInTheDocument()
+  })
+
+  describe('cache refreshes', () => {
+    const listCalls = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.filter(
+        ([filters]) =>
+          JSON.stringify((filters as { queryKey?: unknown } | undefined)?.queryKey) ===
+          JSON.stringify(threadKey.list)
+      ).length
+
+    it('leaves the thread list alone while a follow-up is asked, and refreshes it once afterwards', async () => {
+      serve(thread({ messageCount: 2 }), [
+        message({ id: 'u1', role: 'user', content: 'Earlier' }),
+        message({ id: 'a1', role: 'assistant', content: 'Earlier answer' })
+      ])
+      const ask = controlledAsk()
+      const { client } = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      await screen.findByText('Earlier answer')
+      const typist = userEvent.setup()
+      await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+      await typist.keyboard('{Control>}{Enter}{/Control}')
+      await ask.start()
+
+      expect(listCalls(invalidate)).toBe(0)
+      const detailLoads = api.getThread.mock.calls.length
+
+      serve(thread({ messageCount: 4 }), [
+        message({ id: 'u1', role: 'user', content: 'Earlier' }),
+        message({ id: 'a1', role: 'assistant', content: 'Earlier answer' }),
+        message({ id: 'u2', role: 'user', content: 'Why?' }),
+        message({ id: 'a2', role: 'assistant', content: 'Because.' })
+      ])
+      await ask.complete()
+
+      expect(await screen.findByText('Because.')).toBeInTheDocument()
+      expect(api.getThread.mock.calls.length).toBeGreaterThan(detailLoads)
+      await waitFor(() => expect(listCalls(invalidate)).toBe(1))
+    })
+
+    it('refreshes the thread list as soon as the first question is saved', async () => {
+      sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+      const ask = controlledAsk()
+      const { client } = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      await screen.findByText('Thinking…')
+      await ask.start()
+
+      expect(listCalls(invalidate)).toBe(1)
+    })
   })
 
   it('blocks a second submit while an answer is in flight', async () => {
@@ -362,7 +565,9 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Partial')
+    await ask.frame()
 
+    pastStopGrace()
     serve(thread({ messageCount: 2 }), [asked, placeholder])
     await userEvent.setup().click(screen.getByRole('button', { name: 'Stop' }))
     // The first look after Stop still finds the empty placeholder; a later one finds the answer.
@@ -518,5 +723,13 @@ describe('Conversation', () => {
     options.action.onClick()
 
     expect(api.askQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('titles the page after the thread once it loads', async () => {
+    serve(thread({ title: 'Why does my effect run twice?' }), [])
+
+    await open()
+
+    await waitFor(() => expect(document.title).toBe('Why does my effect run twice? | AI Tutor'))
   })
 })

@@ -673,6 +673,8 @@ export interface components {
   }
   requestBodies: never
   headers: {
+    /** @description Seconds to wait before retrying */
+    RetryAfter: number
     /** @description Session cookie `sid` (HttpOnly). Cleared with an expired cookie on logout. */
     SetCookie: string
   }
@@ -772,6 +774,16 @@ export interface operations {
         }
       }
       413: components['responses']['PayloadTooLarge']
+      /** @description Too many sign-ups from this address (`rate_limited`) */
+      429: {
+        headers: {
+          'Retry-After': components['headers']['RetryAfter']
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
       500: components['responses']['InternalError']
     }
   }
@@ -800,6 +812,15 @@ export interface operations {
       400: components['responses']['ValidationFailed']
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
+      /** @description The time zone changed less than 24 hours ago (`time_zone_recently_changed`); `error.details.nextChangeAt` is an RFC 3339 `date-time` string */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
       413: components['responses']['PayloadTooLarge']
       500: components['responses']['InternalError']
     }
@@ -861,9 +882,10 @@ export interface operations {
       }
       403: components['responses']['ForbiddenOrigin']
       413: components['responses']['PayloadTooLarge']
-      /** @description Too many login attempts (`rate_limited`) */
+      /** @description Too many login attempts from this address or for this email (`rate_limited`) */
       429: {
         headers: {
+          'Retry-After': components['headers']['RetryAfter']
           [name: string]: unknown
         }
         content: {

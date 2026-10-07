@@ -133,6 +133,8 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 describe('streak', () => {
   it('celebrates a streak that is active today', async () => {
     setup()
@@ -417,6 +419,61 @@ describe('profile', () => {
     await waitFor(() => expect(select).toHaveAccessibleDescription(/Unknown time zone/))
     expect(select).toHaveAccessibleDescription(/Your streak counts days/)
     expect(select).toBeInvalid()
+  })
+
+  it('shows the once-a-day limit at the time zone field', async () => {
+    api.updateUser.mockRejectedValue(
+      new ApiError({
+        status: 409,
+        code: 'time_zone_recently_changed',
+        message: 'server wording',
+        details: { nextChangeAt: '2026-10-08T10:00:00.000Z' }
+      })
+    )
+    const { typist } = setup()
+
+    await nameField()
+    await typist.selectOptions(screen.getByLabelText('Time zone'), 'Asia/Tokyo')
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    const select = screen.getByLabelText('Time zone')
+    await waitFor(() =>
+      expect(select).toHaveAccessibleDescription(/You can change your time zone once a day/)
+    )
+    expect(select).toBeInvalid()
+    // Next to the field, not duplicated in the form-level alert.
+    expect(screen.queryByRole('alert')).toBeNull()
+    // When the next change is allowed, in the viewer's locale and time.
+    const when = new Date('2026-10-08T10:00:00.000Z').toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    })
+    expect(select).toHaveAccessibleDescription(new RegExp(`Try again after ${escapeRegExp(when)}`))
+  })
+
+  it('falls back to the fixed sentence when the limit has no usable nextChangeAt', async () => {
+    api.updateUser.mockRejectedValue(
+      new ApiError({ status: 409, code: 'time_zone_recently_changed', message: 'server wording' })
+    )
+    const { typist } = setup()
+
+    await nameField()
+    await typist.selectOptions(screen.getByLabelText('Time zone'), 'Asia/Tokyo')
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Time zone')).toHaveAccessibleDescription(
+        /You can change your time zone once a day\. Try again later\./
+      )
+    )
+  })
+
+  it('tells users up front that the time zone can change once a day', async () => {
+    setup()
+    await nameField()
+    expect(screen.getByLabelText('Time zone')).toHaveAccessibleDescription(
+      /You can change it once a day/
+    )
   })
 
   it('sends a changed time zone alone', async () => {
