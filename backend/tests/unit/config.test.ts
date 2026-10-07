@@ -13,9 +13,10 @@ describe('loadConfig', () => {
       logLevel: 'info',
       aiProvider: 'fake',
       aiModel: 'claude-haiku-4-5',
-      aiDailyTokenBudget: 50000,
+      aiDailyTokenBudget: 1_000_000,
       aiEnabled: true,
-      aiFakeDelayMs: 20
+      aiFakeDelayMs: 20,
+      recoverStaleOnBoot: true
     })
     expect(config.anthropicApiKey).toBeUndefined()
   })
@@ -62,6 +63,28 @@ describe('loadConfig', () => {
   it('parses AI_FAKE_DELAY_MS and rejects a negative value', () => {
     expect(loadConfig({ AI_FAKE_DELAY_MS: '0' }).aiFakeDelayMs).toBe(0)
     expect(() => loadConfig({ AI_FAKE_DELAY_MS: '-1' })).toThrow(/AI_FAKE_DELAY_MS/)
+  })
+
+  it('defaults the daily budget to 1,000,000 for the free fake provider', () => {
+    expect(loadConfig({ AI_PROVIDER: 'fake' }).aiDailyTokenBudget).toBe(1_000_000)
+  })
+
+  it('defaults the daily budget to 50,000 for the anthropic provider', () => {
+    expect(
+      loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }).aiDailyTokenBudget
+    ).toBe(50_000)
+  })
+
+  it('lets AI_DAILY_TOKEN_BUDGET override the default for either provider', () => {
+    expect(loadConfig({ AI_DAILY_TOKEN_BUDGET: '1234' }).aiDailyTokenBudget).toBe(1234)
+    expect(
+      loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k', AI_DAILY_TOKEN_BUDGET: '99' })
+        .aiDailyTokenBudget
+    ).toBe(99)
+  })
+
+  it('parses RECOVER_STALE_ON_BOOT=false to false', () => {
+    expect(loadConfig({ RECOVER_STALE_ON_BOOT: 'false' }).recoverStaleOnBoot).toBe(false)
   })
 
   it('parses AI_ENABLED=false to false', () => {

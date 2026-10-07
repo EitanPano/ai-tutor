@@ -3,8 +3,10 @@ import { z } from 'zod'
 import { text } from '../lib/validation.js'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
+import type { InFlightRegistry } from '../lib/in-flight.js'
 import type { Logger } from '../lib/logger.js'
 import { TutorProviderError, type TutorProvider } from '../lib/tutor/tutor.js'
+import { assertAiEnabled } from '../service/ai-guard.js'
 import { finishAsk, startAsk, type AskOutcome } from '../service/ask.service.js'
 import { getAuth } from './middleware/get-auth.js'
 import { pathId } from './middleware/path-id.js'
@@ -41,11 +43,14 @@ export function messageRouter(
   db: Db,
   config: Config,
   tutor: TutorProvider,
-  logger: Pick<Logger, 'error'>
+  logger: Pick<Logger, 'error'>,
+  inFlight: InFlightRegistry
 ): Router {
   const router = Router()
 
   router.post('/api/thread/:id/message', requireSession(db, config), async (req, res) => {
+    // The AI switch is the first check, before the body is looked at (same order as the quiz).
+    assertAiEnabled(config)
     const auth = getAuth(req)
     const { content } = askSchema.parse(req.body)
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
@@ -57,6 +62,9 @@ export function messageRouter(
       out.event('error', { error: { code, message }, requestId })
     const startedAt = Date.now()
     let heartbeat: NodeJS.Timeout | undefined
+    // Shutdown aborts this controller; the normal path below then persists `aborted` and releases
+    // the lock through `finishAsk`. Nothing else may persist or release.
+    const untrack = inFlight.track(controller)
     let outcome: AskOutcome
 
     // From here on the generation lock is held: every path, including a synchronous throw while
@@ -127,6 +135,7 @@ export function messageRouter(
       logger.error({ err, requestId, threadId: ctx.threadId }, 'persisting the answer failed')
       errorEvent('internal_error', INTERNAL_MESSAGE)
     } finally {
+      untrack()
       clearInterval(heartbeat)
       if (!res.writableEnded) res.end()
     }

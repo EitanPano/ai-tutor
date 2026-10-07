@@ -23,6 +23,9 @@ import {
 
 export const MAX_OUTPUT_TOKENS = 2048
 export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
+/** Per-attempt request timeout and default SDK retries; the generation lock TTL must outlast them. */
+export const PROVIDER_TIMEOUT_MS = 60_000
+export const PROVIDER_MAX_RETRIES = 2
 const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
 
 /** The final user turn of a quiz request. */
@@ -85,8 +88,8 @@ function refusalCategoryOf(message: object): string | null {
 export function createAnthropicProvider(options: AnthropicProviderOptions): TutorProvider {
   const client = new Anthropic({
     apiKey: options.apiKey,
-    maxRetries: options.maxRetries ?? 2,
-    timeout: 60_000,
+    maxRetries: options.maxRetries ?? PROVIDER_MAX_RETRIES,
+    timeout: PROVIDER_TIMEOUT_MS,
     ...(options.fetch ? { fetch: options.fetch } : {})
   })
   const model = options.model

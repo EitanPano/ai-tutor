@@ -4,6 +4,7 @@ import { stopServer } from './client.js'
 import { createApp } from '../../src/app.js'
 import { loadConfig, type Config } from '../../src/lib/config.js'
 import { createDb, type Db } from '../../src/lib/db/index.js'
+import { InFlightRegistry } from '../../src/lib/in-flight.js'
 import { createLogger } from '../../src/lib/logger.js'
 import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 
@@ -13,6 +14,8 @@ export type TestApp = {
   db: Db
   /** The fake tutor wired into the app; `tutor.calls` records every explain input. */
   tutor: FakeTutorProvider
+  /** The registry of running generations. `abortAll()` closes it for good: use a private app. */
+  inFlight: InFlightRegistry
   close: () => Promise<void>
 }
 
@@ -28,12 +31,14 @@ export function createTestApp(
   const tutor = new FakeTutorProvider({ delayMs: 0, record: true })
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
+  const inFlight = new InFlightRegistry()
   const app = createApp({
     config,
     db,
     pool,
     logger: createLogger(config),
     tutor,
+    inFlight,
     ...(overrides.extraRoutes ? { extraRoutes: overrides.extraRoutes } : {})
   })
   return {
@@ -41,6 +46,7 @@ export function createTestApp(
     config,
     db,
     tutor,
+    inFlight,
     close: async () => {
       await stopServer(app)
       await db.destroy()

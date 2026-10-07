@@ -3,18 +3,26 @@ import type { Db } from '../lib/db/index.js'
 import { conflict } from '../lib/error.js'
 import type { Auth } from './ownership.js'
 
+/**
+ * How long a generation lock (and an in-flight assistant placeholder) is trusted before it counts
+ * as abandoned. It must exceed the worst-case generation: a provider call may take 60 s per SDK
+ * attempt (3 attempts: 1 + 2 retries) and guide/quiz generation makes up to 2 such calls
+ * (`MAX_ATTEMPTS`), so about 6 minutes. Ten minutes leaves headroom; a unit test ties the numbers.
+ */
+export const GENERATION_LOCK_TTL_SECONDS = 600
+
 /** Identifies one acquisition: the exact `generation_started_at` it wrote, as microsecond text. */
 export type GenerationLockToken = string
 
 /**
- * Per-user generation lock, shared by explain, guide and quiz generation. A lock older than five
- * minutes is stale (the holder crashed) and is taken over. Returns the token to release with.
+ * Per-user generation lock, shared by explain, guide and quiz generation. A lock older than the
+ * TTL is stale (the holder crashed) and is taken over. Returns the token to release with.
  */
 export async function acquireGenerationLock(db: Db, auth: Auth): Promise<GenerationLockToken> {
   const { rows } = await sql<{ token: string }>`
     UPDATE app_user SET generation_started_at = now()
     WHERE id = ${auth.userId}
-      AND (generation_started_at IS NULL OR generation_started_at < now() - interval '5 minutes')
+      AND (generation_started_at IS NULL OR generation_started_at < now() - make_interval(secs => ${GENERATION_LOCK_TTL_SECONDS}))
     RETURNING generation_started_at::text AS token`.execute(db)
   const token = rows[0]?.token
   if (token === undefined) {
@@ -28,7 +36,7 @@ export async function acquireGenerationLock(db: Db, auth: Auth): Promise<Generat
 
 /**
  * Releases the lock only while `token` still owns it, so a late release from a generation whose
- * lock was taken over after 5 minutes cannot free the new holder's lock.
+ * lock was taken over after the TTL cannot free the new holder's lock.
  */
 export async function releaseGenerationLock(
   db: Db,

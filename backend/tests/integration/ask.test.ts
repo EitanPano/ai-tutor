@@ -5,6 +5,7 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
 import { parseSse, type SseEvent } from '../helper/sse.js'
+import { recoverStaleTurn } from '../../src/service/stale-turn.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
@@ -113,8 +114,8 @@ async function insertSpend(userId: string, inputToken: number, outputToken: numb
 }
 
 /** Opens a real SSE request with `[fake:slow]` and returns once the first delta has arrived. */
-async function openSlowStream(cookie: string, threadId: string, userId: string) {
-  const server = ctx.app.listen(0)
+async function openSlowStream(cookie: string, threadId: string, userId: string, app = ctx.app) {
+  const server = app.listen(0)
   const { port } = server.address() as AddressInfo
   const controller = new AbortController()
   const res = await fetch(`http://127.0.0.1:${port}/api/thread/${threadId}/message`, {
@@ -222,9 +223,32 @@ describe('POST /api/thread/:id/message streaming (AC04)', () => {
     const { session, threadId } = await setup()
     const long = 'a'.repeat(100)
     await ask(session.cookie, threadId, `  ${long}\nsecond line`)
-    expect((await detail(session.cookie, threadId)).thread.title).toBe('a'.repeat(80))
+    expect((await detail(session.cookie, threadId)).thread.title).toBe(`${'a'.repeat(79)}…`)
     await ask(session.cookie, threadId, 'a different question')
-    expect((await detail(session.cookie, threadId)).thread.title).toBe('a'.repeat(80))
+    expect((await detail(session.cookie, threadId)).thread.title).toBe(`${'a'.repeat(79)}…`)
+  })
+
+  it('cuts a long title at a word boundary and adds an ellipsis', async () => {
+    const { session, threadId } = await setup()
+    const words = Array.from({ length: 30 }, (_, index) => `word${index}`).join('   ')
+    await ask(session.cookie, threadId, words)
+    const { title } = (await detail(session.cookie, threadId)).thread
+    expect(title.length).toBeLessThanOrEqual(80)
+    expect(title.endsWith('…')).toBe(true)
+    expect(title).toMatch(/word\d+…$/)
+    expect(title).not.toMatch(/ {2}/)
+  })
+
+  it('skips a leading code fence and blank lines when titling the thread', async () => {
+    const { session, threadId } = await setup()
+    await ask(session.cookie, threadId, '\n```ts\nconst x = 1\n```\nwhy is x a number?')
+    expect((await detail(session.cookie, threadId)).thread.title).toBe('const x = 1')
+  })
+
+  it('falls back to the default title when the question has only fences', async () => {
+    const { session, threadId } = await setup()
+    await ask(session.cookie, threadId, '```\n```')
+    expect((await detail(session.cookie, threadId)).thread.title).toBe('New thread')
   })
 
   it('keeps a title the user already chose and bumps updated_at', async () => {
@@ -344,9 +368,9 @@ describe('limits and locks (AC09)', () => {
     expect((await detail(session.cookie, threadId)).messages).toHaveLength(0)
   })
 
-  it('takes over a stale lock older than 5 minutes', async () => {
+  it('takes over a stale lock older than the TTL', async () => {
     const { session, threadId } = await setup()
-    await sql`UPDATE app_user SET generation_started_at = now() - interval '6 minutes'`.execute(
+    await sql`UPDATE app_user SET generation_started_at = now() - interval '11 minutes'`.execute(
       ctx.db
     )
     const { res } = await ask(session.cookie, threadId, 'hello')
@@ -632,5 +656,140 @@ describe('validation and gates (AC11)', () => {
     expect(unknown.res.status).toBe(404)
     expect(await lockOf(b.user.id)).toBeNull()
     expect((await detail(a.cookie, thread.id)).messages).toHaveLength(0)
+  })
+})
+
+describe('AI switch order', () => {
+  it('answers 503 ai_unavailable, not 400, for an invalid body when AI_ENABLED=false', async () => {
+    const off = createTestApp({ config: { aiEnabled: false } })
+    try {
+      const offClient = createClient(off.app, off.config)
+      const { cookie } = await signUp(offClient)
+      const thread = (await offClient.post('/api/thread').set('Cookie', cookie).send({})).body as {
+        thread: ThreadBody
+      }
+      const res = await offClient
+        .post(`/api/thread/${thread.thread.id}/message`)
+        .set('Cookie', cookie)
+        .send({ content: 42 })
+      expect(res.status).toBe(503)
+      expectContract(res, 'post', '/api/thread/{id}/message')
+      expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+    } finally {
+      await off.close()
+    }
+  })
+})
+
+describe('recovery of turns left in flight (I2)', () => {
+  /** A crashed generation: user message plus an `incomplete` placeholder with no stop reason. */
+  async function insertOrphanTurn(userId: string, threadId: string, ageMinutes: number) {
+    const created = new Date(Date.now() - ageMinutes * 60 * 1000)
+    await ctx.db
+      .insertInto('message')
+      .values({
+        thread_id: threadId,
+        user_id: userId,
+        role: 'user',
+        content: 'orphaned question',
+        status: 'complete',
+        stop_reason: null,
+        created_at: created
+      })
+      .execute()
+    await ctx.db
+      .insertInto('message')
+      .values({
+        thread_id: threadId,
+        user_id: userId,
+        role: 'assistant',
+        content: '',
+        status: 'incomplete',
+        stop_reason: null,
+        created_at: created
+      })
+      .execute()
+    await sql`UPDATE app_user SET generation_started_at = ${created} WHERE id = ${userId}`.execute(
+      ctx.db
+    )
+  }
+
+  it('marks a placeholder older than the lock TTL failed with its question on the next ask', async () => {
+    const { session, threadId } = await setup()
+    await insertOrphanTurn(session.user.id, threadId, 11)
+    const { res } = await ask(session.cookie, threadId, 'a fresh question')
+    expect(res.status).toBe(200)
+    const { messages, thread } = await detail(session.cookie, threadId)
+    expect(messages.map((m) => [m.role, m.status, m.stopReason])).toEqual([
+      ['user', 'failed', null],
+      ['assistant', 'failed', 'error'],
+      ['user', 'complete', null],
+      ['assistant', 'complete', 'end_turn']
+    ])
+    expect(thread.messageCount).toBe(2)
+    expect(await lockOf(session.user.id)).toBeNull()
+  })
+
+  it('recovers it when the thread is read, and frees the thread from the cap', async () => {
+    const { session, threadId } = await setup()
+    await insertMessages(session.user.id, threadId, pairs(11, 'complete'))
+    await insertOrphanTurn(session.user.id, threadId, 11)
+    const { messages, thread } = await detail(session.cookie, threadId)
+    // The orphan is backdated, so it sorts first.
+    expect(messages.slice(0, 2).map((m) => [m.status, m.stopReason])).toEqual([
+      ['failed', null],
+      ['failed', 'error']
+    ])
+    expect(thread.messageCount).toBe(22)
+  })
+
+  it('leaves a placeholder younger than the lock TTL alone', async () => {
+    const { session, threadId } = await setup()
+    await insertOrphanTurn(session.user.id, threadId, 5)
+    const { messages } = await detail(session.cookie, threadId)
+    expect(messages.at(-1)).toMatchObject({ status: 'incomplete', stopReason: null })
+    const { res } = await ask(session.cookie, threadId, 'too soon')
+    expect(res.status).toBe(409)
+    expect((res.body as ErrorBody).error.code).toBe('generation_in_progress')
+  })
+
+  it('recovers only the requesting user turns, and the boot sweep recovers the rest', async () => {
+    const a = await setup()
+    const b = await setup()
+    await insertOrphanTurn(a.session.user.id, a.threadId, 11)
+    await insertOrphanTurn(b.session.user.id, b.threadId, 11)
+    await detail(a.session.cookie, a.threadId)
+    const row = await ctx.db
+      .selectFrom('message')
+      .select('status')
+      .where('thread_id', '=', b.threadId)
+      .where('role', '=', 'assistant')
+      .executeTakeFirstOrThrow()
+    expect(row.status).toBe('incomplete')
+    expect(await recoverStaleTurn(ctx.db)).toBe(1)
+  })
+
+  it('shutdown aborts a running generation; it persists aborted and releases the lock once', async () => {
+    const own = createTestApp()
+    const { session, threadId } = await setup()
+    const stream = await openSlowStream(session.cookie, threadId, session.user.id, own.app)
+    try {
+      expect(own.inFlight.size).toBe(1)
+      expect(own.inFlight.abortAll()).toBe(1)
+      await waitSettled(session.user.id)
+      const message = await ctx.db
+        .selectFrom('message')
+        .select(['status', 'stop_reason'])
+        .where('thread_id', '=', threadId)
+        .where('role', '=', 'assistant')
+        .executeTakeFirstOrThrow()
+      expect(message).toMatchObject({ status: 'incomplete', stop_reason: 'aborted' })
+      expect(await lockOf(session.user.id)).toBeNull()
+      expect(await aiCalls(session.user.id)).toHaveLength(1)
+      expect(own.inFlight.size).toBe(0)
+    } finally {
+      await stream.close()
+      await own.close()
+    }
   })
 })

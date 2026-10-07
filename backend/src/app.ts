@@ -8,6 +8,7 @@ import type pg from 'pg'
 import type { Config } from './lib/config.js'
 import type { Db } from './lib/db/index.js'
 import { errorMiddleware, notFoundHandler } from './lib/error.js'
+import { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
@@ -44,9 +45,19 @@ export type AppDeps = {
   tutor?: TutorProvider
   /** Test-only hook: mounts extra routes before the 404 and error handlers. */
   extraRoutes?: (app: Express) => void
+  /** Running explain generations; the server aborts them all on shutdown. */
+  inFlight?: InFlightRegistry
 }
 
-export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppDeps): Express {
+export function createApp({
+  config,
+  db,
+  pool,
+  logger,
+  tutor,
+  extraRoutes,
+  inFlight = new InFlightRegistry()
+}: AppDeps): Express {
   const app = express()
   app.disable('x-powered-by')
   warmDummyHash()
@@ -79,7 +90,7 @@ export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppD
   app.use(topicRouter(db))
   app.use(threadRouter(db, config))
   const provider = tutor ?? createTutorProvider(config)
-  app.use(messageRouter(db, config, provider, logger))
+  app.use(messageRouter(db, config, provider, logger, inFlight))
   app.use(guideRouter(db, config, provider, logger))
   app.use(quizRouter(db, config, provider, logger))
   app.use(progressRouter(db, config))

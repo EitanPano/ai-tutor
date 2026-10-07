@@ -14,6 +14,7 @@ import {
 } from './generation-lock.js'
 import { ownedBy, type Auth } from './ownership.js'
 import { DEFAULT_TITLE, requireThread } from './thread.service.js'
+import { recoverStaleTurn } from './stale-turn.js'
 import { requireTopic } from './topic.service.js'
 
 /** A thread holds at most 25 non-failed messages (ledger ruling 14). */
@@ -33,9 +34,21 @@ export type AskOutcome =
   | { kind: 'result'; result: ExplainResult; latencyMs: number }
   | { kind: 'error'; model: string; latencyMs: number; usage?: TutorUsage }
 
-function titleFrom(content: string): string {
-  const firstLine = content.trim().split(/\r?\n/)[0] ?? ''
-  return firstLine.trim().slice(0, MAX_TITLE_CHARS)
+/**
+ * The thread title: the first non-empty line that is not a code fence, whitespace collapsed.
+ * Over 80 characters it is cut at the last word boundary within 79 characters and gets an
+ * ellipsis (a single long word is cut hard). The default title when no such line exists.
+ */
+export function titleFrom(content: string): string {
+  const line = content
+    .split(/\r?\n/)
+    .map((raw) => raw.replace(/\s+/g, ' ').trim())
+    .find((text) => text !== '' && !text.startsWith('```'))
+  if (line === undefined) return DEFAULT_TITLE
+  if (line.length <= MAX_TITLE_CHARS) return line
+  const head = line.slice(0, MAX_TITLE_CHARS - 1)
+  const boundary = head.lastIndexOf(' ')
+  return `${(boundary > 0 ? head.slice(0, boundary) : head).trimEnd()}…`
 }
 
 /**
@@ -69,6 +82,8 @@ export async function startAsk(
   content: string
 ): Promise<AskContext> {
   assertAiEnabled(config)
+  // A crashed generation must not count toward the thread cap or hold the lock for ever.
+  await recoverStaleTurn(db, { auth })
   const thread = await requireThread(db, auth, threadId)
   await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
   if (thread.messageCount + 2 > MAX_THREAD_MESSAGES) {

@@ -37,7 +37,7 @@ describe('generation lock', () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
     const stale = await acquireGenerationLock(ctx.db, auth)
-    await sql`UPDATE app_user SET generation_started_at = now() - interval '6 minutes'`.execute(
+    await sql`UPDATE app_user SET generation_started_at = now() - interval '11 minutes'`.execute(
       ctx.db
     )
     const current = await acquireGenerationLock(ctx.db, auth)

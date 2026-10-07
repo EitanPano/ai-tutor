@@ -20,6 +20,8 @@ export default defineConfig({
       NODE_ENV: 'test',
       DATABASE_URL: 'postgres://ai_tutor:ai_tutor@127.0.0.1:5432/ai_tutor_test',
       LOG_LEVEL: 'silent',
+      // Explicit: budget tests (AC09) depend on it, not on the provider-specific default.
+      AI_DAILY_TOKEN_BUDGET: '50000',
       AI_FAKE_DELAY_MS: '0'
     },
     projects: [

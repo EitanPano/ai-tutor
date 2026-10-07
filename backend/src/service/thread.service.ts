@@ -4,6 +4,7 @@ import type { MessageRow } from '../lib/db/schema.js'
 import { badRequest, conflict } from '../lib/error.js'
 import { hasNoNul } from '../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from './ownership.js'
+import { recoverStaleTurn } from './stale-turn.js'
 import { requireTopic } from './topic.service.js'
 
 export const DEFAULT_TOPIC_ID = 'other'
@@ -247,7 +248,11 @@ export async function listThreads(
 }
 
 export async function getThreadDetail(db: Db, auth: Auth, id: string): Promise<ThreadDetailDto> {
-  const thread = await loadThread(db, auth, id)
+  let thread = await loadThread(db, auth, id)
+  // Recover a turn a crash left in flight, so the page never shows it pending for ever.
+  if ((await recoverStaleTurn(db, { auth, threadId: thread.id })) > 0) {
+    thread = await loadThread(db, auth, id)
+  }
   const messages = await db
     .selectFrom('message')
     .selectAll()

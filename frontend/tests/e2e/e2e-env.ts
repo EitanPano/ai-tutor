@@ -4,6 +4,10 @@ export const E2E_BACKEND_ENV = {
   DATABASE_URL: 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor_e2e',
   FRONTEND_URL: 'http://localhost:3100',
   AI_PROVIDER: 'fake',
+  // Explicit: the budget specs spend 60000 tokens; the fake provider's default is far higher.
+  AI_DAILY_TOKEN_BUDGET: '50000',
   NODE_ENV: 'development',
-  LOG_LEVEL: 'warn'
+  LOG_LEVEL: 'warn',
+  // The backend must not query at boot: globalSetup resets this database after it started.
+  RECOVER_STALE_ON_BOOT: 'false'
 }
