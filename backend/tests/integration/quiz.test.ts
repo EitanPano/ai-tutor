@@ -552,17 +552,21 @@ describe('guards', () => {
     expect(await lockOf(session.user.id)).toBeNull()
   })
 
-  it('answers 503 ai_unavailable when AI is disabled, before looking at the body', async () => {
+  it('answers 503 ai_unavailable when AI is disabled, and 400 for an invalid body', async () => {
     const off = createTestApp({ config: { aiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
-      for (const body of [{ topicId: 'react', difficulty: 'easy' }, {}]) {
-        const res = await offClient.post('/api/quiz').set('Cookie', cookie).send(body)
-        expect(res.status).toBe(503)
-        expectContract(res, 'post', '/api/quiz')
-        expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
-      }
+      const res = await offClient
+        .post('/api/quiz')
+        .set('Cookie', cookie)
+        .send({ topicId: 'react', difficulty: 'easy' })
+      expect(res.status).toBe(503)
+      expectContract(res, 'post', '/api/quiz')
+      expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+      // The kill switch is checked once, in the service, after the route validates the body.
+      const invalid = await offClient.post('/api/quiz').set('Cookie', cookie).send({})
+      expect(invalid.status).toBe(400)
       expect(off.tutor.quizCalls).toHaveLength(0)
     } finally {
       await off.close()

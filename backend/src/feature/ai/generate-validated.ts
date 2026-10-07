@@ -2,13 +2,8 @@ import type { z } from 'zod'
 import type { Db } from '../../lib/db/index.js'
 import { badGateway, unprocessable } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
-import {
-  TutorProviderError,
-  ZERO_USAGE,
-  type StructuredResult,
-  type TutorUsage
-} from '../../lib/tutor/tutor.js'
-import { recordAiCall } from './ai-budget.js'
+import { TutorProviderError, ZERO_USAGE, type StructuredResult } from '../../lib/tutor/tutor.js'
+import { recordAiCall, type AiCall } from './ai-budget.js'
 import type { Auth } from '../../lib/ownership.js'
 
 /** One attempt plus one retry when the output is unusable. */
@@ -16,13 +11,7 @@ export const MAX_ATTEMPTS = 2
 
 export type GenerationKind = 'guide' | 'quiz'
 
-type RecordedCall = {
-  model: string
-  stopReason: string
-  refusalCategory: string | null
-  usage: TutorUsage
-  latencyMs: number
-}
+type RecordedCall = Omit<AiCall, 'kind'>
 
 /** What a caller passes; the ai module supplies the logger. */
 export type GenerateOptions<S extends z.ZodType> = {
@@ -92,17 +81,7 @@ async function recordCall(
   call: RecordedCall
 ): Promise<void> {
   try {
-    await recordAiCall(db, auth, {
-      kind,
-      model: call.model,
-      input_token: call.usage.inputTokens,
-      output_token: call.usage.outputTokens,
-      cache_read_token: call.usage.cacheReadTokens,
-      cache_creation_token: call.usage.cacheCreationTokens,
-      stop_reason: call.stopReason,
-      refusal_category: call.refusalCategory,
-      latency_ms: Math.max(0, Math.round(call.latencyMs))
-    })
+    await recordAiCall(db, auth, { kind, ...call })
   } catch (err) {
     logger.error({ err }, 'recording the ai_call failed')
   }

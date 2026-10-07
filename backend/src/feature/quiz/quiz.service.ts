@@ -254,9 +254,7 @@ export function createQuizService(deps: QuizServiceDeps): QuizService {
       } else {
         topic = await deps.topic.require(input.topicId)
       }
-      await ai.assertWithinBudget(auth)
-      const lockToken = await ai.acquireLock(auth)
-      try {
+      return ai.withGenerationLock(auth, async () => {
         const history = threadId === null ? null : await deps.thread.history(auth, threadId)
         const draft = await ai.generateValidated(auth, {
           kind: 'quiz',
@@ -265,10 +263,8 @@ export function createQuizService(deps: QuizServiceDeps): QuizService {
           model: tutor.model,
           logContext: { topicId: topic.id }
         })
-        return await saveQuiz(db, auth, { threadId, topicId: topic.id, difficulty, draft })
-      } finally {
-        await ai.releaseLock(auth, lockToken)
-      }
+        return saveQuiz(db, auth, { threadId, topicId: topic.id, difficulty, draft })
+      })
     },
     async get(auth, id) {
       const quiz = await requireQuiz(db, auth, id)

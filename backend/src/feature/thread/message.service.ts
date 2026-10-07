@@ -204,13 +204,10 @@ export function createMessageService({
           await ai.recordCall(auth, {
             kind: 'explain',
             model: outcome.kind === 'result' ? outcome.result.model : outcome.model,
-            input_token: usage.inputTokens,
-            output_token: usage.outputTokens,
-            cache_read_token: usage.cacheReadTokens,
-            cache_creation_token: usage.cacheCreationTokens,
-            stop_reason: stopReason,
-            refusal_category: result?.refusalCategory ?? null,
-            latency_ms: Math.max(0, Math.round(outcome.latencyMs))
+            usage,
+            stopReason,
+            refusalCategory: result?.refusalCategory ?? null,
+            latencyMs: outcome.latencyMs
           })
         } catch (err) {
           logger.error({ err, userMessageId: ctx.userMessageId }, 'recording the ai_call failed')

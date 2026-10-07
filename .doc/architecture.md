@@ -23,7 +23,7 @@
 |---|---|---|---|
 | `user` | `app_user`, `session` | router only (also builds the shared `requireSession` middleware) | — |
 | `topic` | `topic` | `TopicApi`: `require` | — |
-| `ai` | `ai_call`, `app_user` (`generation_started_at` only) | `AiApi`: `assertEnabled`, `assertWithinBudget`, `recordCall`, `acquireLock`, `releaseLock`, `generateValidated`, `lockTtlSeconds` (no router) | — |
+| `ai` | `ai_call`, `app_user` (`generation_started_at` only) | `AiApi`: `assertEnabled`, `assertWithinBudget`, `recordCall`, `acquireLock`, `releaseLock`, `withGenerationLock`, `generateValidated`, `lockTtlSeconds` (no router) | — |
 | `thread` | `thread`, `message` | `ThreadApi`: `require`, `assertHasAnswer`, `history` | `TopicApi`, `AiApi` |
 | `guide` | `guide`, `guide_step` | router only | `TopicApi`, `AiApi`, `ThreadApi` |
 | `quiz` | `quiz`, `quiz_item`, `quiz_attempt` | router only | `TopicApi`, `AiApi`, `ThreadApi` |

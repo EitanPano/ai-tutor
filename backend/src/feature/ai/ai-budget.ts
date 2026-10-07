@@ -1,8 +1,9 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
-import type { NewAiCall } from '../../lib/db/schema.js'
+import type { AiCallTable, MessageStopReason } from '../../lib/db/schema.js'
 import { AppError, serviceUnavailable } from '../../lib/error.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
+import type { TutorUsage } from '../../lib/tutor/tutor.js'
 
 const TOKEN_SUM = sql<string>`COALESCE(SUM(input_token::bigint + cache_creation_token + cache_read_token + output_token), 0)::text`
 
@@ -53,12 +54,31 @@ export async function assertWithinBudget(
   }
 }
 
-export type AiCallRecord = Omit<NewAiCall, 'id' | 'user_id' | 'created_at'>
+/** One provider call, as callers describe it. `recordAiCall` is the only place that knows the `ai_call` columns. */
+export type AiCall = {
+  kind: AiCallTable['kind']
+  model: string
+  usage: TutorUsage
+  stopReason: MessageStopReason
+  refusalCategory: string | null
+  latencyMs: number
+}
 
-/** Appends one row to the `ai_call` ledger. Pass `trx` to record inside a transaction. */
-export async function recordAiCall(db: Db, auth: Auth, row: AiCallRecord): Promise<void> {
+/** Appends one row to the `ai_call` ledger. */
+export async function recordAiCall(db: Db, auth: Auth, call: AiCall): Promise<void> {
   await db
     .insertInto('ai_call')
-    .values({ ...row, user_id: auth.userId })
+    .values({
+      user_id: auth.userId,
+      kind: call.kind,
+      model: call.model,
+      input_token: call.usage.inputTokens,
+      output_token: call.usage.outputTokens,
+      cache_read_token: call.usage.cacheReadTokens,
+      cache_creation_token: call.usage.cacheCreationTokens,
+      stop_reason: call.stopReason,
+      refusal_category: call.refusalCategory,
+      latency_ms: Math.max(0, Math.round(call.latencyMs))
+    })
     .execute()
 }

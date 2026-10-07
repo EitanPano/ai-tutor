@@ -7,5 +7,5 @@ export type QuizModuleDeps = QuizServiceDeps & { requireSession: RequestHandler 
 export function createQuizModule(deps: QuizModuleDeps): { router: Router } {
   const { requireSession, ...serviceDeps } = deps
   const service = createQuizService(serviceDeps)
-  return { router: quizRouter(service, { requireSession, ai: deps.ai }) }
+  return { router: quizRouter(service, { requireSession }) }
 }

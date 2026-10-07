@@ -2,7 +2,6 @@ import { Router, type RequestHandler, type Response } from 'express'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, type TutorProvider } from '../../lib/tutor/tutor.js'
-import type { AiApi } from '../ai/index.js'
 import type { AskOutcome, MessageService } from './message.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
@@ -30,18 +29,15 @@ export function messageRouter(
   service: MessageService,
   deps: {
     requireSession: RequestHandler
-    ai: AiApi
     tutor: TutorProvider
     logger: Pick<Logger, 'error'>
     inFlight: InFlightRegistry
   }
 ): Router {
-  const { requireSession, ai, tutor, logger, inFlight } = deps
+  const { requireSession, tutor, logger, inFlight } = deps
   const router = Router()
 
   router.post('/api/thread/:id/message', requireSession, async (req, res) => {
-    // The AI switch is the first check, before the body is looked at (same order as the quiz).
-    ai.assertEnabled()
     const auth = getAuth(req)
     const { content } = askSchema.parse(req.body)
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
