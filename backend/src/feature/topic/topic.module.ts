@@ -13,5 +13,5 @@ export type TopicModuleDeps = { db: Db }
 
 export function createTopicModule(deps: TopicModuleDeps): { api: TopicApi; router: Router } {
   const service = createTopicService(deps)
-  return { api: service, router: topicRouter(service) }
+  return { api: { require: (id) => service.require(id) }, router: topicRouter(service) }
 }

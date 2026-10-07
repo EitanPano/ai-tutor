@@ -14,7 +14,7 @@ const { app, modules } = createApp({ config, db, pool, logger, inFlight })
 
 // A single instance runs, so a turn left in flight by a crash is recovered once at boot.
 if (config.recoverStaleOnBoot) {
-  modules.thread
+  modules
     .recoverStale()
     .then((count) => {
       if (count > 0) logger.warn({ count }, 'recovered turns left in flight by a previous run')

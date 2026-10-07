@@ -765,7 +765,7 @@ describe('recovery of turns left in flight (I2)', () => {
       .where('role', '=', 'assistant')
       .executeTakeFirstOrThrow()
     expect(row.status).toBe('incomplete')
-    expect(await ctx.modules.thread.recoverStale()).toBe(1)
+    expect(await ctx.modules.recoverStale()).toBe(1)
   })
 
   it('shutdown aborts a running generation; it persists aborted and releases the lock once', async () => {

@@ -37,8 +37,13 @@ export type AppDeps = {
   inFlight?: InFlightRegistry
 }
 
-/** The module APIs used outside HTTP: boot recovery in index.ts, and tests. Grows per module. */
-export type AppModules = { topic: TopicApi; ai: AiApi; thread: ThreadApi }
+/** What index.ts and tests need besides HTTP: module APIs and the boot-time stale-turn sweep. */
+export type AppModules = {
+  topic: TopicApi
+  ai: AiApi
+  thread: ThreadApi
+  recoverStale: () => Promise<number>
+}
 
 export function createApp({
   config,
@@ -120,5 +125,8 @@ export function createApp({
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
-  return { app, modules: { topic: topic.api, ai: ai.api, thread: thread.api } }
+  return {
+    app,
+    modules: { topic: topic.api, ai: ai.api, thread: thread.api, recoverStale: thread.recoverStale }
+  }
 }

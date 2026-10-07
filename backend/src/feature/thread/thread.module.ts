@@ -20,8 +20,6 @@ export type ThreadApi = {
   assertHasAnswer(auth: Auth, id: string): Promise<void>
   /** Earlier turns, oldest first, as the model should see them (failed turns left out). */
   history(auth: Auth, threadId: string): Promise<TutorTurn[]>
-  /** System-wide sweep of turns left in flight by a crash. Boot only; returns how many it recovered. */
-  recoverStale(): Promise<number>
 }
 
 export type ThreadModuleDeps = {
@@ -34,18 +32,22 @@ export type ThreadModuleDeps = {
   ai: AiApi
 }
 
-export function createThreadModule(deps: ThreadModuleDeps): { api: ThreadApi; router: Router } {
+export function createThreadModule(deps: ThreadModuleDeps): {
+  api: ThreadApi
+  router: Router
+  /** System-wide sweep of turns left in flight by a crash. Boot only. */
+  recoverStale: () => Promise<number>
+} {
   const { db, tutor, logger, inFlight, requireSession, topic, ai } = deps
   const thread = createThreadService({ db, topic, ai })
   const message = createMessageService({ db, topic, ai, thread, logger })
   const api: ThreadApi = {
     require: (auth, id) => thread.require(auth, id),
     assertHasAnswer: (auth, id) => thread.assertHasAnswer(auth, id),
-    history: (auth, threadId) => message.history(auth, threadId),
-    recoverStale: () => recoverStaleTurn(deps.db, deps.ai.lockTtlSeconds)
+    history: (auth, threadId) => message.history(auth, threadId)
   }
   const router = Router()
   router.use(threadRouter(thread, { requireSession }))
   router.use(messageRouter(message, { requireSession, ai, tutor, logger, inFlight }))
-  return { api, router }
+  return { api, router, recoverStale: () => recoverStaleTurn(db, ai.lockTtlSeconds) }
 }
