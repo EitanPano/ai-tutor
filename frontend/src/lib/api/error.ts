@@ -26,15 +26,16 @@ export class ApiError extends Error {
 export const isApiError = (err: unknown): err is ApiError => err instanceof ApiError
 
 const MESSAGE_BY_CODE: Record<string, string> = {
-  network_error: "Can't reach the server. Check that the API is running, then retry.",
+  network_error:
+    "Can't reach the server. Make sure the API is running and you opened http://localhost:3000.",
   rate_limited: 'Too many attempts. Wait a minute, then try again.',
   unauthenticated: 'Your session ended. Log in again to continue.',
   invalid_credentials: 'Email or password is incorrect.',
   email_taken: 'An account with this email already exists. Log in instead.',
   validation_failed: 'Some fields need fixing. Check them and try again.',
-  forbidden: 'The server refused this request. Reload the page and try again.',
+  forbidden_origin:
+    'The server refused this request. Reload the app from its usual address and try again.',
   not_found: "This thread doesn't exist or was deleted.",
-  upstream_unavailable: 'The AI provider is unavailable. Try again in a moment.',
   ai_budget_exceeded: "You've used today's AI budget. It resets at midnight in your time zone.",
   generation_in_progress: 'Another answer is still being generated. Wait for it to finish.',
   thread_full: 'This thread is full. Start a new thread to keep going.',

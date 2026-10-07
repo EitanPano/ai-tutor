@@ -106,3 +106,23 @@ describe('SignupForm', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('SignupForm time zone issue', () => {
+  it('shows a rejected time zone instead of failing silently', async () => {
+    stubApi(
+      errorResponse(400, 'validation_failed', 'The request is invalid.', {
+        issues: [{ path: ['timeZone'], message: 'Unknown time zone' }]
+      })
+    )
+    renderWithQuery(<SignupForm />)
+    const typist = userEvent.setup()
+
+    await fill(typist)
+    await typist.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The server did not accept the time zone Europe/Berlin: Unknown time zone'
+    )
+    expect(router.replace).not.toHaveBeenCalled()
+  })
+})

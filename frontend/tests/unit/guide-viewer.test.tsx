@@ -245,15 +245,13 @@ describe('GuideViewer', () => {
   it('rolls a failed mark done back, returns to the step and toasts', async () => {
     const typist = await open()
     api.updateStep.mockRejectedValueOnce(
-      new ApiError({ status: 502, code: 'upstream_unavailable', message: 'x' })
+      new ApiError({ status: 500, code: 'internal_error', message: 'x' })
     )
 
     await typist.click(screen.getByRole('button', { name: 'Mark done' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
-    expect(toast.error).toHaveBeenCalledWith(
-      'The AI provider is unavailable. Try again in a moment.'
-    )
+    expect(toast.error).toHaveBeenCalledWith('The server hit a problem. Try again in a moment.')
     expect(await screen.findByText('Step 1 of 4')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark done' })).toBeInTheDocument()
     expect(progress()).toHaveAccessibleName('0 of 4 steps done')

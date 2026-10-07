@@ -84,12 +84,19 @@ describe('apiFetch', () => {
     expect(err).toBeInstanceOf(ApiError)
     expect(err).toMatchObject({ status: 0, code: 'network_error' })
     expect(describeError(err)).toBe(
-      "Can't reach the server. Check that the API is running, then retry."
+      "Can't reach the server. Make sure the API is running and you opened http://localhost:3000."
     )
   })
 })
 
 describe('describeError', () => {
+  it('explains a foreign-origin refusal (forbidden_origin)', () => {
+    const err = new ApiError({ status: 403, code: 'forbidden_origin', message: 'x' })
+    expect(describeError(err)).toBe(
+      'The server refused this request. Reload the app from its usual address and try again.'
+    )
+  })
+
   it('has a sentence for rate limiting', () => {
     const err = new ApiError({ status: 429, code: 'rate_limited', message: 'x' })
     expect(describeError(err)).toBe('Too many attempts. Wait a minute, then try again.')

@@ -104,6 +104,11 @@ export function SignupForm() {
         <p className="text-sm text-ink-muted">
           Time zone: {timeZone} — you can change it later on Progress
         </p>
+        {issues.timeZone && (
+          <p role="alert" className="text-sm text-wrong">
+            The server did not accept the time zone {timeZone}: {issues.timeZone}
+          </p>
+        )}
         <Button type="submit" size="lg" loading={signup.isPending} className="mt-2">
           Create account
         </Button>
