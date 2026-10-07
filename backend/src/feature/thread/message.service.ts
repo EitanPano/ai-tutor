@@ -135,6 +135,8 @@ export function createMessageService({
 }: MessageServiceDeps): MessageService {
   return {
     async start(auth, threadId, content) {
+      // Backstop; the route checks first so the error order stays kill switch → body.
+      ai.assertEnabled()
       // A crashed generation must not count toward the thread cap or hold the lock for ever.
       await recoverStaleTurn(db, olderThanTtl(ai.lockTtlSeconds), { auth })
       const thread = await threadService.require(auth, threadId)

@@ -10,7 +10,10 @@ import { createAiService, type AiServiceDeps } from './ai.service.js'
 export type AiApi = {
   /** The AI_ENABLED kill switch: 503 `ai_unavailable` when AI features are turned off. */
   assertEnabled(): void
-  /** 429 `ai_budget_exceeded` once today's tokens (user's time zone) reach AI_DAILY_TOKEN_BUDGET. */
+  /**
+   * 429 `ai_budget_exceeded` once today's tokens (user's time zone) reach AI_DAILY_TOKEN_BUDGET; then
+   * 503 `ai_unavailable` once all users' tokens today (UTC day) reach AI_GLOBAL_DAILY_TOKEN_BUDGET.
+   */
   assertWithinBudget(auth: Auth): Promise<void>
   /** Appends one row to the `ai_call` ledger. */
   recordCall(auth: Auth, call: AiCall): Promise<void>
@@ -19,10 +22,11 @@ export type AiApi = {
   /** Releases only while `token` still owns the lock. Pass `tx` to release inside the caller's transaction. */
   releaseLock(auth: Auth, token: GenerationLockToken, tx?: Db): Promise<void>
   /**
-   * Runs `fn` under the generation lock: the budget check (429 `ai_budget_exceeded`, then the global
-   * cap 503 `ai_unavailable`), then the lock (409 `generation_in_progress`), and always releases it.
-   * The routes check the kill switch first (before body validation); callers do their own lookups before this. Use it for any generation that finishes
-   * inside the request; one whose lock outlives the request holds `acquireLock` itself.
+   * Runs `fn` under the generation lock: a kill-switch backstop (503 `ai_unavailable`), the budget
+   * check (429 `ai_budget_exceeded`, then the global cap 503 `ai_unavailable`), then the lock (409
+   * `generation_in_progress`), and always releases it. The routes check the kill switch first (before
+   * body validation); callers do their own lookups before this. Use it for any generation that
+   * finishes inside the request; one whose lock outlives the request holds `acquireLock` itself.
    */
   withGenerationLock<T>(auth: Auth, fn: () => Promise<T>): Promise<T>
   /** One structured provider call validated by `schema`, retried once; records every call in `ai_call`. */

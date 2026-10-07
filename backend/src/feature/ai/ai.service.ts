@@ -24,7 +24,10 @@ export type AiServiceDeps = {
 export type AiService = {
   /** The AI_ENABLED kill switch: 503 `ai_unavailable` when AI features are turned off. */
   assertEnabled(): void
-  /** 429 `ai_budget_exceeded` once today's tokens (user's time zone) reach AI_DAILY_TOKEN_BUDGET. */
+  /**
+   * 429 `ai_budget_exceeded` once today's tokens (user's time zone) reach AI_DAILY_TOKEN_BUDGET; then
+   * 503 `ai_unavailable` once all users' tokens today (UTC day) reach AI_GLOBAL_DAILY_TOKEN_BUDGET.
+   */
   assertWithinBudget(auth: Auth): Promise<void>
   /** Appends one row to the `ai_call` ledger. */
   recordCall(auth: Auth, call: AiCall): Promise<void>
@@ -32,7 +35,7 @@ export type AiService = {
   acquireLock(auth: Auth): Promise<GenerationLockToken>
   /** Releases only while `token` still owns the lock. Pass `tx` to release inside the caller's transaction. */
   releaseLock(auth: Auth, token: GenerationLockToken, tx?: Db): Promise<void>
-  /** Budget check, lock, `fn`, release in `finally`; see `AiApi.withGenerationLock`. */
+  /** Kill-switch backstop, budget check, lock, `fn`, release in `finally`; see `AiApi.withGenerationLock`. */
   withGenerationLock<T>(auth: Auth, fn: () => Promise<T>): Promise<T>
   /** Clears every held lock, system-wide; returns the count. Boot recovery only. */
   releaseAllLocks(): Promise<number>
@@ -55,6 +58,8 @@ export function createAiService({ db, config, logger }: AiServiceDeps): AiServic
     acquireLock: (auth) => acquireGenerationLock(db, auth),
     releaseLock: (auth, token, tx = db) => releaseGenerationLock(tx, auth, token),
     async withGenerationLock(auth, fn) {
+      // Backstop; the route checks first so the error order stays kill switch → body.
+      assertAiEnabled(config)
       await assertWithinBudgetFor(auth)
       const token = await acquireGenerationLock(db, auth)
       try {
