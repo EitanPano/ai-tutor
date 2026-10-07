@@ -16,14 +16,39 @@ const OWNED: Record<string, readonly string[]> = {
   health: []
 }
 
+// Tables two modules may write: app_user is shared at column level. `user` owns the account columns,
+// `ai` writes only generation_started_at (column-level, enforced by review).
+const SHARED: Record<string, readonly string[]> = { app_user: ['user', 'ai'] }
+
+// Tables written by infrastructure in src/lib, not by any module.
+const INFRA_TABLES: readonly string[] = ['rate_limit']
+
+const SCHEMA_SQL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../db/schema.sql')
+
 const FEATURE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/feature')
 
+// Kysely: `.insertInto('t')`, `.updateTable('t as x')`, `.mergeInto(`t`)`; any quote style, alias dropped.
+// Raw SQL: keywords match in any case and the table may be double-quoted. `FOR [NO KEY] UPDATE` and
+// `DO UPDATE` are locks / upserts on a row already being written, not writes of their own.
 const WRITE_PATTERNS: readonly RegExp[] = [
-  /\.(?:insertInto|updateTable|deleteFrom)\(\s*['"]([a-z_][a-z0-9_]*)['"]/g,
-  /\bINSERT INTO\s+([a-z_][a-z0-9_]*)/g,
-  /(?<!FOR\s)(?<!DO\s)\bUPDATE\s+([a-z_][a-z0-9_]*)/g,
-  /\bDELETE FROM\s+([a-z_][a-z0-9_]*)/g
+  /\.(?:insertInto|updateTable|deleteFrom|mergeInto)\(\s*(['"`])(?<table>[a-z_][a-z0-9_]*)(?:\s+as\s+[a-z_][a-z0-9_]*)?\1/gi,
+  /\b(?:INSERT\s+INTO|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?)\s+"?(?<table>[a-z_][a-z0-9_]*)/gi,
+  /(?<!\b(?:FOR|DO|KEY)\s+)\bUPDATE\s+"?(?<table>[a-z_][a-z0-9_]*)/gi
 ]
+
+// Comments are prose ("update it when ..."), so they are removed before scanning.
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1')
+}
+
+function scanWrites(source: string): string[] {
+  const code = stripComments(source)
+  return WRITE_PATTERNS.flatMap((pattern) =>
+    [...code.matchAll(pattern)].flatMap((match) =>
+      match.groups?.table ? [match.groups.table] : []
+    )
+  )
+}
 
 type Write = { module: string; table: string; file: string }
 
@@ -46,15 +71,19 @@ function detectWrites(): Write[] {
   for (const module of featureModules()) {
     for (const file of tsFiles(path.join(FEATURE_ROOT, module))) {
       const source = readFileSync(file, 'utf8')
-      for (const pattern of WRITE_PATTERNS) {
-        for (const match of source.matchAll(pattern)) {
-          const table = match[1]
-          if (table) writes.push({ module, table, file: path.relative(FEATURE_ROOT, file) })
-        }
+      for (const table of scanWrites(source)) {
+        writes.push({ module, table, file: path.relative(FEATURE_ROOT, file) })
       }
     }
   }
   return writes
+}
+
+function schemaTables(): string[] {
+  const sql = readFileSync(SCHEMA_SQL, 'utf8')
+  return [...sql.matchAll(/^CREATE TABLE\s+([a-z_][a-z0-9_]*)/gim)].flatMap((m) =>
+    m[1] ? [m[1]] : []
+  )
 }
 
 describe('module write ownership', () => {
@@ -82,5 +111,52 @@ describe('module write ownership', () => {
     ]) {
       expect(found.has(pair), `expected the scan to detect ${pair}`).toBe(true)
     }
+  })
+
+  it('gives every table exactly one owning module, except the shared allowlist', () => {
+    const problems: string[] = []
+    for (const table of schemaTables()) {
+      const owners = Object.entries(OWNED)
+        .filter(([, tables]) => tables.includes(table))
+        .map(([module]) => module)
+      if (table in SHARED) {
+        expect([...owners].sort(), `shared table ${table}`).toEqual([...SHARED[table]!].sort())
+      } else if (INFRA_TABLES.includes(table)) {
+        if (owners.length > 0) problems.push(`${table} is infra but owned by ${owners.join(', ')}`)
+      } else if (owners.length !== 1) {
+        problems.push(`${table} has ${owners.length} owners (${owners.join(', ')})`)
+      }
+    }
+    expect(problems).toEqual([])
+  })
+
+  it('keeps src/feature free of loose files, which the scan would skip', () => {
+    const loose = readdirSync(FEATURE_ROOT, { withFileTypes: true })
+      .filter((entry) => !entry.isDirectory())
+      .map((entry) => entry.name)
+    expect(loose).toEqual([])
+  })
+})
+
+describe('write scanner', () => {
+  it.each([
+    ['alias', `db.updateTable('quiz as q').set({})`, 'quiz'],
+    ['backticks', 'db.insertInto(`quiz`).values({})', 'quiz'],
+    ['mergeInto', `db.mergeInto('quiz').using()`, 'quiz'],
+    ['lowercase update', 'await sql`update quiz set x = 1`', 'quiz'],
+    ['quoted identifier', 'sql`DELETE FROM "quiz" WHERE true`', 'quiz'],
+    ['truncate', 'sql`TRUNCATE TABLE quiz`', 'quiz'],
+    ['lowercase insert', 'sql`insert into quiz (a) values (1)`', 'quiz']
+  ])('detects %s', (_name, source, table) => {
+    expect(scanWrites(source)).toEqual([table])
+  })
+
+  it.each([
+    ['FOR UPDATE', 'sql`SELECT 1 FROM quiz FOR UPDATE`'],
+    ['for no key update', 'sql`select 1 from quiz for no key update`'],
+    ['DO UPDATE', 'sql`ON CONFLICT (id) DO UPDATE SET a = 1`'],
+    ['a comment', '// update quiz when the draft changes']
+  ])('does not treat %s as a write', (_name, source) => {
+    expect(scanWrites(source)).toEqual([])
   })
 })
