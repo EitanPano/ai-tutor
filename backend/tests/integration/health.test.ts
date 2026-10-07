@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { markPoolConnectError } from '../../src/lib/db/unavailable.js'
 import { AppError } from '../../src/lib/error.js'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createTestApp } from '../helper/app.js'
@@ -16,7 +17,12 @@ const errors = createTestApp({
       z.object({ email: z.email() }).parse({ email: 'nope' })
     })
     app.get('/boom/db-down', () => {
-      throw new Error('timeout exceeded when trying to connect')
+      const err = new Error('timeout exceeded when trying to connect')
+      markPoolConnectError(err)
+      throw err
+    })
+    app.get('/boom/other-network', () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9'), { code: 'ECONNREFUSED' })
     })
     app.get('/boom/statement-timeout', () => {
       throw Object.assign(new Error('canceling statement due to statement timeout'), {
@@ -126,6 +132,12 @@ describe('error handling', () => {
       requestId: 'req-db'
     })
     expectSchema(res.body, 'ErrorResponse')
+  })
+
+  it('keeps a non-database network error as 500 internal_error', async () => {
+    const res = await http(errors.app).get('/boom/other-network')
+    expect(res.status).toBe(500)
+    expect((res.body as ErrorBody).error.code).toBe('internal_error')
   })
 
   it('keeps a statement timeout as 500 internal_error', async () => {

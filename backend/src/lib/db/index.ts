@@ -2,6 +2,7 @@ import { Kysely, PostgresDialect } from 'kysely'
 import pg from 'pg'
 import type { Logger } from '../logger.js'
 import type { Database } from './schema.js'
+import { markPoolConnectError } from './unavailable.js'
 
 export type Db = Kysely<Database>
 
@@ -35,6 +36,21 @@ export function createDb(
     idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
     ...(statementTimeoutMs === null ? {} : { statement_timeout: statementTimeoutMs })
   })
+  // Kysely gets its clients through the promise form of connect(). Tag its failures so the
+  // error middleware can tell "no database connection" from any other network error.
+  const connect = pool.connect.bind(pool) as () => Promise<pg.PoolClient>
+  const connectTagged = async (): Promise<pg.PoolClient> => {
+    try {
+      return await connect()
+    } catch (err) {
+      markPoolConnectError(err)
+      throw err
+    }
+  }
+  pool.connect = ((...args: unknown[]) =>
+    args.length === 0
+      ? connectTagged()
+      : (connect as (...a: unknown[]) => unknown)(...args)) as typeof pool.connect
   pool.on('error', (err) => {
     if (logger) logger.error({ err }, 'idle database client error')
     else console.error(`idle database client error: ${err.message}`)
