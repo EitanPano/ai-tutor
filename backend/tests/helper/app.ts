@@ -24,7 +24,7 @@ export function createTestApp(
   } = {}
 ): TestApp {
   const config = { ...loadConfig(process.env), ...overrides.config }
-  const tutor = new FakeTutorProvider({ delayMs: 0 })
+  const tutor = new FakeTutorProvider({ delayMs: 0, record: true })
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
   const app = createApp({

@@ -47,6 +47,14 @@ const LANGUAGE_BY_TOPIC: Record<string, string> = {
 }
 
 const MARKER = /\[fake:[a-z_-]+\]/g
+const GUIDE_ONCE = '[fake:guide-invalid-once]'
+const QUIZ_ONCE = '[fake:quiz-invalid-once]'
+
+function bump(counter: Map<string, number>, key: string): number {
+  const next = (counter.get(key) ?? 0) + 1
+  counter.set(key, next)
+  return next
+}
 
 function lastUserQuestion(history: GuideInput['history']): string {
   const turn = history.findLast((entry) => entry.role === 'user')
@@ -172,7 +180,11 @@ export class FakeTutorProvider implements TutorProvider {
   private readonly quizAttempts = new Map<string, number>()
   private readonly delayMs: number
 
-  constructor(options: { delayMs?: number } = {}) {
+  /** Recording is opt-in: a long-running dev server must not retain every question and history. */
+  private readonly record: boolean
+
+  constructor(options: { delayMs?: number; record?: boolean } = {}) {
+    this.record = options.record ?? false
     this.delayMs = options.delayMs ?? 20
   }
 
@@ -190,7 +202,7 @@ export class FakeTutorProvider implements TutorProvider {
 
   async explain(input: ExplainInput, onDelta: (text: string) => void): Promise<ExplainResult> {
     const { signal, ...recorded } = input
-    this.calls.push(recorded)
+    if (this.record) this.calls.push(recorded)
     const { question } = input
     if (question.includes('[fake:error]')) throw new TutorProviderError('Fake provider error.')
 
@@ -233,7 +245,7 @@ export class FakeTutorProvider implements TutorProvider {
   }
 
   private buildGuideResult(input: GuideInput): StructuredResult {
-    this.guideCalls.push(input)
+    if (this.record) this.guideCalls.push(input)
     const userText = input.history
       .filter((turn) => turn.role === 'user')
       .map((turn) => turn.content)
@@ -242,14 +254,12 @@ export class FakeTutorProvider implements TutorProvider {
       throw new TutorProviderError('Fake provider error.')
 
     const key = JSON.stringify([input.topicName, input.history])
-    const attempt = (this.guideAttempts.get(key) ?? 0) + 1
-    this.guideAttempts.set(key, attempt)
+    const attempt = userText.includes(GUIDE_ONCE) ? bump(this.guideAttempts, key) : 0
 
     const guide = buildGuide(input.topicName, lastUserQuestion(input.history))
     const refuse = userText.includes('[fake:guide-refuse]')
     const invalid =
-      userText.includes('[fake:guide-invalid]') ||
-      (userText.includes('[fake:guide-invalid-once]') && attempt === 1)
+      userText.includes('[fake:guide-invalid]') || (userText.includes(GUIDE_ONCE) && attempt === 1)
     const output = refuse ? null : invalid ? { ...guide, steps: guide.steps.slice(0, 2) } : guide
     const inputChars = buildMessages({ ...input, question: '' }).reduce(
       (sum, turn) => sum + turn.content.length,
@@ -278,7 +288,7 @@ export class FakeTutorProvider implements TutorProvider {
   }
 
   private buildQuizResult(input: QuizInput): StructuredResult {
-    this.quizCalls.push(input)
+    if (this.record) this.quizCalls.push(input)
     const userText = (input.history ?? [])
       .filter((turn) => turn.role === 'user')
       .map((turn) => turn.content)
@@ -286,14 +296,12 @@ export class FakeTutorProvider implements TutorProvider {
     if (userText.includes('[fake:quiz-error]')) throw new TutorProviderError('Fake provider error.')
 
     const key = JSON.stringify([input.topicName, input.difficulty, input.history])
-    const attempt = (this.quizAttempts.get(key) ?? 0) + 1
-    this.quizAttempts.set(key, attempt)
+    const attempt = userText.includes(QUIZ_ONCE) ? bump(this.quizAttempts, key) : 0
 
     const quiz = buildQuiz(input.topicName, input.difficulty)
     const refuse = userText.includes('[fake:quiz-refuse]')
     const invalid =
-      userText.includes('[fake:quiz-invalid]') ||
-      (userText.includes('[fake:quiz-invalid-once]') && attempt === 1)
+      userText.includes('[fake:quiz-invalid]') || (userText.includes(QUIZ_ONCE) && attempt === 1)
     const [first, ...rest] = quiz.items
     const output = refuse
       ? null
