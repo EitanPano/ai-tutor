@@ -22,6 +22,31 @@ module.exports = {
       severity: 'error',
       from: {},
       to: { couldNotResolve: true }
+    },
+    {
+      name: 'cross-module-type-only',
+      comment:
+        'A module may depend on another module only through type-only imports; values are injected.',
+      severity: 'error',
+      from: { path: '^src/feature/([^/]+)/' },
+      to: { path: '^src/feature/', pathNot: '^src/feature/$1/', dependencyTypesNot: ['type-only'] }
+    },
+    {
+      name: 'module-public-api-only',
+      comment: "A module reaches another module only through that module's index[.]ts.",
+      severity: 'error',
+      from: { path: '^src/feature/([^/]+)/' },
+      to: {
+        path: '^src/feature/[^/]+/',
+        pathNot: ['^src/feature/$1/', '^src/feature/[^/]+/index[.]ts$']
+      }
+    },
+    {
+      name: 'root-uses-public-api',
+      comment: 'Top-level src files (app[.]ts, index[.]ts) reach modules only through index[.]ts.',
+      severity: 'error',
+      from: { path: '^src/[^/]+[.]ts$' },
+      to: { path: '^src/feature/[^/]+/', pathNot: '^src/feature/[^/]+/index[.]ts$' }
     }
   ],
   options: {
