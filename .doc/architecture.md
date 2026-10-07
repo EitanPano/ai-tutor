@@ -30,7 +30,7 @@
 | `progress` | none (read-only) | router only | — |
 | `health` | none | router only | — |
 
-Every module that has a router also receives `requireSession` from `user`.
+`thread`, `guide`, `quiz` and `progress` also receive `requireSession` from `user`; `topic` and `health` do not.
 
 Dependency order: `user`, `topic`, `ai` → `thread` → `guide`, `quiz`; `progress` and `health` are standalone.
 
