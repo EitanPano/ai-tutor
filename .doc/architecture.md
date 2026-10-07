@@ -32,9 +32,10 @@
 
 `thread`, `guide`, `quiz` and `progress` also receive `requireSession` from `user`; `topic` and `health` do not.
 
-Boot recovery of turns left in flight by a crash is not part of `ThreadApi` (it is a system-wide sweep, so guide and
-quiz must not hold it). `createThreadModule(...)` returns it separately as `recoverStale`, and `createApp` exposes it
-to `src/index.ts` and tests through `AppModules`.
+Boot recovery is not part of `ThreadApi` (it is a system-wide sweep, so guide and quiz must not hold it).
+`createThreadModule(...)` returns the turn sweep separately as `recoverStale`; `createApp` combines it with the `ai`
+module's `releaseAllLocks` into `recoverAtBoot()` and exposes that to `src/index.ts` and tests through `AppModules`
+(see Boot recovery).
 
 Dependency order: `user`, `topic`, `ai` → `thread` → `guide`, `quiz`; `progress` and `health` are standalone.
 
@@ -84,24 +85,31 @@ Browser ──► frontend/  Next.js 16 (App Router, client-side data fetching)
 
 SSE ask flow (`POST /api/thread/:id/message`):
 1. Validate the question (1–20,000 characters).
-2. Check the user's daily token budget.
-3. Take the per-user generation lock.
+2. Check the AI kill switch (first, at the route, before body validation; the guide and quiz routes do the same).
+3. Check the user's daily token budget, then the global daily cap, then take the per-user generation lock
+   (`AiApi.withGenerationLock`, shared with guide and quiz; ask holds the lock itself because it outlives the request).
 4. Save the user message.
-5. Stream the answer: `message.start`, then `delta` events, then either `message.complete` or `error`.
+5. Stream the answer: `message.start`, then `delta` events, then either `message.complete` or `error`. The history
+   sent to the model is capped at 64,000 characters, newest turns kept.
 6. Save the assistant message and the `ai_call` row.
 7. If the client disconnects, abort the upstream call and save the partial answer as `incomplete`.
 
 - A heartbeat is sent every 15 s, and the response sets `X-Accel-Buffering: no`.
+- The upstream explain stream has a deadline: 45 s without a chunk (idle) or 180 s in total ends the call with an `error`
+  event (the turn is saved as `failed`) (`backend/src/lib/tutor/anthropic.provider.ts`).
 - The client reads the stream with `fetch` + `ReadableStream`, because `EventSource` can't send a POST.
 
 ## Auth
 - Email + password, hashed with argon2id.
 - Server-side sessions in table `session`, stored as the SHA-256 of a 256-bit random token.
-- Cookie `sid`: HttpOnly, SameSite=Lax, Secure in production, 30-day sliding expiry, rotated on login.
+- Cookie `sid`: HttpOnly, SameSite=Lax, Secure in production or whenever `FRONTEND_URL` is https, 30-day sliding expiry, rotated on login.
 - CSRF: state-changing requests whose `Origin` isn't `FRONTEND_URL` are rejected with 403.
 - `requireSession` middleware guards protected routes.
 - One ownership helper scopes every tenant query by `user_id`. Another user's resource returns 404, not 403.
-- Login is limited to 5/min per IP + email (429).
+- Login is limited to 5/min per IP + email (429), and to `LOGIN_IP_RATE_LIMIT` (default 30) per 15 min per IP across
+  all emails. Sign-up is limited to `SIGNUP_RATE_LIMIT` (default 10) per hour per IP. IPv6 counts per /64.
+- `TRUST_PROXY` is the number of reverse proxies in front of the backend (default 0: `X-Forwarded-For` is ignored).
+  Behind a proxy set the hop count, or every client shares one IP and one limit.
 - CORS: only `FRONTEND_URL` is allowed, with credentials. No wildcard origin is ever sent.
 
 ## External Dependencies
@@ -113,8 +121,20 @@ SSE ask flow (`POST /api/thread/:id/message`):
 - pino structured logs with redaction: never message content, passwords, tokens, cookies or keys.
 - `GET /health` is liveness; `GET /ready` checks the database.
 - `ai_call` ledger: tokens, cache reads, stop reason, refusal category, latency.
-- Daily token budget per user, and one generation in flight per user.
-- `AI_ENABLED=false` is the kill switch (503 `ai_unavailable`).
+- Budgets, checked before every generation:
+  - Per-user daily budget (`AI_DAILY_TOKEN_BUDGET`, 429 `ai_budget_exceeded`), counted per day in the user's time
+    zone. The time zone can change once per 24 h (409 `time_zone_recently_changed`, `app_user.time_zone_changed_at`),
+    so it cannot be moved to reset the budget.
+  - Global budget (`AI_GLOBAL_DAILY_TOKEN_BUDGET`): all users together since UTC midnight; reached: 503 `ai_unavailable`.
+  - One generation in flight per user.
+- `AI_ENABLED=false` is the kill switch (503 `ai_unavailable`), checked first at the route for ask, guide and quiz.
+- Boot recovery: before listening, `recoverAtBoot()` (`backend/src/app.ts`, awaited in `backend/src/index.ts`) fails
+  every unfinished turn created before boot and clears every generation lock. It assumes a single backend instance:
+  with two, one booting would fail the other's live turns. `RECOVER_STALE_ON_BOOT=false` skips it (the e2e stack).
+  Recovery past the 600 s lock TTL still runs lazily on ask and thread view, probing a partial index
+  (migration 010) first so the common case stays cheap.
+- Database pool timeouts (`backend/src/lib/db/index.ts`): connect 5 s, statement 15 s (the CLI opts out),
+  idle-in-transaction 30 s. A failure to get a connection answers 503 `db_unavailable`.
 - API headers: `helmet` defaults, with `Cross-Origin-Resource-Policy: same-site` (frontend :3000 and API :4000 are same-site).
 - Frontend headers: a per-request-nonce CSP set in `frontend/src/proxy.ts` (`script-src` `self` + nonce + `strict-dynamic`,
   `connect-src` limited to self and the API origin, `frame-ancestors` none, no `wasm-unsafe-eval`: Shiki uses its JavaScript
@@ -122,9 +142,14 @@ SSE ask flow (`POST /api/thread/:id/message`):
   Every page renders per request (the root layout awaits `connection()`) so the nonce can be applied.
 - `bun run check:bundle` fails if `sk-ant` or `ANTHROPIC` appears anywhere in `frontend/.next` (AC12).
 - Practice Docker images and a `full` compose profile exist (see the README); nothing deploys them.
+- CI (`.github/workflows/ci.yml`) runs on push to `main` and on pull requests, with install and Playwright caches
+  and e2e traces kept on failure. `check:bundle` needs a production build and scans it for canary key values injected
+  at build time. A parallel `image` job builds the backend and both Docker images.
+- Test databases are per checkout (a suffix from the hash of the checkout path), so two clones never reset each other's.
 - Local only — there is no hosted environment (plan 001, Q11).
 
 ## Change Log
+- 2026-10-07 — Review hardening (plan 003): boot recovery, stream deadline, DB timeouts, AI cost controls, per-IP limits, CI on main.
 - 2026-10-07 — Backend restructured into feature modules with explicit dependency injection (plan 002).
 - 2026-10-07 — P6 hardening: CORS rule, API and frontend security headers, CSP, bundle secret check.
 - 2026-10-06 — Initial architecture for plan 001 (AI Tutor MVP).

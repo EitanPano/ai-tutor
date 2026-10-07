@@ -84,12 +84,15 @@ default: answers are canned, deterministic and cost nothing.
 |---|---|
 | `bun run typecheck` | `tsc` in both workspaces |
 | `bun run lint` | ESLint + Prettier check |
-| `bun run test` | Backend (real per-checkout test DB) and frontend unit suites, run sequentially |
-| `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and a per-checkout DB |
+| `bun run test` | Backend (real test DB, named per checkout: `ai_tutor_test_<hash of the checkout path>`) and frontend unit suites, run sequentially |
+| `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and a per-checkout DB (same suffix rule) |
 | `bun run gen:api` | Regenerates `frontend/src/types/api.ts` from `.orchestrate/api-contract.yaml` |
-| `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in `frontend/.next` (run `bun run --filter frontend build` first) |
+| `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in `frontend/.next` (run `bun run --filter frontend build` first; CI builds with canary key values so the check can really fail) |
 
 Use `bun run test`, never `bun test`.
+
+CI (`.github/workflows/ci.yml`) runs the same gates on pushes to `main` and on pull requests, then builds the backend, runs e2e (traces are kept as an artifact
+on failure), and builds both Docker images in a parallel `image` job.
 
 ### Full stack in Docker (practice only, nothing deploys it)
 
@@ -122,7 +125,14 @@ container id, so compose sets `HOSTNAME=0.0.0.0` at run time; a plain `docker ru
 - **Kill switch:** `AI_ENABLED=false` makes the AI routes return 503 `ai_unavailable`; history and progress keep
   working. `AI_PROVIDER=fake` stops all spend at once (not allowed in production).
 - **Daily budget:** `AI_DAILY_TOKEN_BUDGET` caps tokens per user per day (default 50000 with `AI_PROVIDER=anthropic`, 1000000 with the free fake provider); `AI_GLOBAL_DAILY_TOKEN_BUDGET` caps all users together per UTC day (default 500000 with anthropic; reached: 503 `ai_unavailable`); one generation runs per user
-  at a time.
+  at a time. A user can change their time zone once per 24 h (409 `time_zone_recently_changed`), so the budget day cannot be moved to reset it.
+- **Rate limits:** sign-up `SIGNUP_RATE_LIMIT` per hour per IP (default 10), login `LOGIN_IP_RATE_LIMIT` per 15 minutes per IP (default 30) beside
+  5 per minute per IP + email. `TRUST_PROXY` is the number of reverse proxies in front of the API (default 0: `X-Forwarded-For` is ignored); behind one,
+  set the hop count or every client shares a single IP.
+- **Boot recovery:** before listening, the backend fails every unfinished turn and clears every generation lock left by a previous run
+  (it assumes one instance; `RECOVER_STALE_ON_BOOT=false` skips it). Database calls time out after 5 s to connect and 15 s per statement; an
+  explain stream is cut after 45 s of silence or 180 s in total.
+- **Migrations 008-010:** `app_user.time_zone_changed_at` (the time zone change limit), an `ai_call(created_at)` index for the global cap sum, and a partial index on in-flight `message` rows for turn recovery. Each has a tested `down`.
 - **Time zones (migration 007):** it normalises stored `app_user.time_zone` values to Postgres spellings (for example
   `Asia/Calcutta` becomes `Asia/Kolkata`) and resets unknown or offset-style values (such as `+01:00`) to `UTC`. Its
   down migration is a no-op, so a rollback does not restore the old values.
