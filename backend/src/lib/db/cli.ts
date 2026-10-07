@@ -10,7 +10,7 @@ const log = (message: string) => console.log(message)
 async function main(): Promise<void> {
   const command = process.argv[2]
   const config = loadDbConfig()
-  const { db, pool } = createDb(config.databaseUrl)
+  const { db, pool } = createDb(config.databaseUrl, undefined, { statementTimeoutMs: null })
   try {
     switch (command) {
       case 'ensure-db':

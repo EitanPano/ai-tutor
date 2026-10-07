@@ -5,15 +5,36 @@ import type { Database } from './schema.js'
 
 export type Db = Kysely<Database>
 
+// A paused or unreachable Postgres must fail a request, not hang it.
+const CONNECTION_TIMEOUT_MS = 5_000
+// A slow query gives up instead of holding one of the 10 pooled connections.
+const STATEMENT_TIMEOUT_MS = 15_000
+// A transaction left open by a stuck request is ended by the server and frees its locks.
+const IDLE_IN_TRANSACTION_TIMEOUT_MS = 30_000
+
+export type CreateDbOptions = {
+  /** `null` disables the statement timeout (operator CLI: a migration may run long). */
+  statementTimeoutMs?: number | null
+}
+
 /**
  * `logger` receives idle-client errors (e.g. after a Postgres restart). Without a listener
  * pg's pool re-emits them as uncaught exceptions and the process dies.
  */
 export function createDb(
   databaseUrl: string,
-  logger?: Pick<Logger, 'error'>
+  logger?: Pick<Logger, 'error'>,
+  options: CreateDbOptions = {}
 ): { db: Db; pool: pg.Pool } {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 10 })
+  const statementTimeoutMs =
+    options.statementTimeoutMs === undefined ? STATEMENT_TIMEOUT_MS : options.statementTimeoutMs
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 10,
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+    idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
+    ...(statementTimeoutMs === null ? {} : { statement_timeout: statementTimeoutMs })
+  })
   pool.on('error', (err) => {
     if (logger) logger.error({ err }, 'idle database client error')
     else console.error(`idle database client error: ${err.message}`)
