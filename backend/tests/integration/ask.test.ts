@@ -724,8 +724,7 @@ describe('validation and gates (AC11)', () => {
 })
 
 describe('AI switch order', () => {
-  // The kill switch is checked once, in the service, after the route validates the body.
-  it('answers 400 for an invalid body when AI_ENABLED=false', async () => {
+  it('answers 503 ai_unavailable, not 400, for an invalid body when AI_ENABLED=false', async () => {
     const off = createTestApp({ config: { aiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
@@ -737,9 +736,9 @@ describe('AI switch order', () => {
         .post(`/api/thread/${thread.thread.id}/message`)
         .set('Cookie', cookie)
         .send({ content: 42 })
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(503)
       expectContract(res, 'post', '/api/thread/{id}/message')
-      expect((res.body as ErrorBody).error.code).toBe('validation_failed')
+      expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
     } finally {
       await off.close()
     }

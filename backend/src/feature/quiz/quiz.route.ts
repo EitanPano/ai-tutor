@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import { pathParam } from '../../lib/validation.js'
+import type { AiApi } from '../ai/index.js'
 import type { CreateQuizInput, QuizService } from './quiz.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
@@ -7,11 +8,13 @@ import { createQuizSchema, submitAttemptSchema } from './quiz.schema.js'
 
 export function quizRouter(
   service: QuizService,
-  { requireSession }: { requireSession: RequestHandler }
+  { requireSession, ai }: { requireSession: RequestHandler; ai: AiApi }
 ): Router {
   const router = Router()
 
   router.post('/api/quiz', requireSession, async (req, res) => {
+    // The AI switch is the first check, before the body is looked at.
+    ai.assertEnabled()
     const input: CreateQuizInput = createQuizSchema.parse(req.body)
     const quiz = await service.create(getAuth(req), input)
     res.status(201).json({ quiz })

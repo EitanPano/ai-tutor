@@ -327,6 +327,23 @@ describe('guards', () => {
     }
   })
 
+  it('answers 503 ai_unavailable, not 400, for an invalid body when AI is disabled', async () => {
+    const off = createTestApp({ config: { aiEnabled: false } })
+    try {
+      const offClient = createClient(off.app, off.config)
+      const { cookie } = await signUp(offClient)
+      const res = await offClient
+        .post('/api/thread/any-id/guide')
+        .set('Cookie', cookie)
+        .send({ unexpected: 42 })
+      expect(res.status).toBe(503)
+      expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+      expect(off.tutor.guideCalls).toHaveLength(0)
+    } finally {
+      await off.close()
+    }
+  })
+
   it('answers 400 validation_failed on an empty or unknown PATCH body', async () => {
     const { session, threadId } = await setup()
     const guide = await createdGuide(session, threadId)

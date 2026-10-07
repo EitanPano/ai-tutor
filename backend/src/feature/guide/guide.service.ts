@@ -127,7 +127,6 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
   const { db, tutor, ai } = deps
   return {
     async create(auth, threadId) {
-      ai.assertEnabled()
       const thread = await deps.thread.require(auth, threadId)
       await deps.thread.assertHasAnswer(auth, thread.id)
       const topic = await deps.topic.require(thread.topicId)

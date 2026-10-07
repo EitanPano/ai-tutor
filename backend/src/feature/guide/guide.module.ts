@@ -7,5 +7,5 @@ export type GuideModuleDeps = GuideServiceDeps & { requireSession: RequestHandle
 export function createGuideModule(deps: GuideModuleDeps): { router: Router } {
   const { requireSession, ...serviceDeps } = deps
   const service = createGuideService(serviceDeps)
-  return { router: guideRouter(service, { requireSession }) }
+  return { router: guideRouter(service, { requireSession, ai: deps.ai }) }
 }

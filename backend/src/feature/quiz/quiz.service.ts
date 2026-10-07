@@ -242,7 +242,6 @@ export function createQuizService(deps: QuizServiceDeps): QuizService {
   return {
     async create(auth, input) {
       const { tutor, ai } = deps
-      ai.assertEnabled()
       const difficulty = input.difficulty ?? DEFAULT_DIFFICULTY
       let threadId: string | null = null
       let topic: { id: string; name: string }

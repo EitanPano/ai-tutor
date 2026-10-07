@@ -21,7 +21,7 @@ export type AiApi = {
   /**
    * Runs `fn` under the generation lock: the budget check (429 `ai_budget_exceeded`, then the global
    * cap 503 `ai_unavailable`), then the lock (409 `generation_in_progress`), and always releases it.
-   * Callers do the kill switch and their own lookups first. Use it for any generation that finishes
+   * The routes check the kill switch first (before body validation); callers do their own lookups before this. Use it for any generation that finishes
    * inside the request; one whose lock outlives the request holds `acquireLock` itself.
    */
   withGenerationLock<T>(auth: Auth, fn: () => Promise<T>): Promise<T>

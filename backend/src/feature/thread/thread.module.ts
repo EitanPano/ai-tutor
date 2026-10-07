@@ -49,6 +49,6 @@ export function createThreadModule(deps: ThreadModuleDeps): {
   }
   const router = Router()
   router.use(threadRouter(thread, { requireSession }))
-  router.use(messageRouter(message, { requireSession, tutor, logger, inFlight }))
+  router.use(messageRouter(message, { requireSession, ai, tutor, logger, inFlight }))
   return { api, router, recoverStale: () => recoverStaleTurn(db, sql<Date>`now()`) }
 }
