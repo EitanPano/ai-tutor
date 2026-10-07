@@ -15,7 +15,7 @@ import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './feature/guide/index.js'
 import { healthRouter } from './feature/health/index.js'
 import { progressRouter } from './feature/progress/index.js'
-import { quizRouter } from './feature/quiz/index.js'
+import { createQuizModule } from './feature/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
 import { createAiModule, type AiApi } from './feature/ai/index.js'
 import { createTopicModule, type TopicApi } from './feature/topic/index.js'
@@ -71,6 +71,14 @@ export function createApp({
     ai: ai.api,
     thread: thread.api
   })
+  const quiz = createQuizModule({
+    db,
+    tutor: provider,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api,
+    thread: thread.api
+  })
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(
@@ -100,7 +108,7 @@ export function createApp({
   app.use(topic.router)
   app.use(thread.router)
   app.use(guide.router)
-  app.use(quizRouter(db, user.requireSession, provider, topic.api, ai.api, thread.api))
+  app.use(quiz.router)
   app.use(progressRouter(db, user.requireSession))
   extraRoutes?.(app)
   app.use(notFoundHandler)

@@ -9,9 +9,10 @@ import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
-export const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
+const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
 
-export type QuizDeps = {
+export type QuizServiceDeps = {
+  db: Db
   tutor: TutorProvider
   topic: TopicApi
   ai: AiApi
@@ -109,45 +110,25 @@ function toQuizDto(
   }
 }
 
-/**
- * Generates a quiz from a thread or from a topic. The provider call, its retry and the `ai_call`
- * rows live in `generateValidated`; the generation lock is always released here. The AI switch
- * is checked first, before anything else.
- */
-export async function createQuiz(
-  db: Db,
-  auth: Auth,
-  deps: QuizDeps,
-  input: CreateQuizInput
-): Promise<QuizDto> {
-  const { tutor, ai } = deps
-  ai.assertEnabled()
-  const difficulty = input.difficulty ?? DEFAULT_DIFFICULTY
-  let threadId: string | null = null
-  let topic: { id: string; name: string }
-  if ('threadId' in input) {
-    const thread = await deps.thread.require(auth, input.threadId)
-    await deps.thread.assertHasAnswer(auth, thread.id)
-    threadId = thread.id
-    topic = await deps.topic.require(thread.topicId)
-  } else {
-    topic = await deps.topic.require(input.topicId)
-  }
-  await ai.assertWithinBudget(auth)
-  const lockToken = await ai.acquireLock(auth)
-  try {
-    const history = threadId === null ? null : await deps.thread.history(auth, threadId)
-    const draft = await ai.generateValidated(auth, {
-      kind: 'quiz',
-      schema: QuizDraftSchema,
-      call: () => tutor.generateQuiz({ topicName: topic.name, difficulty, history }),
-      model: tutor.model,
-      logContext: { topicId: topic.id }
-    })
-    return await saveQuiz(db, auth, { threadId, topicId: topic.id, difficulty, draft })
-  } finally {
-    await ai.releaseLock(auth, lockToken)
-  }
+export type QuizService = {
+  /**
+   * Generates a quiz from a thread or from a topic. The provider call, its retry and the `ai_call`
+   * rows live in `generateValidated`; the generation lock is always released here. The AI switch
+   * is checked first, before anything else.
+   */
+  create(auth: Auth, input: CreateQuizInput): Promise<QuizDto>
+  get(auth: Auth, id: string): Promise<QuizDto>
+  /**
+   * Grades an attempt on the server. The answered item ids must equal the quiz's item ids, each
+   * exactly once; otherwise 422 `attempt_incomplete` lists what is missing, duplicated or unknown.
+   */
+  submitAttempt(
+    auth: Auth,
+    quizId: string,
+    input: { answers: { itemId: string; choiceIndex: number }[] }
+  ): Promise<AttemptDto>
+  /** The attempt must belong to this quiz and to the user (and the quiz must be visible). */
+  getAttempt(auth: Auth, quizId: string, attemptId: string): Promise<AttemptDto>
 }
 
 async function saveQuiz(
@@ -205,26 +186,6 @@ async function requireQuiz(db: Db, auth: Auth, id: string): Promise<QuizRow> {
   return requireFound(row)
 }
 
-export async function getQuiz(db: Db, auth: Auth, id: string): Promise<QuizDto> {
-  const quiz = await requireQuiz(db, auth, id)
-  const items = await db
-    .selectFrom('quiz_item')
-    .select([...TAKER_ITEM_COLUMNS])
-    .where('quiz_id', '=', quiz.id)
-    .where(ownedBy('quiz_item', auth))
-    .orderBy('position')
-    .execute()
-  const attempts = await db
-    .selectFrom('quiz_attempt')
-    .select(['id', 'score', 'total', 'submitted_at'])
-    .where('quiz_id', '=', quiz.id)
-    .where(ownedBy('quiz_attempt', auth))
-    .orderBy('submitted_at', 'desc')
-    .orderBy('id', 'desc')
-    .execute()
-  return toQuizDto(quiz, items, attempts)
-}
-
 type KeyedItem = {
   id: string
   position: number
@@ -276,67 +237,105 @@ function toAttemptDto(
   }
 }
 
-/**
- * Grades an attempt on the server. The answered item ids must equal the quiz's item ids, each
- * exactly once; otherwise 422 `attempt_incomplete` lists what is missing, duplicated or unknown.
- */
-export async function submitAttempt(
-  db: Db,
-  auth: Auth,
-  quizId: string,
-  input: { answers: { itemId: string; choiceIndex: number }[] }
-): Promise<AttemptDto> {
-  const quiz = await requireQuiz(db, auth, quizId)
-  const items = await loadKeyedItems(db, auth, quiz.id)
-  const itemIds = new Set(items.map((item) => item.id))
-  const seen = new Set<string>()
-  const duplicateItemIds: string[] = []
-  const unknownItemIds: string[] = []
-  for (const { itemId } of input.answers) {
-    if (!itemIds.has(itemId)) unknownItemIds.push(itemId)
-    else if (seen.has(itemId)) duplicateItemIds.push(itemId)
-    else seen.add(itemId)
+export function createQuizService(deps: QuizServiceDeps): QuizService {
+  const { db } = deps
+  return {
+    async create(auth, input) {
+      const { tutor, ai } = deps
+      ai.assertEnabled()
+      const difficulty = input.difficulty ?? DEFAULT_DIFFICULTY
+      let threadId: string | null = null
+      let topic: { id: string; name: string }
+      if ('threadId' in input) {
+        const thread = await deps.thread.require(auth, input.threadId)
+        await deps.thread.assertHasAnswer(auth, thread.id)
+        threadId = thread.id
+        topic = await deps.topic.require(thread.topicId)
+      } else {
+        topic = await deps.topic.require(input.topicId)
+      }
+      await ai.assertWithinBudget(auth)
+      const lockToken = await ai.acquireLock(auth)
+      try {
+        const history = threadId === null ? null : await deps.thread.history(auth, threadId)
+        const draft = await ai.generateValidated(auth, {
+          kind: 'quiz',
+          schema: QuizDraftSchema,
+          call: () => tutor.generateQuiz({ topicName: topic.name, difficulty, history }),
+          model: tutor.model,
+          logContext: { topicId: topic.id }
+        })
+        return await saveQuiz(db, auth, { threadId, topicId: topic.id, difficulty, draft })
+      } finally {
+        await ai.releaseLock(auth, lockToken)
+      }
+    },
+    async get(auth, id) {
+      const quiz = await requireQuiz(db, auth, id)
+      const items = await db
+        .selectFrom('quiz_item')
+        .select([...TAKER_ITEM_COLUMNS])
+        .where('quiz_id', '=', quiz.id)
+        .where(ownedBy('quiz_item', auth))
+        .orderBy('position')
+        .execute()
+      const attempts = await db
+        .selectFrom('quiz_attempt')
+        .select(['id', 'score', 'total', 'submitted_at'])
+        .where('quiz_id', '=', quiz.id)
+        .where(ownedBy('quiz_attempt', auth))
+        .orderBy('submitted_at', 'desc')
+        .orderBy('id', 'desc')
+        .execute()
+      return toQuizDto(quiz, items, attempts)
+    },
+    async submitAttempt(auth, quizId, input) {
+      const quiz = await requireQuiz(db, auth, quizId)
+      const items = await loadKeyedItems(db, auth, quiz.id)
+      const itemIds = new Set(items.map((item) => item.id))
+      const seen = new Set<string>()
+      const duplicateItemIds: string[] = []
+      const unknownItemIds: string[] = []
+      for (const { itemId } of input.answers) {
+        if (!itemIds.has(itemId)) unknownItemIds.push(itemId)
+        else if (seen.has(itemId)) duplicateItemIds.push(itemId)
+        else seen.add(itemId)
+      }
+      const missingItemIds = items.filter((item) => !seen.has(item.id)).map((item) => item.id)
+      if (missingItemIds.length > 0 || duplicateItemIds.length > 0 || unknownItemIds.length > 0) {
+        throw unprocessable('attempt_incomplete', 'Answer every quiz item exactly once.', {
+          missingItemIds,
+          ...(duplicateItemIds.length > 0 ? { duplicateItemIds } : {}),
+          ...(unknownItemIds.length > 0 ? { unknownItemIds } : {})
+        })
+      }
+      const chosen = new Map(input.answers.map((entry) => [entry.itemId, entry.choiceIndex]))
+      const score = items.filter((item) => chosen.get(item.id) === item.answer_index).length
+      const attempt = await db
+        .insertInto('quiz_attempt')
+        .values({
+          quiz_id: quiz.id,
+          user_id: auth.userId,
+          answer: JSON.stringify(input.answers),
+          score,
+          total: items.length
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+      return toAttemptDto(attempt, items)
+    },
+    async getAttempt(auth, quizId, attemptId) {
+      const quiz = await requireQuiz(db, auth, quizId)
+      const attempt = requireFound(
+        await db
+          .selectFrom('quiz_attempt')
+          .selectAll()
+          .where('id', '=', attemptId)
+          .where('quiz_id', '=', quiz.id)
+          .where(ownedBy('quiz_attempt', auth))
+          .executeTakeFirst()
+      )
+      return toAttemptDto(attempt, await loadKeyedItems(db, auth, quiz.id))
+    }
   }
-  const missingItemIds = items.filter((item) => !seen.has(item.id)).map((item) => item.id)
-  if (missingItemIds.length > 0 || duplicateItemIds.length > 0 || unknownItemIds.length > 0) {
-    throw unprocessable('attempt_incomplete', 'Answer every quiz item exactly once.', {
-      missingItemIds,
-      ...(duplicateItemIds.length > 0 ? { duplicateItemIds } : {}),
-      ...(unknownItemIds.length > 0 ? { unknownItemIds } : {})
-    })
-  }
-  const chosen = new Map(input.answers.map((entry) => [entry.itemId, entry.choiceIndex]))
-  const score = items.filter((item) => chosen.get(item.id) === item.answer_index).length
-  const attempt = await db
-    .insertInto('quiz_attempt')
-    .values({
-      quiz_id: quiz.id,
-      user_id: auth.userId,
-      answer: JSON.stringify(input.answers),
-      score,
-      total: items.length
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow()
-  return toAttemptDto(attempt, items)
-}
-
-/** The attempt must belong to this quiz and to the user (and the quiz must be visible). */
-export async function getAttempt(
-  db: Db,
-  auth: Auth,
-  quizId: string,
-  attemptId: string
-): Promise<AttemptDto> {
-  const quiz = await requireQuiz(db, auth, quizId)
-  const attempt = requireFound(
-    await db
-      .selectFrom('quiz_attempt')
-      .selectAll()
-      .where('id', '=', attemptId)
-      .where('quiz_id', '=', quiz.id)
-      .where(ownedBy('quiz_attempt', auth))
-      .executeTakeFirst()
-  )
-  return toAttemptDto(attempt, await loadKeyedItems(db, auth, quiz.id))
 }
