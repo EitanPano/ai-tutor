@@ -1,3 +1,5 @@
+import { Agent, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import type { Express } from 'express'
 import request from 'supertest'
 import type { Config } from '../../src/lib/config.js'
@@ -13,6 +15,46 @@ export type UserBody = {
   createdAt: string
 }
 
+// One listening server and one keep-alive agent per app, shared by every request of a test file.
+// `request(app)` listens, connects and closes once per request: thousands of short-lived loopback
+// connections per run. On Node 24.15 for Windows that churn aborts the process natively
+// (exit 127 / 0xC0000409, no message) in about one full run in four; Node 22.14 never does. With
+// a persistent server and keep-alive, a file opens a handful of connections instead.
+const shared = new Map<Express, { server: Server; url: string; agent: Agent }>()
+
+function sharedFor(app: Express) {
+  const known = shared.get(app)
+  if (known) return known
+  // No host: a host-less listen binds synchronously, so the port is known right away.
+  const server = app.listen(0)
+  server.unref()
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  const entry = { server, url, agent: new Agent({ keepAlive: true }) }
+  shared.set(app, entry)
+  return entry
+}
+
+/** Supertest bound to the shared server of `app`. Use it instead of `request(app)`. */
+export function http(app: Express) {
+  const { url, agent } = sharedFor(app)
+  return {
+    get: (path: string) => request(url).get(path).agent(agent),
+    post: (path: string) => request(url).post(path).agent(agent),
+    patch: (path: string) => request(url).patch(path).agent(agent),
+    delete: (path: string) => request(url).delete(path).agent(agent)
+  }
+}
+
+/** Closes the shared server and keep-alive connections of `app`. Safe to call twice. */
+export async function stopServer(app: Express): Promise<void> {
+  const known = shared.get(app)
+  if (!known) return
+  shared.delete(app)
+  known.agent.destroy()
+  known.server.closeAllConnections()
+  await new Promise<void>((resolve) => known.server.close(() => resolve()))
+}
+
 export type Client = {
   get: (path: string) => Test
   post: (path: string) => Test
@@ -24,10 +66,10 @@ export type Client = {
 export function createClient(app: Express, config: Pick<Config, 'frontendUrl'>): Client {
   const origin = (test: Test) => test.set('Origin', config.frontendUrl)
   return {
-    get: (path) => request(app).get(path),
-    post: (path) => origin(request(app).post(path)),
-    patch: (path) => origin(request(app).patch(path)),
-    delete: (path) => origin(request(app).delete(path))
+    get: (path) => http(app).get(path),
+    post: (path) => origin(http(app).post(path)),
+    patch: (path) => origin(http(app).patch(path)),
+    delete: (path) => origin(http(app).delete(path))
   }
 }
 

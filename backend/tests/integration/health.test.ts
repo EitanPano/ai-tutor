@@ -1,8 +1,8 @@
-import request from 'supertest'
 import { z } from 'zod'
 import { AppError } from '../../src/lib/error.js'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createTestApp } from '../helper/app.js'
+import { http } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
 
 const ctx = createTestApp()
@@ -21,7 +21,7 @@ const errors = createTestApp({
   }
 })
 const unreachable = createTestApp({
-  databaseUrl: 'postgres://ai_tutor:ai_tutor@localhost:1/ai_tutor_test'
+  databaseUrl: 'postgres://ai_tutor:ai_tutor@127.0.0.1:1/ai_tutor_test'
 })
 
 afterAll(async () => {
@@ -32,27 +32,27 @@ afterAll(async () => {
 
 describe('GET /health', () => {
   it('returns 200 ok', async () => {
-    const res = await request(ctx.app).get('/health')
+    const res = await http(ctx.app).get('/health')
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ status: 'ok' })
     expectContract(res, 'get', '/health')
   })
 
   it('does not advertise the framework', async () => {
-    const res = await request(ctx.app).get('/health')
+    const res = await http(ctx.app).get('/health')
     expect(res.headers['x-powered-by']).toBeUndefined()
   })
 })
 
 describe('GET /ready', () => {
   it('returns 200 ready when the database is reachable', async () => {
-    const res = await request(ctx.app).get('/ready')
+    const res = await http(ctx.app).get('/ready')
     expect(res.status).toBe(200)
     expectContract(res, 'get', '/ready')
   })
 
   it('returns 503 db_unavailable when the database is unreachable', async () => {
-    const res = await request(unreachable.app).get('/ready')
+    const res = await http(unreachable.app).get('/ready')
     expect(res.status).toBe(503)
     expect((res.body as { error: { code: string } }).error.code).toBe('db_unavailable')
     expectContract(res, 'get', '/ready')
@@ -66,7 +66,7 @@ describe('error handling', () => {
   }
 
   it('returns the standard 404 shape with a requestId for unknown routes', async () => {
-    const res = await request(ctx.app).get('/nope')
+    const res = await http(ctx.app).get('/nope')
     expect(res.status).toBe(404)
     const body = res.body as ErrorBody
     expect(body.error).toEqual({ code: 'not_found', message: 'Not found.' })
@@ -75,7 +75,7 @@ describe('error handling', () => {
   })
 
   it('maps AppError to its status, code, message and details', async () => {
-    const res = await request(errors.app).get('/boom/app').set('X-Request-Id', 'req-app')
+    const res = await http(errors.app).get('/boom/app').set('X-Request-Id', 'req-app')
     expect(res.status).toBe(409)
     expect(res.body).toEqual({
       error: { code: 'thread_busy', message: 'Thread is busy.', details: { threadId: 't1' } },
@@ -85,7 +85,7 @@ describe('error handling', () => {
   })
 
   it('maps ZodError to 400 validation_failed with issues', async () => {
-    const res = await request(errors.app).get('/boom/zod').set('X-Request-Id', 'req-zod')
+    const res = await http(errors.app).get('/boom/zod').set('X-Request-Id', 'req-zod')
     expect(res.status).toBe(400)
     const body = res.body as ErrorBody
     expect(body.error.code).toBe('validation_failed')
@@ -98,7 +98,7 @@ describe('error handling', () => {
   })
 
   it('maps unexpected errors to a generic 500 without leaking internals', async () => {
-    const res = await request(errors.app).get('/boom/plain').set('X-Request-Id', 'req-500')
+    const res = await http(errors.app).get('/boom/plain').set('X-Request-Id', 'req-500')
     expect(res.status).toBe(500)
     expect(res.body).toEqual({
       error: { code: 'internal_error', message: 'Something went wrong on our side. Try again.' },
@@ -111,7 +111,7 @@ describe('error handling', () => {
   })
 
   it('returns 400 malformed_json for a broken JSON body', async () => {
-    const res = await request(ctx.app)
+    const res = await http(ctx.app)
       .post('/health')
       .set('Content-Type', 'application/json')
       .send('{"broken":')
@@ -126,7 +126,7 @@ describe('error handling', () => {
   })
 
   it('returns 413 payload_too_large for an oversized body', async () => {
-    const res = await request(ctx.app)
+    const res = await http(ctx.app)
       .post('/health')
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ text: 'x'.repeat(300 * 1024) }))
@@ -141,7 +141,7 @@ describe('error handling', () => {
   })
 
   it('maps other body-parser client errors by status (415 for an unsupported charset)', async () => {
-    const res = await request(ctx.app)
+    const res = await http(ctx.app)
       .post('/health')
       .set('Content-Type', 'application/json; charset=iso-8859-1')
       .send('{}')
@@ -153,7 +153,7 @@ describe('error handling', () => {
   })
 
   it('maps a body that fails to decode to 400 bad_request', async () => {
-    const res = await request(ctx.app)
+    const res = await http(ctx.app)
       .post('/health')
       .set('Content-Type', 'application/json')
       .set('Content-Encoding', 'gzip')
@@ -166,7 +166,7 @@ describe('error handling', () => {
   })
 
   it('maps an unsupported Content-Encoding to 415', async () => {
-    const res = await request(ctx.app)
+    const res = await http(ctx.app)
       .post('/health')
       .set('Content-Type', 'application/json')
       .set('Content-Encoding', 'bogus')
@@ -178,12 +178,12 @@ describe('error handling', () => {
 
 describe('request id', () => {
   it('echoes a sane incoming X-Request-Id', async () => {
-    const res = await request(ctx.app).get('/health').set('X-Request-Id', 'abc-123')
+    const res = await http(ctx.app).get('/health').set('X-Request-Id', 'abc-123')
     expect(res.headers['x-request-id']).toBe('abc-123')
   })
 
   it('replaces an unsafe X-Request-Id with a generated one', async () => {
-    const res = await request(ctx.app).get('/health').set('X-Request-Id', 'bad id with spaces')
+    const res = await http(ctx.app).get('/health').set('X-Request-Id', 'bad id with spaces')
     expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/)
   })
 })

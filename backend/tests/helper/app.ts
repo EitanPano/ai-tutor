@@ -1,5 +1,6 @@
 import type { Express } from 'express'
 import { sql } from 'kysely'
+import { stopServer } from './client.js'
 import { createApp } from '../../src/app.js'
 import { loadConfig, type Config } from '../../src/lib/config.js'
 import { createDb, type Db } from '../../src/lib/db/index.js'
@@ -35,7 +36,16 @@ export function createTestApp(
     tutor,
     ...(overrides.extraRoutes ? { extraRoutes: overrides.extraRoutes } : {})
   })
-  return { app, config, db, tutor, close: () => db.destroy() }
+  return {
+    app,
+    config,
+    db,
+    tutor,
+    close: async () => {
+      await stopServer(app)
+      await db.destroy()
+    }
+  }
 }
 
 /** Empties every table except `schema_migration` and `topic` (reference data seeded by migration). */

@@ -34,7 +34,7 @@ describe('GET /api/topic', () => {
 
   it('answers 500 in the standard error shape when the database fails', async () => {
     const broken = createTestApp({
-      databaseUrl: 'postgres://ai_tutor:ai_tutor@localhost:5432/does_not_exist'
+      databaseUrl: 'postgres://ai_tutor:ai_tutor@127.0.0.1:5432/does_not_exist'
     })
     try {
       const res = await createClient(broken.app, broken.config).get('/api/topic')
