@@ -7,6 +7,7 @@ import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button, buttonClass } from '@/component/ui/button'
 import { EmptyState } from '@/component/ui/empty-state'
 import { Sheet } from '@/component/ui/sheet'
+import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getGuide, guideKey, type Guide } from '@/lib/api/guide'
 import { BackIcon, GuideIcon, QuizIcon, RetryIcon } from '@/lib/icon'
@@ -158,6 +159,7 @@ export function GuideViewer({ guideId }: { guideId: string }) {
   const query = useQuery({
     queryKey: guideKey.detail(guideId),
     queryFn: ({ signal }) => getGuide(guideId, signal),
+    staleTime: SEEDED_STALE_MS,
     select: (response) => response.guide
   })
 

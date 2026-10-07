@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GuideViewer } from '@/component/guide/guide-viewer'
 import { ApiError } from '@/lib/api/error'
-import type { Guide, Step } from '@/lib/api/guide'
+import { guideKey, type Guide, type Step } from '@/lib/api/guide'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({ getGuide: vi.fn(), updateStep: vi.fn(), createQuiz: vi.fn() }))
@@ -84,6 +84,17 @@ const heading = () => screen.getByRole('heading', { level: 2 })
 const progress = () => screen.getByRole('progressbar')
 
 describe('GuideViewer', () => {
+  it('shows a seeded guide as is, without fetching it again', async () => {
+    renderWithQuery(<GuideViewer guideId="g1" />, (client) =>
+      client.setQueryData(guideKey.detail('g1'), { guide: structuredClone(server) })
+    )
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Understand closures' })
+    ).toBeInTheDocument()
+    expect(api.getGuide).not.toHaveBeenCalled()
+  })
+
   it('shows a skeleton, then focuses the first step that is not done', async () => {
     serve([step(1, { doneAt: NOW }), step(2), step(3), step(4)])
     renderWithQuery(<GuideViewer guideId="g1" />)

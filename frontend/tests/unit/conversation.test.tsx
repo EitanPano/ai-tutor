@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Conversation } from '@/component/thread/conversation'
 import type { AskHandlers, AskResult } from '@/lib/api/ask'
 import { ApiError } from '@/lib/api/error'
-import type { Message, Thread } from '@/lib/api/thread'
+import { threadKey, type Message, type Thread } from '@/lib/api/thread'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({
@@ -394,6 +394,56 @@ describe('Conversation', () => {
     expect(screen.getByRole('figure')).toBe(block)
     expect(within(block).getByRole('button', { name: 'Copy' })).toBe(copy)
     expect(screen.getByText('More text after the block')).toBeInTheDocument()
+  })
+
+  describe('cache refreshes', () => {
+    const listCalls = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.filter(
+        ([filters]) =>
+          JSON.stringify((filters as { queryKey?: unknown } | undefined)?.queryKey) ===
+          JSON.stringify(threadKey.list)
+      ).length
+
+    it('leaves the thread list alone while a follow-up is asked, and refreshes it once afterwards', async () => {
+      serve(thread({ messageCount: 2 }), [
+        message({ id: 'u1', role: 'user', content: 'Earlier' }),
+        message({ id: 'a1', role: 'assistant', content: 'Earlier answer' })
+      ])
+      const ask = controlledAsk()
+      const { client } = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      await screen.findByText('Earlier answer')
+      const typist = userEvent.setup()
+      await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+      await typist.keyboard('{Control>}{Enter}{/Control}')
+      await ask.start()
+
+      expect(listCalls(invalidate)).toBe(0)
+      const detailLoads = api.getThread.mock.calls.length
+
+      serve(thread({ messageCount: 4 }), [
+        message({ id: 'u1', role: 'user', content: 'Earlier' }),
+        message({ id: 'a1', role: 'assistant', content: 'Earlier answer' }),
+        message({ id: 'u2', role: 'user', content: 'Why?' }),
+        message({ id: 'a2', role: 'assistant', content: 'Because.' })
+      ])
+      await ask.complete()
+
+      expect(await screen.findByText('Because.')).toBeInTheDocument()
+      expect(api.getThread.mock.calls.length).toBeGreaterThan(detailLoads)
+      await waitFor(() => expect(listCalls(invalidate)).toBe(1))
+    })
+
+    it('refreshes the thread list as soon as the first question is saved', async () => {
+      sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+      const ask = controlledAsk()
+      const { client } = renderWithQuery(<Conversation threadId={THREAD_ID} />)
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      await screen.findByText('Thinking…')
+      await ask.start()
+
+      expect(listCalls(invalidate)).toBe(1)
+    })
   })
 
   it('blocks a second submit while an answer is in flight', async () => {

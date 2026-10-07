@@ -103,6 +103,15 @@ export function useAsk(
           .getQueryData<ThreadDetailResponse>(threadKey.detail(threadId))
           ?.messages.some((m) => m.id === id && !isPending(m))
 
+      // Only the first question changes the title, so only then does the list need to know now.
+      const firstQuestion = !queryClient.getQueryData<ThreadDetailResponse>(
+        threadKey.detail(threadId)
+      )?.messages.length
+      const refreshDetail = () =>
+        queryClient.invalidateQueries({ queryKey: threadKey.detail(threadId) })
+      // `all` would refetch every loaded list page too; the list is refreshed on its own terms.
+      const refreshList = () => queryClient.invalidateQueries({ queryKey: threadKey.list })
+
       const update = (change: (current: Asking) => Asking) =>
         setAsking((current) => (current ? change(current) : current))
 
@@ -125,8 +134,8 @@ export function useAsk(
             onAccepted?.()
             answerId = assistantMessageId
             update((a) => ({ ...a, userMessageId, assistantMessageId }))
-            // The thread was just saved with its first question: refresh its title and the list.
-            void queryClient.invalidateQueries({ queryKey: threadKey.all })
+            void refreshDetail()
+            if (firstQuestion) void refreshList()
           },
           onDelta: (text) => {
             buffered.current += text
@@ -162,13 +171,15 @@ export function useAsk(
         if (mounted.current) setAsking((a) => (a ? { ...a, phase: 'finalizing' } : a))
         // The saved thread is the truth: keep the streamed text on screen until it has loaded.
         // The controller stays set until then, so a second ask cannot start mid-handover.
-        await queryClient.invalidateQueries({ queryKey: threadKey.all }).catch(() => undefined)
+        await refreshDetail().catch(() => undefined)
         // After a Stop the server finishes saving the partial answer a moment later, and the
         // first look may come from a load that started before this turn existed.
         for (let i = 0; i < 10 && mounted.current && stillSaving(answerId); i++) {
           await new Promise((resolve) => setTimeout(resolve, 300))
-          await queryClient.invalidateQueries({ queryKey: threadKey.all }).catch(() => undefined)
+          await refreshDetail().catch(() => undefined)
         }
+        // Every turn moves the thread to the top of the list: one refresh, once it has settled.
+        void refreshList().catch(() => undefined)
         controller.current = undefined
         if (mounted.current) setAsking(undefined)
       }

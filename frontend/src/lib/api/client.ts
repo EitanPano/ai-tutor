@@ -5,6 +5,9 @@ export type ErrorResponse = components['schemas']['ErrorResponse']
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
+/** A cache seeded with `setQueryData` just before navigating is fresh for this long, so the next page uses it as is. */
+export const SEEDED_STALE_MS = 30_000
+
 type ApiFetchOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown

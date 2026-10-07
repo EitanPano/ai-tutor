@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Markdown } from '@/component/markdown/markdown'
 import { Button } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
+import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { getQuiz, quizKey, submitAttempt, type Quiz, type QuizItem } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
 import { BackIcon, ProgressIcon } from '@/lib/icon'
@@ -203,6 +204,7 @@ export function QuizView({ quizId }: { quizId: string }) {
   const query = useQuery({
     queryKey: quizKey.detail(quizId),
     queryFn: ({ signal }) => getQuiz(quizId, signal),
+    staleTime: SEEDED_STALE_MS,
     select: (response) => response.quiz
   })
 
