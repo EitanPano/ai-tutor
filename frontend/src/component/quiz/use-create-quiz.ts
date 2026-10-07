@@ -44,5 +44,6 @@ export function useCreateQuiz() {
     }
   })
 
-  return { create: mutation.mutate, isPending: mutation.isPending }
+  // router.push only starts the navigation: stay busy through success so the old page cannot start a second quiz.
+  return { create: mutation.mutate, isPending: mutation.isPending || mutation.isSuccess }
 }

@@ -79,26 +79,28 @@ export const StudyTools = memo(function StudyTools({
   const reason = !hasAnswer ? 'Ask a question first' : busy ? 'Wait for the answer to finish' : ''
   const disabled = !!reason
   // One thing is written at a time: two generations would only race each other.
-  const working = create.isPending || quiz.isPending
+  // A success stays busy too: router.push only starts the navigation, the old page lingers.
+  const guiding = create.isPending || create.isSuccess
+  const working = guiding || quiz.isPending
   const describedBy = disabled ? 'study-reason' : undefined
 
   return (
     <div className="flex flex-col gap-3">
       <div role="toolbar" aria-label="Study tools" className="flex flex-wrap items-center gap-3">
         <Button
-          loading={create.isPending}
+          loading={guiding}
           disabled={disabled || quiz.isPending}
           aria-describedby={describedBy}
           onClick={() => create.mutate()}
         >
-          {!create.isPending && <GuideIcon aria-hidden="true" className="size-4" />}
-          {create.isPending ? 'Writing your guide…' : 'Guide me step by step'}
+          {!guiding && <GuideIcon aria-hidden="true" className="size-4" />}
+          {guiding ? 'Writing your guide…' : 'Guide me step by step'}
         </Button>
         <div role="group" aria-label="Quiz" className="flex items-center gap-2">
           <Button
             variant="secondary"
             loading={quiz.isPending}
-            disabled={disabled || create.isPending}
+            disabled={disabled || guiding}
             aria-describedby={describedBy}
             onClick={() => quiz.create({ threadId, difficulty })}
           >

@@ -87,6 +87,23 @@ describe('StudyTools guide action', () => {
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/guide/g9'))
   })
 
+  it('stays busy after the guide is written, while the page changes', async () => {
+    api.createGuide.mockResolvedValue({
+      guide: { id: 'g9', threadId: 't1', topicId: 'react', title: 'x', createdAt: '', steps: [] }
+    })
+    const typist = setup()
+
+    await typist.click(screen.getByRole('button', { name: 'Guide me step by step' }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/guide/g9'))
+
+    // The route has not changed yet in this test, as in the browser right after router.push.
+    const busy = screen.getByRole('button', { name: 'Writing your guide…' })
+    expect(busy).toBeDisabled()
+    await typist.click(busy)
+    expect(api.createGuide).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Quiz me' })).toBeDisabled()
+  })
+
   it('toasts a retryable failure with Retry that asks again', async () => {
     api.createGuide.mockRejectedValue(
       new ApiError({ status: 502, code: 'ai_invalid_output', message: 'x' })
@@ -170,6 +187,20 @@ describe('StudyTools quiz action', () => {
 
     finish(quizResponse('q9'))
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q9'))
+  })
+
+  it('stays busy after the quiz is written, while the page changes', async () => {
+    api.createQuiz.mockResolvedValue(quizResponse('q9'))
+    const typist = setup()
+
+    await typist.click(screen.getByRole('button', { name: 'Quiz me' }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q9'))
+
+    const busy = screen.getByRole('button', { name: 'Writing your quiz…' })
+    expect(busy).toBeDisabled()
+    await typist.click(busy)
+    expect(api.createQuiz).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Guide me step by step' })).toBeDisabled()
   })
 
   it('asks for the chosen difficulty', async () => {

@@ -56,6 +56,16 @@ describe('useCreateQuiz', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: threadKey.detail('t1') })
   })
 
+  it('stays busy after the quiz is written, while the page changes', async () => {
+    api.createQuiz.mockResolvedValue(quiz('t1'))
+    const { result } = setup()
+
+    act(() => result.current.create({ threadId: 't1' }))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith('/quiz/q1'))
+
+    expect(result.current.isPending).toBe(true)
+  })
+
   it('serves a quiz on a topic, which has no thread to refresh', async () => {
     api.createQuiz.mockResolvedValue(quiz(null))
     const { result, invalidate } = setup()

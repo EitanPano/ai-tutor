@@ -150,9 +150,12 @@ function Taker({ quiz }: { quiz: Quiz }) {
     if (submit.isError) submitButton.current?.focus()
   }, [submit.isError])
 
+  // A success stays busy too: router.push only starts the navigation, the old page lingers.
+  const submitting = submit.isPending || submit.isSuccess
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (ready && !submit.isPending) submit.mutate()
+    if (ready && !submitting) submit.mutate()
   }
 
   return (
@@ -184,11 +187,11 @@ function Taker({ quiz }: { quiz: Quiz }) {
           <Button
             ref={submitButton}
             type="submit"
-            loading={submit.isPending}
+            loading={submitting}
             disabled={!ready}
             aria-describedby="quiz-progress"
           >
-            {submit.isPending ? 'Grading…' : 'Submit answers'}
+            {submitting ? 'Grading…' : 'Submit answers'}
           </Button>
         </Sheet>
       </div>
