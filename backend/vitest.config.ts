@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     globals: false,
     include: ['tests/**/*.test.ts'],
+    // Threads, not forks: on Windows a forked worker intermittently dies at start-up
+    // (exit code 3221226505) and fails the run.
+    pool: 'threads',
     fileParallelism: false,
     globalSetup: ['tests/global-setup.ts'],
     env: {
