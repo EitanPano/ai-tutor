@@ -3,10 +3,17 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
-import { updateStep } from '../../src/feature/guide/guide.service.js'
+import { createGuideService } from '../../src/feature/guide/guide.service.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
+const guideService = createGuideService({
+  db: ctx.db,
+  tutor: ctx.tutor,
+  topic: ctx.modules.topic,
+  ai: ctx.modules.ai,
+  thread: ctx.modules.thread
+})
 
 type StepBody = {
   id: string
@@ -345,11 +352,11 @@ describe('scoping and soft delete', () => {
     const stepId = guide.steps[0]?.id ?? ''
     const auth = { userId: session.user.id }
     // The route rejects an empty body, so the read-only branch is exercised through the service.
-    await expect(updateStep(ctx.db, auth, guide.id, stepId, {})).resolves.toMatchObject({
+    await expect(guideService.updateStep(auth, guide.id, stepId, {})).resolves.toMatchObject({
       id: stepId
     })
     await client.delete(`/api/thread/${threadId}`).set('Cookie', session.cookie)
-    await expect(updateStep(ctx.db, auth, guide.id, stepId, {})).rejects.toMatchObject({
+    await expect(guideService.updateStep(auth, guide.id, stepId, {})).rejects.toMatchObject({
       status: 404
     })
   })

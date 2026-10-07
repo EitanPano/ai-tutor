@@ -12,7 +12,7 @@ import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
-import { guideRouter } from './feature/guide/index.js'
+import { createGuideModule } from './feature/guide/index.js'
 import { healthRouter } from './feature/health/index.js'
 import { progressRouter } from './feature/progress/index.js'
 import { quizRouter } from './feature/quiz/index.js'
@@ -63,6 +63,14 @@ export function createApp({
     topic: topic.api,
     ai: ai.api
   })
+  const guide = createGuideModule({
+    db,
+    tutor: provider,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api,
+    thread: thread.api
+  })
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(
@@ -91,7 +99,7 @@ export function createApp({
   app.use(user.router)
   app.use(topic.router)
   app.use(thread.router)
-  app.use(guideRouter(db, user.requireSession, provider, topic.api, ai.api, thread.api))
+  app.use(guide.router)
   app.use(quizRouter(db, user.requireSession, provider, topic.api, ai.api, thread.api))
   app.use(progressRouter(db, user.requireSession))
   extraRoutes?.(app)
