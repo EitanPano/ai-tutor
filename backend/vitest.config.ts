@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import { TEST_DATABASE_NAME } from './tests/helper/test-database-name.js'
 
 export default defineConfig({
   test: {
@@ -18,7 +19,7 @@ export default defineConfig({
     globalSetup: ['tests/global-setup.ts'],
     env: {
       NODE_ENV: 'test',
-      DATABASE_URL: 'postgres://ai_tutor:ai_tutor@127.0.0.1:5432/ai_tutor_test',
+      DATABASE_URL: `postgres://ai_tutor:ai_tutor@127.0.0.1:5432/${TEST_DATABASE_NAME}`,
       LOG_LEVEL: 'silent',
       // Explicit: budget tests (AC09) depend on it, not on the provider-specific default.
       AI_DAILY_TOKEN_BUDGET: '50000',

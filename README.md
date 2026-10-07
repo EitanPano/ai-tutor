@@ -84,8 +84,8 @@ default: answers are canned, deterministic and cost nothing.
 |---|---|
 | `bun run typecheck` | `tsc` in both workspaces |
 | `bun run lint` | ESLint + Prettier check |
-| `bun run test` | Backend (real `ai_tutor_test` DB) and frontend unit suites, run sequentially |
-| `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and DB `ai_tutor_e2e` |
+| `bun run test` | Backend (real per-checkout test DB) and frontend unit suites, run sequentially |
+| `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and a per-checkout DB |
 | `bun run gen:api` | Regenerates `frontend/src/types/api.ts` from `.orchestrate/api-contract.yaml` |
 | `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in `frontend/.next` (run `bun run --filter frontend build` first) |
 

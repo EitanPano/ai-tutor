@@ -8,7 +8,7 @@ const password = 'e2e-password-1'
 let counter = 0
 
 /**
- * Runs one parameterised statement against the isolated `ai_tutor_e2e` database. It connects over
+ * Runs one parameterised statement against the isolated per-checkout e2e database. It connects over
  * the network, like the backend does, so it works against compose locally and the CI service container.
  */
 async function sql(text: string, values: unknown[] = []): Promise<void> {
