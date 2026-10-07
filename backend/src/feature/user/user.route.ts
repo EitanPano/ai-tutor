@@ -10,7 +10,7 @@ import { signupSchema, updateSchema } from './user.schema.js'
 export function userRouter(
   service: UserService,
   deps: {
-    config: Pick<Config, 'nodeEnv'>
+    config: Pick<Config, 'nodeEnv' | 'frontendUrl'>
     signupLimiter: RateLimiterPostgres
     requireSession: RequestHandler
   }

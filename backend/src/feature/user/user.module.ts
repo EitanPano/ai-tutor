@@ -10,7 +10,7 @@ import { userRouter } from './user.route.js'
 
 export type UserModuleDeps = {
   db: Db
-  config: Pick<Config, 'nodeEnv'>
+  config: Pick<Config, 'nodeEnv' | 'frontendUrl'>
   /** Postgres-backed limiters for sign-up and login. */
   limiters: UserLimiters
 }

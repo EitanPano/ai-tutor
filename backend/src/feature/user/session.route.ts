@@ -22,7 +22,7 @@ export function sessionRouter(
   service: SessionService,
   deps: {
     user: UserService
-    config: Pick<Config, 'nodeEnv'>
+    config: Pick<Config, 'nodeEnv' | 'frontendUrl'>
     limiters: Pick<UserLimiters, 'login' | 'loginIp'>
     requireSession: RequestHandler
   }
