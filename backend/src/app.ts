@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import express, { type Express, type RequestHandler } from 'express'
+import helmet from 'helmet'
 import { pinoHttp } from 'pino-http'
 import type pg from 'pg'
 import type { Config } from './lib/config.js'
@@ -65,6 +66,9 @@ export function createApp({ config, db, pool, logger, tutor, extraRoutes }: AppD
       }
     })
   )
+  // API responses are JSON/SSE: helmet's defaults apply. The frontend (:3000) and API (:4000) are
+  // same-site, so CORP stays same-site rather than helmet's same-origin default.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
   app.use(cors({ origin: config.frontendUrl, credentials: true }))
   app.use(cookieParser())
   app.use('/api', originCheck(config.frontendUrl))
