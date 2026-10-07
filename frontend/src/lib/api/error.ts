@@ -37,6 +37,7 @@ const MESSAGE_BY_CODE: Record<string, string> = {
     'The server refused this request. Reload the app from its usual address and try again.',
   not_found: "This thread doesn't exist or was deleted.",
   ai_budget_exceeded: "You've used today's AI budget. It resets at midnight in your time zone.",
+  time_zone_recently_changed: 'You can change your time zone once a day. Try again later.',
   generation_in_progress: 'Another answer is still being generated. Wait for it to finish.',
   thread_full: 'This thread is full. Start a new thread to keep going.',
   ai_refused: "The tutor can't help with that question. Try rephrasing it.",

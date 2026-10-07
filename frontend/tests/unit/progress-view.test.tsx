@@ -419,6 +419,30 @@ describe('profile', () => {
     expect(select).toBeInvalid()
   })
 
+  it('shows the once-a-day limit at the time zone field', async () => {
+    api.updateUser.mockRejectedValue(
+      new ApiError({
+        status: 409,
+        code: 'time_zone_recently_changed',
+        message: 'server wording',
+        details: { nextChangeAt: '2026-10-08T10:00:00.000Z' }
+      })
+    )
+    const { typist } = setup()
+
+    await nameField()
+    await typist.selectOptions(screen.getByLabelText('Time zone'), 'Asia/Tokyo')
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    const select = screen.getByLabelText('Time zone')
+    await waitFor(() =>
+      expect(select).toHaveAccessibleDescription(/You can change your time zone once a day/)
+    )
+    expect(select).toBeInvalid()
+    // Next to the field, not duplicated in the form-level alert.
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('sends a changed time zone alone', async () => {
     api.updateUser.mockResolvedValue({ user: { ...user, timeZone: 'Asia/Tokyo' } })
     const { typist } = setup()

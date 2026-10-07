@@ -10,6 +10,8 @@ CREATE TABLE app_user (
   password_hash text NOT NULL,
   display_name text NOT NULL,
   time_zone text NOT NULL,
+  -- When the time zone last changed (null: never). One change per 24 hours keeps the daily AI budget window from being reset.
+  time_zone_changed_at timestamptz NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz NULL,
   -- Per-user generation lock: set while an AI generation runs, taken over after 10 minutes.

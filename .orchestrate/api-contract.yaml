@@ -21,6 +21,7 @@ info:
     | `not_found` | 404 | Resource does not exist, or belongs to another user |
     | `email_taken` | 409 | An account with this email already exists |
     | `generation_in_progress` | 409 | An AI generation is already running for this user (one at a time per user, not per thread) |
+    | `time_zone_recently_changed` | 409 | The time zone was already changed in the last 24 hours; `error.details.nextChangeAt` is when the next change is allowed |
     | `thread_full` | 409 | The thread reached its maximum message count |
     | `thread_empty` | 409 | The thread has no completed answer to build a guide or quiz from |
     | `payload_too_large` | 413 | Request body exceeds the size limit |
@@ -152,6 +153,12 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'
+        '409':
+          description: The time zone changed less than 24 hours ago (`time_zone_recently_changed`); `error.details.nextChangeAt` is an RFC 3339 `date-time` string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '500':

@@ -8,7 +8,7 @@ import { FormError } from '@/component/ui/form-error'
 import { Select } from '@/component/ui/select'
 import { Sheet } from '@/component/ui/sheet'
 import { TextField } from '@/component/ui/text-field'
-import { describeError, fieldIssues } from '@/lib/api/error'
+import { describeError, fieldIssues, isApiError } from '@/lib/api/error'
 import { progressKey } from '@/lib/api/progress'
 import { updateUser } from '@/lib/api/user'
 import { SESSION_KEY } from '@/lib/session'
@@ -62,6 +62,10 @@ export function ProfileForm({ user }: { user: User }) {
   })
 
   const issues = fieldIssues(save.error)
+  // The once-a-day limit is about the time zone field, though it is not a validation failure.
+  if (isApiError(save.error) && save.error.code === 'time_zone_recently_changed') {
+    issues.timeZone = describeError(save.error)
+  }
   const formError =
     save.isError && Object.keys(issues).length === 0 ? describeError(save.error) : ''
 

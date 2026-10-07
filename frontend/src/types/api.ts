@@ -800,6 +800,15 @@ export interface operations {
       400: components['responses']['ValidationFailed']
       401: components['responses']['Unauthenticated']
       403: components['responses']['ForbiddenOrigin']
+      /** @description The time zone changed less than 24 hours ago (`time_zone_recently_changed`); `error.details.nextChangeAt` is an RFC 3339 `date-time` string */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
       413: components['responses']['PayloadTooLarge']
       500: components['responses']['InternalError']
     }
