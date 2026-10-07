@@ -8,6 +8,7 @@ const boolString = z.enum(['true', 'false']).transform((value) => value === 'tru
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  HOST: z.string().min(1).default('127.0.0.1'),
   DATABASE_URL: z.string().min(1).optional(),
   FRONTEND_URL: z
     .url()
@@ -27,6 +28,7 @@ const envSchema = z.object({
 export type Config = {
   nodeEnv: 'development' | 'test' | 'production'
   port: number
+  host: string
   databaseUrl: string
   frontendUrl: string
   logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'
@@ -74,6 +76,7 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
   return {
     nodeEnv: v.NODE_ENV,
     port: v.PORT,
+    host: v.HOST,
     databaseUrl: v.DATABASE_URL ?? DEV_DATABASE_URL,
     frontendUrl: v.FRONTEND_URL ?? DEV_FRONTEND_URL,
     logLevel: v.LOG_LEVEL,

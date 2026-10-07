@@ -10,8 +10,8 @@ const logger = createLogger(config)
 const { db, pool } = createDb(config.databaseUrl, logger)
 const app = createApp({ config, db, pool, logger })
 
-const server = app.listen(config.port, () => {
-  logger.info({ port: config.port }, 'backend listening')
+const server = app.listen(config.port, config.host, () => {
+  logger.info({ host: config.host, port: config.port }, 'backend listening')
 })
 
 let shuttingDown = false

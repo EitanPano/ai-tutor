@@ -7,6 +7,7 @@ describe('loadConfig', () => {
     expect(config).toMatchObject({
       nodeEnv: 'development',
       port: 4000,
+      host: '127.0.0.1',
       databaseUrl: 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor',
       frontendUrl: 'http://localhost:3000',
       logLevel: 'info',
