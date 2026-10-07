@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto'
 import cookieParser from 'cookie-parser'
 import cors from 'cors'
-import express, { type Express, type RequestHandler } from 'express'
+import express, { type Express } from 'express'
 import helmet from 'helmet'
 import { pinoHttp } from 'pino-http'
 import type pg from 'pg'
@@ -13,27 +12,16 @@ import type { Logger } from './lib/logger.js'
 import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
-import { guideRouter } from './route/guide.route.js'
-import { healthRouter } from './route/health.route.js'
-import { progressRouter } from './route/progress.route.js'
-import { quizRouter } from './route/quiz.route.js'
-import { originCheck } from './route/middleware/origin-check.js'
-import { messageRouter } from './route/message.route.js'
-import { sessionRouter } from './route/session.route.js'
-import { threadRouter } from './route/thread.route.js'
-import { topicRouter } from './route/topic.route.js'
-import { userRouter } from './route/user.route.js'
-import { warmDummyHash } from './service/session.service.js'
-
-const SANE_REQUEST_ID = /^[A-Za-z0-9._-]{1,64}$/
-
-const requestId: RequestHandler = (req, res, next) => {
-  const incoming = req.get('x-request-id')
-  const id = incoming && SANE_REQUEST_ID.test(incoming) ? incoming : randomUUID()
-  res.locals.requestId = id
-  res.setHeader('X-Request-Id', id)
-  next()
-}
+import { createGuideModule } from './feature/guide/index.js'
+import { createHealthModule } from './feature/health/index.js'
+import { createProgressModule } from './feature/progress/index.js'
+import { createQuizModule } from './feature/quiz/index.js'
+import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
+import { createAiModule, type AiApi } from './feature/ai/index.js'
+import { createTopicModule, type TopicApi } from './feature/topic/index.js'
+import { createUserModule } from './feature/user/index.js'
+import { originCheck } from './http/origin-check.js'
+import { requestId } from './http/request-id.js'
 
 export type AppDeps = {
   config: Config
@@ -49,6 +37,14 @@ export type AppDeps = {
   inFlight?: InFlightRegistry
 }
 
+/** What index.ts and tests need besides HTTP: module APIs and the boot-time stale-turn sweep. */
+export type AppModules = {
+  topic: TopicApi
+  ai: AiApi
+  thread: ThreadApi
+  recoverStale: () => Promise<number>
+}
+
 export function createApp({
   config,
   db,
@@ -57,10 +53,9 @@ export function createApp({
   tutor,
   extraRoutes,
   inFlight = new InFlightRegistry()
-}: AppDeps): Express {
+}: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
   app.disable('x-powered-by')
-  warmDummyHash()
   app.use(requestId)
   app.use(
     pinoHttp({
@@ -84,18 +79,54 @@ export function createApp({
   app.use(cookieParser())
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
-  app.use(healthRouter(db))
-  app.use(userRouter(db, config))
-  app.use(sessionRouter(db, config, createLoginLimiter(pool)))
-  app.use(topicRouter(db))
-  app.use(threadRouter(db, config))
+  // Modules are built in dependency order: a module only receives the APIs of modules built before it.
+  const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
+  const topic = createTopicModule({ db })
+  const ai = createAiModule({ db, config, logger })
   const provider = tutor ?? createTutorProvider(config)
-  app.use(messageRouter(db, config, provider, logger, inFlight))
-  app.use(guideRouter(db, config, provider, logger))
-  app.use(quizRouter(db, config, provider, logger))
-  app.use(progressRouter(db, config))
+  const thread = createThreadModule({
+    db,
+    tutor: provider,
+    logger,
+    inFlight,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api
+  })
+  const guide = createGuideModule({
+    db,
+    tutor: provider,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api,
+    thread: thread.api
+  })
+  const quiz = createQuizModule({
+    db,
+    tutor: provider,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api,
+    thread: thread.api
+  })
+  const progress = createProgressModule({ db, requireSession: user.requireSession })
+  const health = createHealthModule({ db })
+  for (const router of [
+    health.router,
+    user.router,
+    topic.router,
+    thread.router,
+    guide.router,
+    quiz.router,
+    progress.router
+  ]) {
+    app.use(router)
+  }
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
-  return app
+  return {
+    app,
+    modules: { topic: topic.api, ai: ai.api, thread: thread.api, recoverStale: thread.recoverStale }
+  }
 }

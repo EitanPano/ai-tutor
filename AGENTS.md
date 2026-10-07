@@ -34,7 +34,12 @@
   `.orchestrate/api-contract.yaml` is the one versioned file there: the frontend/backend
   handshake (OpenAPI 3.1).
 - `frontend/` — the Next.js app.
-- `backend/` — the Express 5 API. Layers: `src/route` → `src/service` → `src/lib`.
+- `backend/` — the Express 5 API, split into feature modules.
+  - `src/feature/<m>/` — one module per domain; `index.ts` exposes only `createXModule` and types.
+    Modules call each other through an injected `XApi`, never another module's internals.
+  - `src/http/` — shared Express helpers. `src/lib/` — infrastructure. `src/app.ts` — wiring.
+  - Boundaries are enforced by dependency-cruiser in `bun run lint` and by
+    `backend/tests/unit/architecture.test.ts`.
   Schema lives in `db/schema.sql` (full bootstrap) and `db/migration/` (`NNN-*.sql`);
   change both together.
 - `compose.yaml` — local Postgres 18 (`docker compose up -d --wait db`).

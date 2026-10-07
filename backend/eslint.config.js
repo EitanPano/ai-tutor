@@ -12,10 +12,13 @@ export default defineConfig([
     languageOptions: {
       globals: globals.node,
       parserOptions: {
-        projectService: { allowDefaultProject: ['eslint.config.js'] },
+        projectService: { allowDefaultProject: ['eslint.config.js', '.dependency-cruiser.cjs'] },
         tsconfigRootDir: import.meta.dirname
       }
     }
+  },
+  {
+    rules: { '@typescript-eslint/no-import-type-side-effects': 'error' }
   },
   prettier
 ])

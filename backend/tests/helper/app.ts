@@ -1,7 +1,7 @@
 import type { Express } from 'express'
 import { sql } from 'kysely'
 import { stopServer } from './client.js'
-import { createApp } from '../../src/app.js'
+import { createApp, type AppModules } from '../../src/app.js'
 import { loadConfig, type Config } from '../../src/lib/config.js'
 import { createDb, type Db } from '../../src/lib/db/index.js'
 import { InFlightRegistry } from '../../src/lib/in-flight.js'
@@ -10,6 +10,8 @@ import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 
 export type TestApp = {
   app: Express
+  /** The module APIs, as `createApp` returns them. */
+  modules: AppModules
   config: Config
   db: Db
   /** The fake tutor wired into the app; `tutor.calls` records every explain input. */
@@ -32,7 +34,7 @@ export function createTestApp(
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
   const inFlight = new InFlightRegistry()
-  const app = createApp({
+  const { app, modules } = createApp({
     config,
     db,
     pool,
@@ -43,6 +45,7 @@ export function createTestApp(
   })
   return {
     app,
+    modules,
     config,
     db,
     tutor,

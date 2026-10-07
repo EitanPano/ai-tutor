@@ -1,8 +1,8 @@
 /**
  * Registry of the AbortControllers of generations that are running right now. On shutdown the
  * process aborts them all first: each generation then unwinds through its normal path, where
- * `finishAsk` persists the `aborted` outcome and releases the generation lock. The registry
- * never persists or releases anything itself.
+ * `MessageService.finish` persists the `aborted` outcome and releases the generation lock. The
+ * registry never persists or releases anything itself.
  */
 export class InFlightRegistry {
   private readonly controllers = new Set<AbortController>()

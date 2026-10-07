@@ -23,6 +23,7 @@ Current queue:
 - [ ] p4 quiz | stack:full | plan:001
 - [ ] p5 progress | stack:full | plan:001
 - [ ] p6 hardening | stack:full | plan:001
+- [ ] backend module structure | stack:full | plan:002
 
 Dependencies (plan `001`, Rollout Order): P0 → P1 → P2 run in order. P3 and P4 need only P2, so they can run in
 parallel. P5 needs P3 and P4. P6 is last.
