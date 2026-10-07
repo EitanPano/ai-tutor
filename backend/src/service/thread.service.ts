@@ -2,6 +2,7 @@ import { sql } from 'kysely'
 import type { Db } from '../lib/db/index.js'
 import type { MessageRow } from '../lib/db/schema.js'
 import { badRequest, conflict } from '../lib/error.js'
+import { hasNoNul } from '../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from './ownership.js'
 import { requireTopic } from './topic.service.js'
 
@@ -160,6 +161,15 @@ type Cursor = { u: string; i: string }
 // ISO-8601 UTC with up to microsecond precision, the precision Postgres stores.
 const CURSOR_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/
 
+// Ids are UUIDv7 text; accept any id of sane length without NUL (Postgres 22021).
+const MAX_CURSOR_ID = 64
+
+/** True when the cursor time is a real calendar instant (month 13 and Feb 30 do not round-trip). */
+function isRealTimestamp(value: string): boolean {
+  const ms = Date.parse(value)
+  return !Number.isNaN(ms) && new Date(ms).toISOString().slice(0, 19) === value.slice(0, 19)
+}
+
 function encodeCursor(cursor: Cursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString('base64url')
 }
@@ -175,7 +185,15 @@ function decodeCursor(raw: string): Cursor {
     const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
     if (typeof parsed === 'object' && parsed !== null && 'u' in parsed && 'i' in parsed) {
       const { u, i } = parsed
-      if (typeof u === 'string' && typeof i === 'string' && CURSOR_TIME.test(u) && i !== '') {
+      if (
+        typeof u === 'string' &&
+        typeof i === 'string' &&
+        CURSOR_TIME.test(u) &&
+        isRealTimestamp(u) &&
+        i !== '' &&
+        i.length <= MAX_CURSOR_ID &&
+        hasNoNul(i)
+      ) {
         return { u, i }
       }
     }

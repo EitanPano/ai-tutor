@@ -23,12 +23,12 @@ const listQuerySchema = z.object({
 
 const createSchema = z.strictObject({
   topicId: text().min(1).optional(),
-  title: text().min(1).max(120).optional()
+  title: text().trim().min(1).max(120).optional()
 })
 
 const updateSchema = z
   .strictObject({
-    title: text().min(1).max(120).optional(),
+    title: text().trim().min(1).max(120).optional(),
     topicId: text().min(1).optional()
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Provide at least one field.' })

@@ -237,9 +237,7 @@ describe('input limits', () => {
     expect((patch.body as ErrorBody).error.code).toBe('validation_failed')
   })
 
-  // DEFECT (QA-03): the thread title schema has min(1) but no trim, so '   ' is accepted (201) and
-  // the thread list renders a blank row.
-  it.fails('rejects a whitespace-only thread title', async () => {
+  it('rejects a whitespace-only thread title', async () => {
     const session = await signUp(client)
     const title = await client
       .post('/api/thread')
@@ -247,6 +245,37 @@ describe('input limits', () => {
       .send({ title: '   ' })
     // A blank title would render as an empty row in the thread list.
     expect(title.status).toBe(400)
+  })
+
+  it('rejects a whitespace-only title on PATCH and trims padded titles', async () => {
+    const session = await signUp(client)
+    const thread = await newThread(session, { title: '  Padded title \t' })
+    expect(thread.title).toBe('Padded title')
+    const blank = await client
+      .patch(`/api/thread/${thread.id}`)
+      .set('Cookie', session.cookie)
+      .send({ title: ' \n\t ' })
+    expect(blank.status).toBe(400)
+    expect((blank.body as ErrorBody).error.code).toBe('validation_failed')
+    const trimmed = await client
+      .patch(`/api/thread/${thread.id}`)
+      .set('Cookie', session.cookie)
+      .send({ title: '  Renamed  ' })
+    expect((trimmed.body as { thread: ThreadBody }).thread.title).toBe('Renamed')
+  })
+
+  it('rejects a whitespace-only display name on PATCH and trims padded ones', async () => {
+    const session = await signUp(client)
+    const blank = await client
+      .patch('/api/user')
+      .set('Cookie', session.cookie)
+      .send({ displayName: '   ' })
+    expect(blank.status).toBe(400)
+    const padded = await client
+      .patch('/api/user')
+      .set('Cookie', session.cookie)
+      .send({ displayName: '  Ada  ' })
+    expect((padded.body as { user: { displayName: string } }).user.displayName).toBe('Ada')
   })
 
   it('stores and returns Unicode and emoji text unchanged', async () => {
@@ -428,26 +457,34 @@ describe('forged pagination cursor', () => {
     expect(still).toHaveLength(3)
   })
 
-  // DEFECT (QA-01): a cursor whose time matches the shape regex but is not a real date
-  // (month 13, hour 25) passes decodeCursor and then fails inside Postgres' ::timestamptz cast,
-  // surfacing as 500 internal_error instead of 400 validation_failed.
-  it.fails(
-    'answers 400 for a cursor time that matches the shape but is not a real date',
-    async () => {
-      const session = await threeThreads()
-      const cursor = forge({ u: '2026-13-45T25:61:61Z', i: 'x' })
-      const res = await client.get(`/api/thread?cursor=${cursor}`).set('Cookie', session.cookie)
-      expect(res.status).toBe(400)
-    }
-  )
+  it('answers 400 for a cursor time that matches the shape but is not a real date', async () => {
+    const session = await threeThreads()
+    const cursor = forge({ u: '2026-13-45T25:61:61Z', i: 'x' })
+    const res = await client.get(`/api/thread?cursor=${cursor}`).set('Cookie', session.cookie)
+    expect(res.status).toBe(400)
+  })
 
-  // DEFECT (QA-02): a NUL in the cursor id passes decodeCursor (only `i !== ''` is checked) and
-  // Postgres rejects it (22021), surfacing as 500 instead of 400.
-  it.fails('answers 400 for a cursor id that holds a NUL character', async () => {
+  it('answers 400 for a cursor id that holds a NUL character', async () => {
     const session = await threeThreads()
     const cursor = forge({ u: '2026-10-07T00:00:00.000000Z', i: 'a\u0000b' })
     const res = await client.get(`/api/thread?cursor=${cursor}`).set('Cookie', session.cookie)
     expect(res.status).toBe(400)
+  })
+
+  it('answers 400 for impossible calendar dates and oversized cursor ids', async () => {
+    const session = await threeThreads()
+    const bad = [
+      { u: '2026-02-30T00:00:00Z', i: 'x' },
+      { u: '2026-10-07T24:00:00Z', i: 'x' },
+      { u: '2026-10-07T00:00:00Z', i: 'x'.repeat(65) }
+    ]
+    for (const value of bad) {
+      const res = await client
+        .get(`/api/thread?cursor=${forge(value)}`)
+        .set('Cookie', session.cookie)
+      expect(res.status, JSON.stringify(value)).toBe(400)
+      expect((res.body as ErrorBody).error.code).toBe('validation_failed')
+    }
   })
 
   it('never lets another user cursor reveal their threads', async () => {
