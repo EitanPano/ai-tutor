@@ -1,11 +1,20 @@
-// AC12: no secret material may ship in the frontend build. Scans every file under
-// frontend/.next for provider-key markers. It never reads any environment file.
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+// AC12: no secret material may ship in the frontend build. Scans the client output
+// (<dist>/static, what browsers download) of a production build for provider-key markers.
+// CI builds with canary key values (ci.yml), so a client reference to a key is inlined
+// and found here. It never reads any environment file.
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = fileURLToPath(new URL('../frontend/.next', import.meta.url))
+const frontendDir = fileURLToPath(new URL('../frontend', import.meta.url))
+const distName = process.env.NEXT_DIST_DIR ?? '.next'
+const dist = join(frontendDir, distName)
 const MARKERS = ['sk-ant', 'ANTHROPIC']
+
+function fail(message) {
+  console.error(message)
+  process.exit(1)
+}
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -15,25 +24,24 @@ function* walk(dir) {
   }
 }
 
+// `next dev` also creates the dist dir (.next/dev), so only BUILD_ID proves a production build.
+if (!existsSync(join(dist, 'BUILD_ID'))) {
+  fail(`no production build in frontend/${distName}: run "bun run --filter frontend build" first`)
+}
+const clientDir = join(dist, 'static')
+if (!existsSync(clientDir)) fail(`frontend/${distName}/static not found: the build is incomplete`)
+
 let scanned = 0
 const offenders = []
-try {
-  for (const file of walk(root)) {
-    scanned += 1
-    const text = readFileSync(file, 'latin1')
-    if (MARKERS.some((marker) => text.includes(marker))) offenders.push(file)
-  }
-} catch (err) {
-  if (err.code === 'ENOENT') {
-    console.error('frontend/.next not found: run "bun run --filter frontend build" first')
-    process.exit(1)
-  }
-  throw err
+for (const file of walk(clientDir)) {
+  scanned += 1
+  const text = readFileSync(file, 'latin1')
+  if (MARKERS.some((marker) => text.includes(marker))) offenders.push(file)
 }
 
 if (offenders.length > 0) {
-  console.error('Secret markers found in the frontend build:')
-  for (const file of offenders) console.error(`  ${file}`)
+  console.error('Secret markers found in the frontend client build:')
+  for (const file of offenders) console.error(`  ${relative(frontendDir, file)}`)
   process.exit(1)
 }
-console.log(`OK: no secret markers in ${scanned} files under frontend/.next`)
+console.log(`OK: no secret markers in ${scanned} client files under frontend/${distName}/static`)

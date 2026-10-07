@@ -76,7 +76,13 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         working-directory: frontend
         run: bunx playwright install-deps chromium
-      - run: bun run --filter frontend build
+      - name: Build frontend
+        run: bun run --filter frontend build
+        # Canary provider keys, on this step only (backend tests must not see them): a client
+        # reference to either name is inlined at build time, and check:bundle then finds it.
+        env:
+          ANTHROPIC_API_KEY: sk-ant-ci-canary-not-a-real-key
+          NEXT_PUBLIC_ANTHROPIC_API_KEY: sk-ant-ci-canary-not-a-real-key
       - run: bun run check:bundle
       - id: e2e
         run: bun run test:e2e
