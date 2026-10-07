@@ -118,6 +118,19 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
   }
 }
 
+/**
+ * A settings mistake that does not stop boot: with the global cap below the per-user budget, one
+ * user can never spend their whole budget, because the cap pauses everyone first.
+ */
+export function configWarning(
+  config: Pick<Config, 'aiDailyTokenBudget' | 'aiGlobalDailyTokenBudget'>
+): string | undefined {
+  if (config.aiGlobalDailyTokenBudget < config.aiDailyTokenBudget) {
+    return `AI_GLOBAL_DAILY_TOKEN_BUDGET (${config.aiGlobalDailyTokenBudget}) is below AI_DAILY_TOKEN_BUDGET (${config.aiDailyTokenBudget}): the global cap will pause AI before any user reaches their own budget`
+  }
+  return undefined
+}
+
 const dbEnvSchema = envSchema.pick({ NODE_ENV: true, DATABASE_URL: true, LOG_LEVEL: true })
 
 export type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>

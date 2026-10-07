@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadConfig, loadDbConfig } from '../../src/lib/config.js'
+import { configWarning, loadConfig, loadDbConfig } from '../../src/lib/config.js'
 
 describe('loadConfig', () => {
   it('applies development defaults for an empty environment', () => {
@@ -157,5 +157,24 @@ describe('loadDbConfig', () => {
   it('requires DATABASE_URL in production and rejects a bad log level', () => {
     expect(() => loadDbConfig({ NODE_ENV: 'production' })).toThrow('DATABASE_URL')
     expect(() => loadDbConfig({ LOG_LEVEL: 'loud' })).toThrow('LOG_LEVEL')
+  })
+})
+
+describe('configWarning', () => {
+  it('warns when the global cap is below the per-user budget', () => {
+    const config = loadConfig({
+      AI_DAILY_TOKEN_BUDGET: '5000',
+      AI_GLOBAL_DAILY_TOKEN_BUDGET: '1000'
+    })
+    expect(configWarning(config)).toMatch(/AI_GLOBAL_DAILY_TOKEN_BUDGET.*AI_DAILY_TOKEN_BUDGET/)
+  })
+
+  it('stays quiet when the cap equals or exceeds the budget, and for the defaults', () => {
+    const equal = loadConfig({
+      AI_DAILY_TOKEN_BUDGET: '5000',
+      AI_GLOBAL_DAILY_TOKEN_BUDGET: '5000'
+    })
+    expect(configWarning(equal)).toBeUndefined()
+    expect(configWarning(loadConfig({}))).toBeUndefined()
   })
 })

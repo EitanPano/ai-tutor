@@ -1,5 +1,5 @@
 import { createApp } from './app.js'
-import { loadConfig } from './lib/config.js'
+import { configWarning, loadConfig } from './lib/config.js'
 import { createDb } from './lib/db/index.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import { createLogger } from './lib/logger.js'
@@ -8,6 +8,8 @@ const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const config = loadConfig()
 const logger = createLogger(config)
+const warning = configWarning(config)
+if (warning) logger.warn(warning)
 const { db, pool } = createDb(config.databaseUrl, logger)
 const inFlight = new InFlightRegistry()
 const { app, modules } = createApp({ config, db, pool, logger, inFlight })
