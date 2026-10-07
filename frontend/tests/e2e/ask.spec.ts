@@ -72,6 +72,10 @@ test('a slow answer is visible while it streams and Stop keeps the partial text'
   // Delivery is incremental: the answer is partial and still streaming.
   await expect(answers(page).first()).toHaveAttribute('aria-busy', 'true')
   await expect(page.getByRole('heading', { name: 'Why it happens' })).toHaveCount(0)
+  // Stop ignores a click in the first moments after Ask (a double click must not cancel the
+  // answer), so wait for text from a later delta: deltas are 400 ms apart.
+  await expect(answers(page).first()).toContainText('The short version is')
+  await expect(page.getByRole('heading', { name: 'Why it happens' })).toHaveCount(0)
   await expect(stop).toBeVisible()
 
   await stop.click()
