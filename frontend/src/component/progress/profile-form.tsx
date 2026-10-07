@@ -93,7 +93,9 @@ export function ProfileForm({ user }: { user: User }) {
             <Select
               label="Time zone"
               value={timeZone}
-              aria-describedby="time-zone-hint"
+              aria-describedby={
+                issues.timeZone ? 'time-zone-hint time-zone-error' : 'time-zone-hint'
+              }
               aria-invalid={issues.timeZone ? true : undefined}
               onChange={(e) => {
                 setTimeZone(e.target.value)
@@ -109,13 +111,23 @@ export function ProfileForm({ user }: { user: User }) {
             <p id="time-zone-hint" className="text-sm text-ink-muted">
               Your streak counts days in this time zone.
             </p>
-            {issues.timeZone && <p className="text-sm text-wrong">{issues.timeZone}</p>}
+            {issues.timeZone && (
+              <p id="time-zone-error" className="text-sm text-wrong">
+                {issues.timeZone}
+              </p>
+            )}
           </div>
           <p className="text-sm text-ink-muted">Member since {memberSince(user.createdAt)}</p>
           <FormError>{formError}</FormError>
           <div className="flex items-center gap-3">
-            <Button type="submit" loading={save.isPending} disabled={!changed}>
-              Save profile
+            {/* aria-disabled, not disabled: a disabled button would drop keyboard focus to the page. */}
+            <Button
+              type="submit"
+              aria-disabled={!changed || save.isPending}
+              aria-busy={save.isPending || undefined}
+              className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+            >
+              {save.isPending ? 'Saving…' : 'Save profile'}
             </Button>
             <p role="status" className="text-sm text-correct">
               {saved && !changed ? 'Saved.' : ''}

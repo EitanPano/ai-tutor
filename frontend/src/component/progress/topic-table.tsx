@@ -35,12 +35,14 @@ type Cell = { label: string; children: ReactNode; numeric?: boolean; hideStacked
 function Td({ label, children, numeric = false, hideStacked = false }: Cell) {
   return (
     <td
-      data-label={label}
-      className={`flex items-baseline justify-between gap-4 py-1 before:text-sm before:text-ink-muted before:content-[attr(data-label)] xl:table-cell xl:px-3 xl:py-3 xl:align-middle xl:before:hidden ${
+      role="cell"
+      className={`flex items-baseline justify-between gap-4 py-1 xl:table-cell xl:px-3 xl:py-3 xl:align-middle ${
         numeric ? 'tabular-nums xl:text-right' : 'xl:whitespace-nowrap'
       } ${hideStacked ? 'max-xl:hidden' : ''}`}
     >
-      {children}
+      {/* Real text, so the label is announced when the header row is hidden by the stacked layout. */}
+      <span className="text-sm font-normal text-ink-muted xl:hidden">{label}</span>
+      <span>{children}</span>
     </td>
   )
 }
@@ -96,9 +98,10 @@ type RowProps = { topic: TopicProgress; muted?: boolean } & Omit<QuizMeProps, 't
 
 function TopicRow({ topic, muted = false, ...quiz }: RowProps) {
   return (
-    <tr className={`${rowClass} ${muted ? 'text-ink-muted' : ''}`.trim()}>
+    <tr role="row" className={`${rowClass} ${muted ? 'text-ink-muted' : ''}`.trim()}>
       <th
         scope="row"
+        role="rowheader"
         className="pb-1 text-left text-base font-semibold xl:table-cell xl:px-3 xl:py-3 xl:pb-3"
       >
         {topic.topicName}
@@ -130,7 +133,7 @@ function TopicRow({ topic, muted = false, ...quiz }: RowProps) {
           </span>
         )}
       </Td>
-      <td className="pt-2 xl:table-cell xl:px-3 xl:py-3">
+      <td role="cell" className="pt-2 xl:table-cell xl:px-3 xl:py-3">
         <QuizMe topic={topic} {...quiz} />
       </td>
     </tr>
@@ -141,6 +144,7 @@ const headClass = 'px-3 py-3 text-sm font-semibold'
 
 export function TopicTable({ topics }: { topics: TopicProgress[] }) {
   const headingId = useId()
+  const notStartedId = useId()
   const quiz = useCreateQuiz()
   const [target, setTarget] = useState<string | null>(null)
   const { started, notStarted } = splitTopics([...topics])
@@ -160,59 +164,69 @@ export function TopicTable({ topics }: { topics: TopicProgress[] }) {
         Topics
       </h2>
       <Sheet className="overflow-hidden">
-        <table className="block w-full border-collapse xl:table">
-          <thead className="max-xl:sr-only">
-            <tr className="border-b border-rule text-left xl:table-row">
-              <th scope="col" className={headClass}>
+        <table
+          role="table"
+          aria-labelledby={headingId}
+          className="block w-full border-collapse xl:table"
+        >
+          <thead role="rowgroup" className="max-xl:sr-only">
+            <tr role="row" className="border-b border-rule text-left xl:table-row">
+              <th scope="col" role="columnheader" className={headClass}>
                 Topic
               </th>
-              <th scope="col" className={`${headClass} text-right`}>
+              <th scope="col" role="columnheader" className={`${headClass} text-right`}>
                 Questions
               </th>
-              <th scope="col" className={`${headClass} text-right`}>
+              <th scope="col" role="columnheader" className={`${headClass} text-right`}>
                 Steps done
               </th>
-              <th scope="col" className={`${headClass} text-right`}>
+              <th scope="col" role="columnheader" className={`${headClass} text-right`}>
                 Guides completed
               </th>
-              <th scope="col" className={`${headClass} text-right`}>
+              <th scope="col" role="columnheader" className={`${headClass} text-right`}>
                 Quiz attempts
               </th>
-              <th scope="col" className={`${headClass} text-right`}>
+              <th scope="col" role="columnheader" className={`${headClass} text-right`}>
                 Best score
               </th>
               <th
                 scope="col"
+                role="columnheader"
                 title="Average of each quiz's best attempt"
                 className={`${headClass} text-right`}
               >
                 Topic score
               </th>
-              <th scope="col" className={headClass}>
+              <th scope="col" role="columnheader" className={headClass}>
                 Last activity
               </th>
-              <th scope="col" className={headClass}>
+              <th scope="col" role="columnheader" className={headClass}>
                 <span className="sr-only">Quiz</span>
               </th>
             </tr>
           </thead>
           {started.length > 0 && (
-            <tbody className="block xl:table-row-group">
+            <tbody role="rowgroup" className="block xl:table-row-group">
               {started.map((topic) => (
                 <TopicRow key={topic.topicId} topic={topic} {...rowProps(topic)} />
               ))}
             </tbody>
           )}
           {notStarted.length > 0 && (
-            <tbody className="block xl:table-row-group">
-              <tr className="block border-t border-rule bg-canvas/60 xl:table-row">
-                <th
-                  scope="colgroup"
+            <tbody
+              role="rowgroup"
+              aria-labelledby={notStartedId}
+              className="block xl:table-row-group"
+            >
+              <tr role="row" className="block border-t border-rule bg-canvas/60 xl:table-row">
+                <td
+                  role="cell"
+                  id={notStartedId}
                   colSpan={9}
                   className="block px-4 py-2 text-left text-sm font-semibold text-ink-muted xl:table-cell xl:px-3"
                 >
                   Not started yet
-                </th>
+                </td>
               </tr>
               {notStarted.map((topic) => (
                 <TopicRow key={topic.topicId} topic={topic} muted {...rowProps(topic)} />

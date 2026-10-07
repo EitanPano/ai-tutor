@@ -58,12 +58,12 @@ test('progress shows what was studied, starts a topic quiz, and saves the profil
   await expect(page.getByText(/^1 question asked, 1 step done, 0 guides completed/)).toBeVisible()
 
   const react = page.getByRole('row', { name: /^React/ })
-  await expect(react.getByRole('cell').nth(0)).toHaveText('1')
-  await expect(react.getByRole('cell').nth(1)).toHaveText('1')
-  await expect(react.getByRole('cell').nth(3)).toHaveText('1')
-  await expect(react.getByRole('cell').nth(4)).toHaveText('100%')
-  await expect(react.getByRole('cell').nth(5)).toHaveText('100%')
-  await expect(page.getByRole('columnheader', { name: 'Not started yet' })).toBeVisible()
+  await expect(react.getByRole('cell').nth(0)).toHaveText(/1$/, { useInnerText: true })
+  await expect(react.getByRole('cell').nth(1)).toHaveText(/1$/, { useInnerText: true })
+  await expect(react.getByRole('cell').nth(3)).toHaveText(/1$/, { useInnerText: true })
+  await expect(react.getByRole('cell').nth(4)).toHaveText(/100%$/, { useInnerText: true })
+  await expect(react.getByRole('cell').nth(5)).toHaveText(/100%$/, { useInnerText: true })
+  await expect(page.getByRole('rowgroup', { name: 'Not started yet' })).toBeVisible()
 
   const recent = page.getByRole('region', { name: 'Recent activity' })
   await expect(recent.getByRole('link')).toHaveCount(3)
@@ -98,4 +98,29 @@ test('a time zone the server rejects shows its message beside the field', async 
 
   await expect(page.locator('#time-zone-hint ~ p')).toBeVisible()
   await expect(page.getByText('Profile saved')).toHaveCount(0)
+})
+
+test('the topic table keeps its table semantics on a phone-sized screen', async ({ page }) => {
+  await signUp(page)
+  await page.getByRole('link', { name: 'New thread' }).first().click()
+  await page.getByLabel('Topic').selectOption({ label: 'React' })
+  await page.getByRole('textbox', { name: 'Your question' }).fill('Why does my effect run twice?')
+  await page.getByRole('button', { name: 'Ask' }).click()
+  await expect(page.getByRole('heading', { name: 'Why it happens' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/progress')
+
+  const table = page.getByRole('table', { name: 'Topics' })
+  await expect(table).toBeVisible()
+  const row = table.getByRole('row', { name: /^React/ })
+  await expect(row).toBeVisible()
+  await expect(row.getByRole('rowheader', { name: 'React' })).toBeVisible()
+  // Each stacked cell carries its own label, so it reads "Questions 0" without the header row.
+  await expect(row.getByRole('cell', { name: /^Questions\s*1$/ })).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Quiz me on React' })).toBeVisible()
+  // Topics without activity stay a labelled group, with a name and a quiz button per row.
+  const group = table.getByRole('rowgroup', { name: 'Not started yet' })
+  await expect(group.getByRole('rowheader', { name: 'SQL' })).toBeVisible()
+  await expect(group.getByRole('cell', { name: /^Questions/ })).toHaveCount(0)
 })

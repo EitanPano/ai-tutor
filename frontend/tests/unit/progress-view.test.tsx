@@ -182,14 +182,34 @@ describe('topic table', () => {
     setup()
 
     await screen.findByRole('table')
-    const names = screen
-      .getAllByRole('rowheader')
-      .map((h) => h.textContent)
-      .filter((text) => text !== 'Not started yet')
+    const names = screen.getAllByRole('rowheader').map((h) => h.textContent)
+
     expect(names).toEqual(['SQL', 'React', 'JavaScript', 'CSS'])
-    expect(screen.getByRole('columnheader', { name: 'Not started yet' })).toBeVisible()
+    const group = screen.getByRole('rowgroup', { name: 'Not started yet' })
+    expect(
+      within(group)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent)
+    ).toEqual(['JavaScript', 'CSS'])
     expect(rowOf('JavaScript')).toHaveClass('text-ink-muted')
     expect(rowOf('React')).not.toHaveClass('text-ink-muted')
+  })
+
+  it('keeps explicit table roles and a label inside each cell, so the stacked layout stays a table', async () => {
+    setup()
+
+    const table = await screen.findByRole('table', { name: 'Topics' })
+    expect(table).toHaveAttribute('role', 'table')
+    for (const el of table.querySelectorAll('thead, tbody'))
+      expect(el).toHaveAttribute('role', 'rowgroup')
+    for (const el of table.querySelectorAll('tr')) expect(el).toHaveAttribute('role', 'row')
+    for (const el of table.querySelectorAll('th')) {
+      expect(['columnheader', 'rowheader']).toContain(el.getAttribute('role'))
+    }
+    for (const el of table.querySelectorAll('td')) expect(el).toHaveAttribute('role', 'cell')
+    const react = within(rowOf('React'))
+    expect(react.getAllByRole('cell')[0]).toHaveTextContent('Questions2')
+    expect(react.getByRole('cell', { name: /Best score\s*80%/ })).toBeVisible()
   })
 
   it('has a labelled column for every measure', async () => {
@@ -205,8 +225,7 @@ describe('topic table', () => {
       'Best score',
       'Topic score',
       'Last activity',
-      'Quiz',
-      'Not started yet'
+      'Quiz'
     ])
     expect(screen.getByRole('columnheader', { name: 'Topic score' })).toHaveAttribute(
       'title',
@@ -299,7 +318,10 @@ describe('profile', () => {
     expect(await nameField()).toHaveValue('Ada')
     expect(screen.getByLabelText('Time zone')).toHaveValue('Europe/Paris')
     expect(screen.getByText(/^Member since .*2026/)).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
   })
 
   it('keeps a stored time zone the browser does not list', async () => {
@@ -325,7 +347,59 @@ describe('profile', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved.'))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['session'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['progress'] })
-    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save profile' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+  })
+
+  it('keeps keyboard focus on Save profile after saving', async () => {
+    const saved = { ...user, displayName: 'Grace' }
+    api.updateUser.mockResolvedValue({ user: saved })
+    const { typist } = setup()
+
+    const name = await nameField()
+    api.getSession.mockResolvedValue({ user: saved })
+    await typist.clear(name)
+    await typist.type(name, 'Grace')
+    const button = screen.getByRole('button', { name: 'Save profile' })
+    button.focus()
+    await typist.keyboard('{Enter}')
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved.'))
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).not.toBeDisabled()
+    expect(button).toHaveFocus()
+  })
+
+  it('does not save when the button is only aria-disabled', async () => {
+    const { typist } = setup()
+
+    await nameField()
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    expect(api.updateUser).not.toHaveBeenCalled()
+  })
+
+  it('links a time zone error to the select', async () => {
+    api.updateUser.mockRejectedValue(
+      new ApiError({
+        status: 400,
+        code: 'validation_failed',
+        message: 'x',
+        details: { issues: [{ path: ['timeZone'], message: 'Unknown time zone' }] }
+      })
+    )
+    const { typist } = setup()
+
+    await nameField()
+    await typist.selectOptions(screen.getByLabelText('Time zone'), 'Asia/Tokyo')
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    const select = screen.getByLabelText('Time zone')
+    await waitFor(() => expect(select).toHaveAccessibleDescription(/Unknown time zone/))
+    expect(select).toHaveAccessibleDescription(/Your streak counts days/)
+    expect(select).toBeInvalid()
   })
 
   it('sends a changed time zone alone', async () => {
