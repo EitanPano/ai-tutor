@@ -21,9 +21,7 @@ services:
   # `docker compose up -d db` still starts Postgres alone for development.
   migrate:
     profiles: ['full']
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    # Reuses the image the backend service builds (one build, not two).
     image: ai-tutor-backend
     command: ['node', 'dist/lib/db/cli.js', 'migrate']
     environment:
@@ -57,7 +55,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    restart: unless-stopped
+    restart: on-failure:3 # a missing key fails fast instead of crash-looping
 
   frontend:
     profiles: ['full']

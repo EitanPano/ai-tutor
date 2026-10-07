@@ -105,10 +105,13 @@ docker compose --profile full down      # keeps the pgdata volume
 docker compose up -d --wait db          # `down` also removes the db container; bring it back for dev
 ```
 
-`docker compose up -d db` (no profile) starts only Postgres. Host ports are published on 127.0.0.1 only; inside the
+If the full profile does not come up, run `docker compose logs backend` first (a missing key or bad config shows there;
+the backend restarts at most 3 times on failure instead of looping). `docker compose up -d db` (no profile) starts only Postgres. Host ports are published on 127.0.0.1 only; inside the
 containers the servers listen on 0.0.0.0 so those mappings can reach them. A missing key fails the backend at start
 with `ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic`. `NEXT_PUBLIC_API_URL` is baked into the frontend
-image at build time (compose arg), so changing the API address means rebuilding it.
+image at build time (compose arg), so changing the API address means rebuilding it. Docker overrides `HOSTNAME` with the
+container id, so compose sets `HOSTNAME=0.0.0.0` at run time; a plain `docker run` of the frontend image needs
+`-e HOSTNAME=0.0.0.0` or the server will not be reachable through the port mapping.
 
 ## Operations
 
@@ -120,6 +123,9 @@ image at build time (compose arg), so changing the API address means rebuilding 
   working. `AI_PROVIDER=fake` stops all spend at once (not allowed in production).
 - **Daily budget:** `AI_DAILY_TOKEN_BUDGET` (default 50000) caps tokens per user per day; one generation runs per user
   at a time.
+- **Time zones (migration 007):** it normalises stored `app_user.time_zone` values to Postgres spellings (for example
+  `Asia/Calcutta` becomes `Asia/Kolkata`) and resets unknown or offset-style values (such as `+01:00`) to `UTC`. Its
+  down migration is a no-op, so a rollback does not restore the old values.
 - **Operator password reset:** `bun run --filter backend user:reset-password <email>` ends that user's sessions and
   prints a temporary password once.
 - **Log everyone out:** delete the rows of `session` (`DELETE FROM session;`).

@@ -299,6 +299,20 @@ describe('limits and locks (AC09)', () => {
     expect(ctx.tutor.calls).toHaveLength(0)
   })
 
+  it('sums per-row token counts past the int4 range without overflowing', async () => {
+    const { session, threadId } = await setup()
+    const nearMax = 2_147_483_647
+    await sql`
+      INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+        cache_creation_token, stop_reason, latency_ms, created_at)
+      SELECT id, 'explain', 'fake', ${nearMax}, ${nearMax}, 0, 0, 'end_turn', 1,
+        (date_trunc('day', now() AT TIME ZONE time_zone) + interval '12 hours') AT TIME ZONE time_zone
+      FROM app_user WHERE id = ${session.user.id}`.execute(ctx.db)
+    const { res } = await ask(session.cookie, threadId, 'hello')
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('ai_budget_exceeded')
+  })
+
   it('ignores tokens spent before the start of today in the user time zone', async () => {
     const { session, threadId } = await setup()
     await ctx.db

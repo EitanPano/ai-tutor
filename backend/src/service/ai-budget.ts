@@ -11,7 +11,7 @@ import type { Auth } from './ownership.js'
  */
 export async function assertWithinBudget(db: Db, auth: Auth, budget: number): Promise<void> {
   const { rows } = await sql<{ used: string }>`
-    SELECT COALESCE(SUM(c.input_token + c.cache_creation_token + c.cache_read_token + c.output_token), 0)::text AS used
+    SELECT COALESCE(SUM(c.input_token::bigint + c.cache_creation_token + c.cache_read_token + c.output_token), 0)::text AS used
     FROM app_user u
     LEFT JOIN ai_call c
       ON c.user_id = u.id

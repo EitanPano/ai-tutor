@@ -20,6 +20,8 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
+# Docker overrides HOSTNAME with the container id at run time, so this default is not enough:
+# compose sets HOSTNAME=0.0.0.0 itself, and a plain `docker run` needs `-e HOSTNAME=0.0.0.0`.
 WORKDIR /app
 # Standalone output of a workspace build mirrors the repo: server.js sits at frontend/server.js.
 COPY --from=build --chown=node:node /app/frontend/.next/standalone ./
