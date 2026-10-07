@@ -1,6 +1,6 @@
 # 003 — Review hardening
 
-Status: active
+Status: done
 Owner: Eitan
 Last updated: 2026-10-07
 Approval: scope and Q2–Q3 answered in chat on 2026-10-07; plan approved as written (Q4 included) the same
