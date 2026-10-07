@@ -37,12 +37,17 @@ export type AppDeps = {
   inFlight?: InFlightRegistry
 }
 
-/** What index.ts and tests need besides HTTP: module APIs and the boot-time stale-turn sweep. */
+/** What index.ts and tests need besides HTTP: module APIs and the boot recovery. */
 export type AppModules = {
   topic: TopicApi
   ai: AiApi
   thread: ThreadApi
-  recoverStale: () => Promise<number>
+  /**
+   * Boot only, before the first request: fails every unfinished turn (whatever its age) and clears
+   * every generation lock. Assumes a single backend instance, so all of it belongs to a dead
+   * process. Turns first, then locks, so a freed user never meets their own orphan turn.
+   */
+  recoverAtBoot: () => Promise<{ turns: number; locks: number }>
 }
 
 export function createApp({
@@ -127,6 +132,15 @@ export function createApp({
   app.use(errorMiddleware)
   return {
     app,
-    modules: { topic: topic.api, ai: ai.api, thread: thread.api, recoverStale: thread.recoverStale }
+    modules: {
+      topic: topic.api,
+      ai: ai.api,
+      thread: thread.api,
+      recoverAtBoot: async () => {
+        const turns = await thread.recoverStale()
+        const locks = await ai.releaseAllLocks()
+        return { turns, locks }
+      }
+    }
   }
 }

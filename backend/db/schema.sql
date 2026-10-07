@@ -12,7 +12,7 @@ CREATE TABLE app_user (
   time_zone text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz NULL,
-  -- Per-user generation lock: set while an AI generation runs, taken over after 5 minutes.
+  -- Per-user generation lock: set while an AI generation runs, taken over after 10 minutes.
   generation_started_at timestamptz NULL
 );
 

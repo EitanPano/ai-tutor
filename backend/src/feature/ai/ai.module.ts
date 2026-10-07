@@ -28,7 +28,17 @@ export type AiApi = {
 }
 export type AiModuleDeps = AiServiceDeps
 
-export function createAiModule(deps: AiModuleDeps): { api: AiApi } {
+/**
+ * Besides the api, the module returns `releaseAllLocks` for the boot recovery in `app.ts`. It is
+ * not on `AiApi` because no other module may clear locks it does not hold.
+ */
+export type AiModule = {
+  api: AiApi
+  /** Clears every held generation lock, system-wide; returns how many were held. Boot only. */
+  releaseAllLocks: () => Promise<number>
+}
+
+export function createAiModule(deps: AiModuleDeps): AiModule {
   const service = createAiService(deps)
   const api: AiApi = {
     assertEnabled: () => service.assertEnabled(),
@@ -39,5 +49,5 @@ export function createAiModule(deps: AiModuleDeps): { api: AiApi } {
     generateValidated: (auth, options) => service.generateValidated(auth, options),
     lockTtlSeconds: service.lockTtlSeconds
   }
-  return { api }
+  return { api, releaseAllLocks: () => service.releaseAllLocks() }
 }

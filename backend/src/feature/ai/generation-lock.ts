@@ -47,3 +47,14 @@ export async function releaseGenerationLock(
     UPDATE app_user SET generation_started_at = NULL
     WHERE id = ${auth.userId} AND generation_started_at = ${token}::timestamptz`.execute(db)
 }
+
+/**
+ * Clears every held lock and returns how many there were. Only for boot, before the first request:
+ * with one backend instance, every lock still set then belongs to a process that no longer exists.
+ */
+export async function releaseAllGenerationLocks(db: Db): Promise<number> {
+  const result = await sql`
+    UPDATE app_user SET generation_started_at = NULL
+    WHERE generation_started_at IS NOT NULL`.execute(db)
+  return Number(result.numAffectedRows ?? 0)
+}

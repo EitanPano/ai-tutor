@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from 'express'
+import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
@@ -49,5 +50,5 @@ export function createThreadModule(deps: ThreadModuleDeps): {
   const router = Router()
   router.use(threadRouter(thread, { requireSession }))
   router.use(messageRouter(message, { requireSession, ai, tutor, logger, inFlight }))
-  return { api, router, recoverStale: () => recoverStaleTurn(db, ai.lockTtlSeconds) }
+  return { api, router, recoverStale: () => recoverStaleTurn(db, sql<Date>`now()`) }
 }

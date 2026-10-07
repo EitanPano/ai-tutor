@@ -8,6 +8,7 @@ import { assertWithinBudget, recordAiCall, type AiCallRecord } from './ai-budget
 import { generateValidated, type GenerateOptions } from './generate-validated.js'
 import {
   acquireGenerationLock,
+  releaseAllGenerationLocks,
   releaseGenerationLock,
   GENERATION_LOCK_TTL_SECONDS,
   type GenerationLockToken
@@ -31,6 +32,8 @@ export type AiService = {
   acquireLock(auth: Auth): Promise<GenerationLockToken>
   /** Releases only while `token` still owns the lock. Pass `tx` to release inside the caller's transaction. */
   releaseLock(auth: Auth, token: GenerationLockToken, tx?: Db): Promise<void>
+  /** Clears every held lock, system-wide; returns the count. Boot recovery only. */
+  releaseAllLocks(): Promise<number>
   /** One structured provider call validated by `schema`, retried once; records every call in `ai_call`. */
   generateValidated<S extends z.ZodType>(
     auth: Auth,
@@ -47,6 +50,7 @@ export function createAiService({ db, config, logger }: AiServiceDeps): AiServic
     recordCall: (auth, row) => recordAiCall(db, auth, row),
     acquireLock: (auth) => acquireGenerationLock(db, auth),
     releaseLock: (auth, token, tx = db) => releaseGenerationLock(tx, auth, token),
+    releaseAllLocks: () => releaseAllGenerationLocks(db),
     generateValidated: (auth, options) => generateValidated(db, auth, { ...options, logger }),
     lockTtlSeconds: GENERATION_LOCK_TTL_SECONDS
   }

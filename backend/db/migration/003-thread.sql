@@ -22,7 +22,7 @@ INSERT INTO topic (id, name, position) VALUES
   ('other', 'Other', 12)
 ON CONFLICT DO NOTHING;
 
--- Per-user generation lock: set while an AI generation runs, taken over after 5 minutes.
+-- Per-user generation lock: set while an AI generation runs, taken over after 10 minutes.
 ALTER TABLE app_user ADD COLUMN generation_started_at timestamptz NULL;
 
 CREATE TABLE thread (

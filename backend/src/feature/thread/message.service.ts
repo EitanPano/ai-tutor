@@ -7,7 +7,7 @@ import { ZERO_USAGE } from '../../lib/tutor/tutor.js'
 import type { AiApi, GenerationLockToken } from '../ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import { DEFAULT_TITLE, type ThreadService } from './thread.service.js'
-import { recoverStaleTurn } from './stale-turn.js'
+import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { TopicApi } from '../topic/index.js'
 
 /** A thread holds at most 25 non-failed messages (ledger ruling 14). */
@@ -137,7 +137,7 @@ export function createMessageService({
     async start(auth, threadId, content) {
       ai.assertEnabled()
       // A crashed generation must not count toward the thread cap or hold the lock for ever.
-      await recoverStaleTurn(db, ai.lockTtlSeconds, { auth })
+      await recoverStaleTurn(db, olderThanTtl(ai.lockTtlSeconds), { auth })
       const thread = await threadService.require(auth, threadId)
       await ai.assertWithinBudget(auth)
       if (thread.messageCount + 2 > MAX_THREAD_MESSAGES) {
