@@ -2,16 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { askQuestion } from '@/lib/api/ask'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isApiError, isRetryable } from '@/lib/api/error'
 import { isPending, threadKey, type ThreadDetailResponse } from '@/lib/api/thread'
-
-/** Failures worth offering a one-tap Retry for: nothing about the question itself is wrong. */
-const RETRYABLE = new Set([
-  'ai_provider_error',
-  'stream_interrupted',
-  'network_error',
-  'generation_in_progress'
-])
 
 /** Ask turns into Stop in place, so a double click or key repeat must not stop the answer just asked for. */
 const STOP_GRACE_MS = 400
@@ -154,7 +146,7 @@ export function useAsk(
           if (code === 'ai_budget_exceeded') setBudgetSpent(true)
           if (code === 'thread_full') setThreadFull(true)
           const id = toast.error(describeError(err), {
-            ...(RETRYABLE.has(code) && {
+            ...(isRetryable(err, 'ask') && {
               action: {
                 label: 'Retry',
                 onClick: () => {

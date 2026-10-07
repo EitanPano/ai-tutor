@@ -49,6 +49,29 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   stream_interrupted: 'The answer stopped unexpectedly. Retry to ask again.'
 }
 
+const RETRYABLE_BY_KIND = {
+  ask: new Set([
+    'ai_provider_error',
+    'stream_interrupted',
+    'network_error',
+    'generation_in_progress'
+  ]),
+  generate: new Set([
+    'ai_invalid_output',
+    'ai_provider_error',
+    'generation_in_progress',
+    'network_error'
+  ])
+} as const
+
+/**
+ * Whether a failure is worth a one-tap Retry: nothing about the request itself is wrong, so
+ * asking again could work. `ask` streams an answer; `generate` writes a guide or a quiz.
+ */
+export function isRetryable(err: unknown, kind: keyof typeof RETRYABLE_BY_KIND): boolean {
+  return isApiError(err) && RETRYABLE_BY_KIND[kind].has(err.code)
+}
+
 /** One user-facing sentence for any thrown value. Says what happened and what to do. */
 export function describeError(err: unknown): string {
   if (isApiError(err)) {

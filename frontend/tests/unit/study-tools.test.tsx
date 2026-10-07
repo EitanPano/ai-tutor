@@ -123,6 +123,16 @@ describe('StudyTools guide action', () => {
     await waitFor(() => expect(api.createGuide).toHaveBeenCalledTimes(2))
   })
 
+  it.each(['generation_in_progress', 'network_error'])('offers Retry on %s', async (code) => {
+    api.createGuide.mockRejectedValue(new ApiError({ status: 409, code, message: 'x' }))
+    const typist = setup()
+
+    await typist.click(screen.getByRole('button', { name: 'Guide me step by step' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect(toast.error.mock.calls[0]![1].action.label).toBe('Retry')
+  })
+
   it.each([
     [422, 'ai_refused', "The tutor can't help with that question. Try rephrasing it."],
     [409, 'thread_empty', 'Ask a question first. A guide or quiz needs an answer to build on.']

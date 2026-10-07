@@ -8,15 +8,12 @@ import { toast } from 'sonner'
 import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button } from '@/component/ui/button'
 import { Select } from '@/component/ui/select'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isRetryable } from '@/lib/api/error'
 import { createGuide, guideKey, type GuideSummary } from '@/lib/api/guide'
 import type { Difficulty, QuizSummary } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
 import { GuideIcon, QuizIcon } from '@/lib/icon'
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, difficultyLabel } from '@/lib/quiz'
-
-/** Failures worth a Retry: nothing about the thread itself is wrong. */
-const RETRYABLE = new Set(['ai_invalid_output', 'ai_provider_error'])
 
 type StudyToolsProps = {
   threadId: string
@@ -69,7 +66,7 @@ export const StudyTools = memo(function StudyTools({
       router.push(`/guide/${encodeURIComponent(guide.id)}`)
     },
     onError: (err) => {
-      const retryable = isApiError(err) && RETRYABLE.has(err.code)
+      const retryable = isRetryable(err, 'generate')
       toastId.current = toast.error(describeError(err), {
         ...(retryable && { action: { label: 'Retry', onClick: () => create.mutate() } })
       })

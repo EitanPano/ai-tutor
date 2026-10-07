@@ -96,6 +96,16 @@ describe('useCreateQuiz', () => {
     expect(api.createQuiz).toHaveBeenLastCalledWith({ threadId: 't1', difficulty: 'hard' })
   })
 
+  it.each(['generation_in_progress', 'network_error'])('offers Retry on %s', async (code) => {
+    api.createQuiz.mockRejectedValue(new ApiError({ status: 409, code, message: 'x' }))
+    const { result } = setup()
+
+    act(() => result.current.create({ threadId: 't1', difficulty: 'hard' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect(toast.error.mock.calls[0]![1].action.label).toBe('Retry')
+  })
+
   it('toasts a refusal without Retry and dismisses the toast when the page goes', async () => {
     api.createQuiz.mockRejectedValue(
       new ApiError({ status: 422, code: 'ai_refused', message: 'x' })
