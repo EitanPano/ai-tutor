@@ -16,7 +16,7 @@ import { Streak } from './streak'
 import { Totals } from './totals'
 import { TopicTable } from './topic-table'
 
-function ProgressSkeleton() {
+export function ProgressSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading progress" className="flex flex-col gap-5">
       <div className="h-32 animate-pulse rounded-md border border-rule bg-sheet" />

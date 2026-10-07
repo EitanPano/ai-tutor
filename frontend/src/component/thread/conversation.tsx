@@ -13,6 +13,7 @@ import { Composer } from './composer'
 import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
 import { ThreadHeader } from './thread-header'
+import { ThreadSkeleton } from './thread-skeleton'
 import { Transcript } from './transcript'
 import { useAsk } from './use-ask'
 
@@ -101,14 +102,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     if (loaded) scrollToEnd()
   }, [loaded])
 
-  if (detail.isPending) {
-    return (
-      <div aria-busy="true" aria-label="Loading thread" className="flex flex-col gap-4">
-        <div className="h-9 w-2/3 animate-pulse rounded-sm bg-rule" />
-        <div className="h-64 animate-pulse rounded-md border border-rule bg-sheet" />
-      </div>
-    )
-  }
+  if (detail.isPending) return <ThreadSkeleton />
 
   if (!detail.data) {
     const missing = isApiError(detail.error) && detail.error.code === 'not_found'

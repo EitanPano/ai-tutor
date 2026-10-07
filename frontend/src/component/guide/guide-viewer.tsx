@@ -18,7 +18,7 @@ import { useStepUpdate } from './use-step-update'
 
 const COMPLETE = 'complete'
 
-function Skeleton() {
+export function GuideSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading guide" className="flex flex-col gap-5">
       <div className="h-9 w-2/3 animate-pulse rounded-sm bg-rule" />
@@ -163,7 +163,7 @@ export function GuideViewer({ guideId }: { guideId: string }) {
     select: (response) => response.guide
   })
 
-  if (query.isPending) return <Skeleton />
+  if (query.isPending) return <GuideSkeleton />
 
   if (!query.data) {
     const missing = isApiError(query.error) && query.error.code === 'not_found'
