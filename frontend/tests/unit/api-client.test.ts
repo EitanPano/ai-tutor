@@ -97,9 +97,29 @@ describe('describeError', () => {
     )
   })
 
-  it('has a sentence for rate limiting', () => {
+  it('has a sentence for rate limiting that does not promise a short wait', () => {
     const err = new ApiError({ status: 429, code: 'rate_limited', message: 'x' })
-    expect(describeError(err)).toBe('Too many attempts. Wait a minute, then try again.')
+    expect(describeError(err)).toBe('Too many attempts. Try again later.')
+  })
+
+  it("shows the server's message for ai_unavailable: switched off or paused for today", () => {
+    const off = new ApiError({
+      status: 503,
+      code: 'ai_unavailable',
+      message: 'AI features are temporarily unavailable.'
+    })
+    const capped = new ApiError({
+      status: 503,
+      code: 'ai_unavailable',
+      message: 'AI features are paused for today. Try again tomorrow.'
+    })
+    expect(describeError(off)).toBe('AI features are temporarily unavailable.')
+    expect(describeError(capped)).toBe('AI features are paused for today. Try again tomorrow.')
+  })
+
+  it('falls back to a fixed sentence for ai_unavailable without a server message', () => {
+    const err = new ApiError({ status: 503, code: 'ai_unavailable', message: '' })
+    expect(describeError(err)).toBe('AI features are unavailable right now. Try again later.')
   })
 
   it('does not leak a server message for 5xx errors', () => {

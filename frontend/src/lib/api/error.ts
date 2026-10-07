@@ -28,7 +28,7 @@ export const isApiError = (err: unknown): err is ApiError => err instanceof ApiE
 const MESSAGE_BY_CODE: Record<string, string> = {
   network_error:
     "Can't reach the server. Make sure the API is running and you opened http://localhost:3000.",
-  rate_limited: 'Too many attempts. Wait a minute, then try again.',
+  rate_limited: 'Too many attempts. Try again later.',
   unauthenticated: 'Your session ended. Log in again to continue.',
   invalid_credentials: 'Email or password is incorrect.',
   email_taken: 'An account with this email already exists. Log in instead.',
@@ -42,7 +42,9 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   thread_full: 'This thread is full. Start a new thread to keep going.',
   ai_refused: "The tutor can't help with that question. Try rephrasing it.",
   ai_provider_error: 'The AI service failed to answer. Retry in a moment.',
-  ai_unavailable: 'AI features are turned off right now.',
+  // Fallback only: `describeError` prefers the server's message, which tells a kill switch from a
+  // paused-for-today cap.
+  ai_unavailable: 'AI features are unavailable right now. Try again later.',
   thread_empty: 'Ask a question first. A guide or quiz needs an answer to build on.',
   attempt_incomplete: 'Answer every item before submitting.',
   ai_invalid_output: 'The tutor produced something unusable. Try again.',
@@ -75,6 +77,8 @@ export function isRetryable(err: unknown, kind: keyof typeof RETRYABLE_BY_KIND):
 /** One user-facing sentence for any thrown value. Says what happened and what to do. */
 export function describeError(err: unknown): string {
   if (isApiError(err)) {
+    // Both causes share the code, and the server's message names the right one (and is safe to show).
+    if (err.code === 'ai_unavailable' && err.message) return err.message
     const known = MESSAGE_BY_CODE[err.code]
     if (known) return known
     if (err.status >= 500) return 'The server hit a problem. Try again in a moment.'
