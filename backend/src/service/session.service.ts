@@ -3,7 +3,7 @@ import type { Db } from '../lib/db/index.js'
 import { unauthorized } from '../lib/error.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
 import { createSessionToken, hashSessionToken } from '../lib/session-token.js'
-import { toUserDto, type UserDto } from './user.service.js'
+import { toUserDto, type UserDto } from './user.dto.js'
 
 export type ResolvedSession = {
   sessionId: string

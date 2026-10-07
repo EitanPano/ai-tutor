@@ -1,35 +1,16 @@
 import type { Db } from '../lib/db/index.js'
-import type { AppUserRow } from '../lib/db/schema.js'
 import { badRequest, conflict } from '../lib/error.js'
 import { hashPassword } from '../lib/password.js'
 import { normaliseTimeZone } from '../lib/time-zone.js'
 import { requireFound, type Auth } from './ownership.js'
 import { startSession } from './session.service.js'
-
-export type UserDto = {
-  id: string
-  email: string
-  displayName: string
-  timeZone: string
-  createdAt: string
-}
+import { toUserDto, type UserDto } from './user.dto.js'
 
 export type CreateUserInput = {
   email: string
   password: string
   displayName: string
   timeZone: string
-}
-
-/** Explicit mapping: the password hash must never leave the service layer. */
-export function toUserDto(row: AppUserRow): UserDto {
-  return {
-    id: row.id,
-    email: row.email,
-    displayName: row.display_name,
-    timeZone: row.time_zone,
-    createdAt: row.created_at.toISOString()
-  }
 }
 
 /** The spelling Postgres accepts, or 400 `validation_failed` (see `normaliseTimeZone`). */
