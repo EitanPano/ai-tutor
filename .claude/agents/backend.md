@@ -37,10 +37,12 @@ That is your spec — implement all of it and nothing beyond it.
 
 ### Step 2: Implement
 Structure:
-1. `backend/src/route/` — HTTP + Zod validation, one module per resource
-2. `backend/src/service/` — domain rules + ownership; `auth: { userId }` is passed explicitly
-3. `backend/src/lib/` — db, tutor provider, rate limit
-4. `backend/src/index.ts` — the Express app, wired together
+- A new resource is a module in `backend/src/feature/<m>/`: `<m>.module.ts`, `<m>.service.ts`,
+  `<m>.route.ts`, `<m>.schema.ts`, `index.ts`.
+- `auth: { userId }` is still passed explicitly.
+- Use another module only through its injected `XApi` (`import type` only).
+- Wire new modules in `backend/src/app.ts`, in dependency order.
+- A module that writes a table declares it in `OWNED` in `backend/tests/unit/architecture.test.ts`.
 
 Tests run against the real test database.
 
