@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url'
 import type pg from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createDb } from '../../src/lib/db/index.js'
-import { migrate, parseMigration, reset, rollback } from '../../src/lib/db/migrate.js'
+import {
+  MIGRATION_DIR,
+  migrate,
+  parseMigration,
+  reset,
+  rollback
+} from '../../src/lib/db/migrate.js'
 import { SCHEMA_CHECK_DATABASE_URL, TEST_DATABASE_URL } from '../global-setup.js'
 
 const SCHEMA_SQL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../db/schema.sql')
@@ -102,5 +108,37 @@ describe('schema.sql', () => {
     await check.pool.query('CREATE SCHEMA public')
     await check.pool.query(await readFile(SCHEMA_SQL, 'utf8'))
     expect(await snapshot(check.pool)).toEqual(await snapshot(test.pool))
+  })
+})
+
+describe('007-normalise-time-zone', () => {
+  it('remaps legacy and offset zones, keeps valid ones, and is idempotent', async () => {
+    await reset(test.pool)
+    const file = await readFile(path.join(MIGRATION_DIR, '007-normalise-time-zone.sql'), 'utf8')
+    const { up } = parseMigration('007-normalise-time-zone.sql', file)
+    const zones: Record<string, string> = {
+      'Asia/Calcutta': 'Asia/Kolkata',
+      'europe/kiev': 'Europe/Kyiv',
+      'europe/paris': 'Europe/Paris',
+      '+01:00': 'UTC',
+      'Mars/Olympus': 'UTC',
+      'America/New_York': 'America/New_York'
+    }
+    let n = 0
+    for (const zone of Object.keys(zones)) {
+      n += 1
+      await test.pool.query(
+        `INSERT INTO app_user (email, password_hash, display_name, time_zone)
+         VALUES ($1, 'x', 'u', $2)`,
+        [`tz${n}@example.com`, zone]
+      )
+    }
+    await test.pool.query(up)
+    await test.pool.query(up)
+    const { rows } = await test.pool.query<{ email: string; time_zone: string }>(
+      'SELECT email, time_zone FROM app_user ORDER BY email'
+    )
+    expect(rows.map((row) => row.time_zone)).toEqual(Object.values(zones))
+    await test.pool.query('TRUNCATE app_user CASCADE')
   })
 })

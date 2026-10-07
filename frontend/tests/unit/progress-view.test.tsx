@@ -330,6 +330,23 @@ describe('profile', () => {
     expect(await screen.findByRole('option', { name: 'UTC' })).toBeInTheDocument()
   })
 
+  it('selects a normalised zone the browser lists only under its legacy spelling, and round-trips a legacy pick', async () => {
+    vi.spyOn(Intl, 'supportedValuesOf').mockReturnValue(['Asia/Calcutta', 'Europe/Paris'])
+    api.updateUser.mockResolvedValue({ user: { ...user, timeZone: 'Asia/Kolkata' } })
+    const { typist } = setup(progress(), { ...user, timeZone: 'Asia/Kolkata' })
+
+    const select = await screen.findByLabelText('Time zone')
+    expect(select).toHaveValue('Asia/Kolkata')
+
+    await typist.selectOptions(select, 'Europe/Paris')
+    await typist.selectOptions(select, 'Asia/Calcutta')
+    await typist.click(screen.getByRole('button', { name: 'Save profile' }))
+
+    await waitFor(() => expect(api.updateUser).toHaveBeenCalledWith({ timeZone: 'Asia/Calcutta' }))
+    await waitFor(() => expect(screen.getByLabelText('Time zone')).toHaveValue('Asia/Kolkata'))
+    expect(screen.queryByText(/something went wrong|failed/i)).not.toBeInTheDocument()
+  })
+
   it('sends only the changed field, then refreshes the session and progress', async () => {
     const saved = { ...user, displayName: 'Grace' }
     api.updateUser.mockResolvedValue({ user: saved })

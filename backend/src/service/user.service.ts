@@ -2,6 +2,7 @@ import type { Db } from '../lib/db/index.js'
 import type { AppUserRow } from '../lib/db/schema.js'
 import { badRequest, conflict } from '../lib/error.js'
 import { hashPassword } from '../lib/password.js'
+import { normaliseTimeZone } from '../lib/time-zone.js'
 import { requireFound, type Auth } from './ownership.js'
 import { startSession } from './session.service.js'
 
@@ -31,15 +32,13 @@ export function toUserDto(row: AppUserRow): UserDto {
   }
 }
 
-function assertTimeZone(timeZone: string): void {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone })
-  } catch (err) {
-    if (!(err instanceof RangeError)) throw err
-    throw badRequest('validation_failed', 'The request is invalid.', {
-      issues: [{ path: ['timeZone'], message: 'Must be an IANA time zone such as Europe/Paris.' }]
-    })
-  }
+/** The spelling Postgres accepts, or 400 `validation_failed` (see `normaliseTimeZone`). */
+async function resolveTimeZone(db: Db, timeZone: string): Promise<string> {
+  const normalised = await normaliseTimeZone(db, timeZone)
+  if (normalised !== null) return normalised
+  throw badRequest('validation_failed', 'The request is invalid.', {
+    issues: [{ path: ['timeZone'], message: 'Must be an IANA time zone such as Europe/Paris.' }]
+  })
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -51,7 +50,7 @@ export async function createUser(
   db: Db,
   input: CreateUserInput
 ): Promise<{ user: UserDto; token: string }> {
-  assertTimeZone(input.timeZone)
+  const timeZone = await resolveTimeZone(db, input.timeZone)
   const passwordHash = await hashPassword(input.password)
   try {
     return await db.transaction().execute(async (trx) => {
@@ -61,7 +60,7 @@ export async function createUser(
           email: input.email.trim(),
           password_hash: passwordHash,
           display_name: input.displayName,
-          time_zone: input.timeZone
+          time_zone: timeZone
         })
         .returningAll()
         .executeTakeFirstOrThrow()
@@ -91,10 +90,11 @@ export async function updateUser(
   auth: Auth,
   input: { displayName?: string; timeZone?: string }
 ): Promise<UserDto> {
-  if (input.timeZone !== undefined) assertTimeZone(input.timeZone)
+  const timeZone =
+    input.timeZone === undefined ? undefined : await resolveTimeZone(db, input.timeZone)
   const changes = {
     ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
-    ...(input.timeZone !== undefined ? { time_zone: input.timeZone } : {})
+    ...(timeZone !== undefined ? { time_zone: timeZone } : {})
   }
   if (Object.keys(changes).length === 0) return getUser(db, auth)
   const row = await db
