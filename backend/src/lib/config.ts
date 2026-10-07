@@ -88,3 +88,28 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS
   }
 }
+
+const dbEnvSchema = envSchema.pick({ NODE_ENV: true, DATABASE_URL: true, LOG_LEVEL: true })
+
+export type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>
+
+/**
+ * The narrow config the db CLI (migrate, seed, reset-password, ...) needs: it must run in an
+ * image or shell that has no AI settings, so it never validates them.
+ */
+export function loadDbConfig(vars: NodeJS.ProcessEnv = process.env): DbConfig {
+  const parsed = dbEnvSchema.safeParse(withoutEmpty(vars))
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+    throw new Error(`Invalid configuration:\n- ${lines.join('\n- ')}`)
+  }
+  const v = parsed.data
+  if (v.NODE_ENV === 'production' && !v.DATABASE_URL) {
+    throw new Error('Invalid configuration:\n- DATABASE_URL: required in production')
+  }
+  return {
+    nodeEnv: v.NODE_ENV,
+    databaseUrl: v.DATABASE_URL ?? DEV_DATABASE_URL,
+    logLevel: v.LOG_LEVEL
+  }
+}

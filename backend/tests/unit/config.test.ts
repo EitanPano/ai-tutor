@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadConfig } from '../../src/lib/config.js'
+import { loadConfig, loadDbConfig } from '../../src/lib/config.js'
 
 describe('loadConfig', () => {
   it('applies development defaults for an empty environment', () => {
@@ -79,5 +79,26 @@ describe('loadConfig', () => {
     expect(loadConfig({ FRONTEND_URL: 'https://app.example.com' }).frontendUrl).toBe(
       'https://app.example.com'
     )
+  })
+})
+
+describe('loadDbConfig', () => {
+  it('needs no AI settings, even in production', () => {
+    expect(loadDbConfig({ NODE_ENV: 'production', DATABASE_URL: 'postgres://db/x' })).toEqual({
+      nodeEnv: 'production',
+      databaseUrl: 'postgres://db/x',
+      logLevel: 'info'
+    })
+  })
+
+  it('defaults the database URL in development', () => {
+    expect(loadDbConfig({}).databaseUrl).toBe(
+      'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor'
+    )
+  })
+
+  it('requires DATABASE_URL in production and rejects a bad log level', () => {
+    expect(() => loadDbConfig({ NODE_ENV: 'production' })).toThrow('DATABASE_URL')
+    expect(() => loadDbConfig({ LOG_LEVEL: 'loud' })).toThrow('LOG_LEVEL')
   })
 })

@@ -1,4 +1,4 @@
-import { loadConfig } from '../config.js'
+import { loadDbConfig } from '../config.js'
 import { ensureDatabase } from './ensure-database.js'
 import { createDb } from './index.js'
 import { migrate, reset, rollback } from './migrate.js'
@@ -9,7 +9,7 @@ const log = (message: string) => console.log(message)
 
 async function main(): Promise<void> {
   const command = process.argv[2]
-  const config = loadConfig()
+  const config = loadDbConfig()
   const { db, pool } = createDb(config.databaseUrl)
   try {
     switch (command) {

@@ -1,0 +1,17 @@
+# Build context hygiene: nothing local, generated or secret goes into an image.
+**/node_modules
+**/.next
+**/.next-e2e
+**/dist
+**/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+.git
+.superpowers
+.orchestrate
+.claude
+.plan
+.doc
+**/.env*
+!**/.env.example
