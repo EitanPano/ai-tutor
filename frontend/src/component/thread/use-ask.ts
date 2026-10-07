@@ -49,6 +49,10 @@ export function useAsk(
   const controller = useRef<AbortController | undefined>(undefined)
   const askedAt = useRef(0)
   const mounted = useRef(true)
+  // Streamed text waits here and reaches state at most once per animation frame: every state
+  // change re-parses the whole growing answer as Markdown.
+  const buffered = useRef('')
+  const frame = useRef<number | undefined>(undefined)
   const askRef =
     useRef<(question: string, onAccepted?: () => void) => Promise<AskResult>>(undefined)
   const retryAccepted = useRef(onRetryAccepted)
@@ -63,6 +67,9 @@ export function useAsk(
     const ids = toastIds.current
     return () => {
       mounted.current = false
+      if (frame.current !== undefined) cancelAnimationFrame(frame.current)
+      frame.current = undefined
+      buffered.current = ''
       // Deferred so React's dev-only unmount/remount does not cancel a stream that just started.
       setTimeout(() => {
         if (mounted.current) return
@@ -83,6 +90,7 @@ export function useAsk(
       let started = false
       let answerId: string | undefined
       let outcome: AskResult['outcome'] = 'failed'
+      buffered.current = ''
       setAnnouncement('')
       setAsking({ phase: 'thinking', question, text: '' })
 
@@ -98,6 +106,17 @@ export function useAsk(
       const update = (change: (current: Asking) => Asking) =>
         setAsking((current) => (current ? change(current) : current))
 
+      // Moves the buffered text into state now and drops the pending frame, so nothing is lost
+      // or applied twice. Call it before any change that must come after the text.
+      const flush = () => {
+        if (frame.current !== undefined) cancelAnimationFrame(frame.current)
+        frame.current = undefined
+        const text = buffered.current
+        buffered.current = ''
+        if (text && mounted.current)
+          update((a) => ({ ...a, phase: 'streaming', text: a.text + text }))
+      }
+
       try {
         const result = await askQuestion(threadId, question, {
           signal: abort.signal,
@@ -109,8 +128,14 @@ export function useAsk(
             // The thread was just saved with its first question: refresh its title and the list.
             void queryClient.invalidateQueries({ queryKey: threadKey.all })
           },
-          onDelta: (text) => update((a) => ({ ...a, phase: 'streaming', text: a.text + text })),
-          onComplete: () => update((a) => ({ ...a, phase: 'finalizing' }))
+          onDelta: (text) => {
+            buffered.current += text
+            frame.current ??= requestAnimationFrame(flush)
+          },
+          onComplete: () => {
+            flush()
+            update((a) => ({ ...a, phase: 'finalizing' }))
+          }
         })
         outcome = result
         if (result === 'completed' && mounted.current) setAnnouncement('Answer ready')
@@ -133,6 +158,7 @@ export function useAsk(
           if (id !== undefined) toastIds.current.add(id)
         }
       } finally {
+        flush()
         if (mounted.current) setAsking((a) => (a ? { ...a, phase: 'finalizing' } : a))
         // The saved thread is the truth: keep the streamed text on screen until it has loaded.
         // The controller stays set until then, so a second ask cannot start mid-handover.

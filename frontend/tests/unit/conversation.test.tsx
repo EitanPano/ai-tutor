@@ -70,6 +70,8 @@ function controlledAsk() {
         handlers.onStart?.({ threadId: THREAD_ID, userMessageId: 'u2', assistantMessageId: 'a2' })
       ),
     delta: (text: string) => act(() => handlers.onDelta?.(text)),
+    /** Lets one animation frame pass, which is when buffered delta text reaches the screen. */
+    frame: () => act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))),
     complete: () =>
       act(async () => {
         handlers.onComplete?.({
@@ -128,6 +130,7 @@ describe('Conversation', () => {
     await ask.start()
     await ask.delta('Strict Mode ')
     await ask.delta('mounts twice.')
+    await ask.frame()
 
     expect(screen.queryByText('Thinking…')).not.toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
@@ -157,6 +160,51 @@ describe('Conversation', () => {
     expect(screen.getAllByRole('article', { name: 'Your question' })).toHaveLength(1)
   })
 
+  it('shows deltas that arrive within one frame together, never one by one', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+
+    await ask.delta('Strict ')
+    await ask.delta('Mode ')
+    await ask.delta('mounts twice.')
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).not.toHaveTextContent('Strict')
+    expect(screen.getByText('Thinking…')).toBeInTheDocument()
+
+    await ask.frame()
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Strict Mode mounts twice.'
+    )
+
+    await ask.delta(' More.')
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).not.toHaveTextContent('More.')
+    await ask.frame()
+    expect(screen.getByRole('article', { name: 'Tutor answer' })).toHaveTextContent(
+      'Strict Mode mounts twice. More.'
+    )
+  })
+
+  it('keeps text delivered right before complete, without a frame in between', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    const ask = controlledAsk()
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await screen.findByText('Thinking…')
+    await ask.start()
+    await ask.delta('Before ')
+    await ask.frame()
+    await ask.delta('the end.')
+
+    // The saved thread has not arrived yet, so the streamed text is what is on screen.
+    api.getThread.mockImplementation(() => new Promise(() => undefined))
+    await ask.complete()
+
+    const answer = screen.getByRole('article', { name: 'Tutor answer' })
+    expect(answer).toHaveTextContent('Before the end.')
+    expect(answer.textContent).not.toContain('the end.the end.')
+  })
+
   it('aborts the request when Stop is pressed', async () => {
     sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
     const ask = controlledAsk()
@@ -164,6 +212,7 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Partial')
+    await ask.frame()
     pastStopGrace()
 
     serve(thread({ messageCount: 2 }), [
@@ -334,11 +383,13 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Intro\n\n```ts\nconst a = 1\n```\n\n')
+    await ask.frame()
 
     const block = screen.getByRole('figure')
     const copy = within(block).getByRole('button', { name: 'Copy' })
     await userEvent.setup().type(screen.getByRole('textbox', { name: 'Your question' }), 'next one')
     await ask.delta('More text after the block')
+    await ask.frame()
 
     expect(screen.getByRole('figure')).toBe(block)
     expect(within(block).getByRole('button', { name: 'Copy' })).toBe(copy)
@@ -399,6 +450,7 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Partial')
+    await ask.frame()
 
     pastStopGrace()
     serve(thread({ messageCount: 2 }), [asked, placeholder])
