@@ -26,37 +26,7 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && err.code === '23505'
 }
 
-/** Creates the user and their first session in one transaction. */
-export async function createUser(
-  db: Db,
-  input: CreateUserInput
-): Promise<{ user: UserDto; token: string }> {
-  const timeZone = await resolveTimeZone(db, input.timeZone)
-  const passwordHash = await hashPassword(input.password)
-  try {
-    return await db.transaction().execute(async (trx) => {
-      const row = await trx
-        .insertInto('app_user')
-        .values({
-          email: input.email.trim(),
-          password_hash: passwordHash,
-          display_name: input.displayName,
-          time_zone: timeZone
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()
-      const token = await startSession(trx, row.id)
-      return { user: toUserDto(row), token }
-    })
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      throw conflict('email_taken', 'An account with this email already exists.')
-    }
-    throw err
-  }
-}
-
-export async function getUser(db: Db, auth: Auth): Promise<UserDto> {
+async function getUser(db: Db, auth: Auth): Promise<UserDto> {
   const row = await db
     .selectFrom('app_user')
     .selectAll()
@@ -66,24 +36,63 @@ export async function getUser(db: Db, auth: Auth): Promise<UserDto> {
   return toUserDto(requireFound(row))
 }
 
-export async function updateUser(
-  db: Db,
-  auth: Auth,
-  input: { displayName?: string; timeZone?: string }
-): Promise<UserDto> {
-  const timeZone =
-    input.timeZone === undefined ? undefined : await resolveTimeZone(db, input.timeZone)
-  const changes = {
-    ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
-    ...(timeZone !== undefined ? { time_zone: timeZone } : {})
+export type UserServiceDeps = { db: Db }
+
+export type UserService = {
+  /** Creates the user and their first session in one transaction. */
+  create(input: CreateUserInput): Promise<{ user: UserDto; token: string }>
+  get(auth: Auth): Promise<UserDto>
+  update(auth: Auth, input: { displayName?: string; timeZone?: string }): Promise<UserDto>
+}
+
+export function createUserService({ db }: UserServiceDeps): UserService {
+  return {
+    async create(input) {
+      const timeZone = await resolveTimeZone(db, input.timeZone)
+      const passwordHash = await hashPassword(input.password)
+      try {
+        return await db.transaction().execute(async (trx) => {
+          const row = await trx
+            .insertInto('app_user')
+            .values({
+              email: input.email.trim(),
+              password_hash: passwordHash,
+              display_name: input.displayName,
+              time_zone: timeZone
+            })
+            .returningAll()
+            .executeTakeFirstOrThrow()
+          const token = await startSession(trx, row.id)
+          return { user: toUserDto(row), token }
+        })
+      } catch (err) {
+        if (isUniqueViolation(err)) {
+          throw conflict('email_taken', 'An account with this email already exists.')
+        }
+        throw err
+      }
+    },
+
+    get(auth) {
+      return getUser(db, auth)
+    },
+
+    async update(auth, input) {
+      const timeZone =
+        input.timeZone === undefined ? undefined : await resolveTimeZone(db, input.timeZone)
+      const changes = {
+        ...(input.displayName !== undefined ? { display_name: input.displayName } : {}),
+        ...(timeZone !== undefined ? { time_zone: timeZone } : {})
+      }
+      if (Object.keys(changes).length === 0) return getUser(db, auth)
+      const row = await db
+        .updateTable('app_user')
+        .set(changes)
+        .where('id', '=', auth.userId)
+        .where('deleted_at', 'is', null)
+        .returningAll()
+        .executeTakeFirst()
+      return toUserDto(requireFound(row))
+    }
   }
-  if (Object.keys(changes).length === 0) return getUser(db, auth)
-  const row = await db
-    .updateTable('app_user')
-    .set(changes)
-    .where('id', '=', auth.userId)
-    .where('deleted_at', 'is', null)
-    .returningAll()
-    .executeTakeFirst()
-  return toUserDto(requireFound(row))
 }

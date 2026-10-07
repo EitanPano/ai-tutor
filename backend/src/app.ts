@@ -19,7 +19,7 @@ import { quizRouter } from './feature/quiz/index.js'
 import { threadRouter, messageRouter } from './feature/thread/index.js'
 import { createAiModule, type AiApi } from './feature/ai/index.js'
 import { createTopicModule, type TopicApi } from './feature/topic/index.js'
-import { userRouter, sessionRouter, warmDummyHash } from './feature/user/index.js'
+import { createUserModule } from './feature/user/index.js'
 import { originCheck } from './http/origin-check.js'
 import { requestId } from './http/request-id.js'
 
@@ -50,10 +50,10 @@ export function createApp({
   inFlight = new InFlightRegistry()
 }: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
+  const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
   app.disable('x-powered-by')
-  warmDummyHash()
   app.use(requestId)
   app.use(
     pinoHttp({
@@ -78,15 +78,14 @@ export function createApp({
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
   app.use(healthRouter(db))
-  app.use(userRouter(db, config))
-  app.use(sessionRouter(db, config, createLoginLimiter(pool)))
+  app.use(user.router)
   app.use(topic.router)
-  app.use(threadRouter(db, config, topic.api))
+  app.use(threadRouter(db, user.requireSession, topic.api))
   const provider = tutor ?? createTutorProvider(config)
-  app.use(messageRouter(db, config, provider, logger, inFlight, topic.api, ai.api))
-  app.use(guideRouter(db, config, provider, logger, topic.api, ai.api))
-  app.use(quizRouter(db, config, provider, logger, topic.api, ai.api))
-  app.use(progressRouter(db, config))
+  app.use(messageRouter(db, user.requireSession, provider, logger, inFlight, topic.api, ai.api))
+  app.use(guideRouter(db, user.requireSession, provider, topic.api, ai.api))
+  app.use(quizRouter(db, user.requireSession, provider, topic.api, ai.api))
+  app.use(progressRouter(db, user.requireSession))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)

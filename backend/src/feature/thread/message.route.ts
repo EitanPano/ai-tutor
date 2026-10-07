@@ -1,5 +1,4 @@
-import { Router, type Response } from 'express'
-import type { Config } from '../../lib/config.js'
+import { Router, type RequestHandler, type Response } from 'express'
 import type { Db } from '../../lib/db/index.js'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
@@ -8,7 +7,6 @@ import type { AiApi } from '../ai/index.js'
 import { finishAsk, startAsk, type AskOutcome } from './message.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
-import { requireSession } from '../user/index.js'
 import type { TopicApi } from '../topic/index.js'
 import { askSchema } from './message.schema.js'
 
@@ -32,7 +30,7 @@ function eventWriter(res: Response) {
 
 export function messageRouter(
   db: Db,
-  config: Config,
+  requireSession: RequestHandler,
   tutor: TutorProvider,
   logger: Pick<Logger, 'error'>,
   inFlight: InFlightRegistry,
@@ -41,7 +39,7 @@ export function messageRouter(
 ): Router {
   const router = Router()
 
-  router.post('/api/thread/:id/message', requireSession(db, config), async (req, res) => {
+  router.post('/api/thread/:id/message', requireSession, async (req, res) => {
     // The AI switch is the first check, before the body is looked at (same order as the quiz).
     ai.assertEnabled()
     const auth = getAuth(req)

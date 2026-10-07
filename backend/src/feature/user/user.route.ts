@@ -1,25 +1,27 @@
-import { Router } from 'express'
+import { Router, type RequestHandler } from 'express'
 import type { Config } from '../../lib/config.js'
 import { SESSION_COOKIE, sessionCookieOptions } from '../../lib/cookie.js'
-import type { Db } from '../../lib/db/index.js'
-import { createUser, updateUser } from './user.service.js'
+import type { UserService } from './user.service.js'
 import { getAuth } from '../../http/get-auth.js'
-import { requireSession } from './require-session.js'
 import { signupSchema, updateSchema } from './user.schema.js'
 
-export function userRouter(db: Db, config: Config): Router {
+export function userRouter(
+  service: UserService,
+  deps: { config: Pick<Config, 'nodeEnv'>; requireSession: RequestHandler }
+): Router {
+  const { config, requireSession } = deps
   const router = Router()
 
   router.post('/api/user', async (req, res) => {
     const input = signupSchema.parse(req.body)
-    const { user, token } = await createUser(db, input)
+    const { user, token } = await service.create(input)
     res.cookie(SESSION_COOKIE, token, sessionCookieOptions(config))
     res.status(201).json({ user })
   })
 
-  router.patch('/api/user', requireSession(db, config), async (req, res) => {
+  router.patch('/api/user', requireSession, async (req, res) => {
     const input = updateSchema.parse(req.body)
-    const user = await updateUser(db, getAuth(req), input)
+    const user = await service.update(getAuth(req), input)
     res.json({ user })
   })
 
