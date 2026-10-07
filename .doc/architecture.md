@@ -24,13 +24,17 @@
 | `user` | `app_user`, `session` | router only (also builds the shared `requireSession` middleware) | â€” |
 | `topic` | `topic` | `TopicApi`: `require` | â€” |
 | `ai` | `ai_call`, `app_user` (`generation_started_at` only) | `AiApi`: `assertEnabled`, `assertWithinBudget`, `recordCall`, `acquireLock`, `releaseLock`, `generateValidated`, `lockTtlSeconds` (no router) | â€” |
-| `thread` | `thread`, `message` | `ThreadApi`: `require`, `assertHasAnswer`, `history`, `recoverStale` | `TopicApi`, `AiApi` |
+| `thread` | `thread`, `message` | `ThreadApi`: `require`, `assertHasAnswer`, `history` | `TopicApi`, `AiApi` |
 | `guide` | `guide`, `guide_step` | router only | `TopicApi`, `AiApi`, `ThreadApi` |
 | `quiz` | `quiz`, `quiz_item`, `quiz_attempt` | router only | `TopicApi`, `AiApi`, `ThreadApi` |
 | `progress` | none (read-only) | router only | â€” |
 | `health` | none | router only | â€” |
 
 `thread`, `guide`, `quiz` and `progress` also receive `requireSession` from `user`; `topic` and `health` do not.
+
+Boot recovery of turns left in flight by a crash is not part of `ThreadApi` (it is a system-wide sweep, so guide and
+quiz must not hold it). `createThreadModule(...)` returns it separately as `recoverStale`, and `createApp` exposes it
+to `src/index.ts` and tests through `AppModules`.
 
 Dependency order: `user`, `topic`, `ai` â†’ `thread` â†’ `guide`, `quiz`; `progress` and `health` are standalone.
 
@@ -45,13 +49,21 @@ Rules:
 Enforcement:
 - dependency-cruiser (`backend/.dependency-cruiser.cjs`, run by `bun run lint`):
   - `no-circular` â€” no import cycles.
-  - `infra-is-leaf` â€” `src/lib/` and `src/http/` never import features, routes, services or `app.ts`.
-  - `not-to-unresolvable` â€” every import must resolve.
-  - `cross-module-type-only` â€” a module imports another module only with type-only imports.
-  - `module-public-api-only` â€” a module reaches another only through its `index.ts`.
-  - `root-uses-public-api` â€” `app.ts` and `index.ts` reach modules only through `index.ts`.
+  - `infra-is-leaf` — `src/lib/` and `src/http/` never import features or `app.ts`.
+  - `not-to-unresolvable` — every import must resolve.
+  - `cross-module-type-only` — a module imports another module only with type-only imports.
+  - `module-public-api-only` — a module reaches another only through its `index.ts`.
+  - `feature-values-own-or-infra` — a module imports values only from itself, `src/lib/` and `src/http/`, so a
+    re-export from a new folder or top-level file cannot launder another module's values.
+  - `outside-uses-public-api` — code outside `src/feature/` (`app.ts`, `index.ts`, any other folder) reaches a module
+    only through its `index.ts`.
+  - `index-exports-module-only` — an `index.ts` re-exports values only from its own `<m>.module.ts`.
+- ESLint `@typescript-eslint/no-import-type-side-effects` — type imports are written `import type { X }`, never
+  `import { type X }`: with `verbatimModuleSyntax` the inline form leaves a runtime import behind, which dependency-cruiser
+  would report as type-only.
 - `OWNED` in `backend/tests/unit/architecture.test.ts` is the source of truth for write ownership; the test fails
-  when a module writes a table it does not own.
+  when a module writes a table it does not own, when a table in `db/schema.sql` has no single owner (the `SHARED`
+  allowlist covers `app_user`; `rate_limit` is written by `src/lib/`), and when `src/feature/` holds a loose file.
 
 Adding a module:
 - Create `backend/src/feature/<m>/` with `<m>.module.ts`, `<m>.service.ts`, `<m>.route.ts`, `<m>.schema.ts`, `index.ts`.
