@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { pathParam, text } from '../lib/validation.js'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import type { Logger } from '../lib/logger.js'
@@ -21,8 +22,8 @@ const difficulty = z.enum(['easy', 'medium', 'hard'])
 // Mirrors CreateQuizRequest in .orchestrate/api-contract.yaml: exactly one of `threadId`
 // (optional difficulty) or `topicId` (difficulty required).
 const createQuizSchema = z.union([
-  z.strictObject({ threadId: z.string().min(1), difficulty: difficulty.optional() }),
-  z.strictObject({ topicId: z.string().min(1), difficulty })
+  z.strictObject({ threadId: text().min(1), difficulty: difficulty.optional() }),
+  z.strictObject({ topicId: text().min(1), difficulty })
 ])
 
 // Mirrors SubmitAttemptRequest. The service checks the ids against the quiz.
@@ -30,7 +31,7 @@ const submitAttemptSchema = z.strictObject({
   answers: z
     .array(
       z.strictObject({
-        itemId: z.string().min(1),
+        itemId: text().min(1),
         choiceIndex: z.number().int().min(0).max(3)
       })
     )
@@ -65,7 +66,7 @@ export function quizRouter(
   })
 
   router.get('/api/quiz/:id/attempt/:attemptId', session, async (req, res) => {
-    const attemptId = typeof req.params.attemptId === 'string' ? req.params.attemptId : ''
+    const attemptId = pathParam(req.params.attemptId)
     res.json({ attempt: await getAttempt(db, getAuth(req), pathId(req), attemptId) })
   })
 

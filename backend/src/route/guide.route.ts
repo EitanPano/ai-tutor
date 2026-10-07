@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { pathParam } from '../lib/validation.js'
 import { z } from 'zod'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
@@ -38,7 +39,7 @@ export function guideRouter(
 
   router.patch('/api/guide/:id/step/:stepId', session, async (req, res) => {
     const input = updateStepSchema.parse(req.body)
-    const stepId = typeof req.params.stepId === 'string' ? req.params.stepId : ''
+    const stepId = pathParam(req.params.stepId)
     res.json({ step: await updateStep(db, getAuth(req), pathId(req), stepId, input) })
   })
 

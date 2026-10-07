@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { text } from '../lib/validation.js'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import {
@@ -16,19 +17,19 @@ import { requireSession } from './middleware/require-session.js'
 // These schemas mirror ListThreads / CreateThreadRequest / UpdateThreadRequest in
 // .orchestrate/api-contract.yaml.
 const listQuerySchema = z.object({
-  cursor: z.string().min(1).optional(),
+  cursor: text().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional()
 })
 
 const createSchema = z.strictObject({
-  topicId: z.string().min(1).optional(),
-  title: z.string().min(1).max(120).optional()
+  topicId: text().min(1).optional(),
+  title: text().min(1).max(120).optional()
 })
 
 const updateSchema = z
   .strictObject({
-    title: z.string().min(1).max(120).optional(),
-    topicId: z.string().min(1).optional()
+    title: text().min(1).max(120).optional(),
+    topicId: text().min(1).optional()
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Provide at least one field.' })
 

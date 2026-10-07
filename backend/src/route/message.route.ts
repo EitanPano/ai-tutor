@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express'
 import { z } from 'zod'
+import { text } from '../lib/validation.js'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import type { Logger } from '../lib/logger.js'
@@ -16,8 +17,7 @@ const INTERNAL_MESSAGE = 'Something went wrong on our side. Try again.'
 
 // Mirrors AskRequest in .orchestrate/api-contract.yaml; whitespace-only counts as empty.
 const askSchema = z.strictObject({
-  content: z
-    .string()
+  content: text()
     .max(20_000)
     .refine((value) => value.trim().length > 0, {
       message: 'Too small: expected at least 1 character'

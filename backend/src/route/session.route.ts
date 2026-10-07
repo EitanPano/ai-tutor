@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { RateLimiterRes, type RateLimiterPostgres } from 'rate-limiter-flexible'
 import { z } from 'zod'
+import { email, text } from '../lib/validation.js'
 import type { Config } from '../lib/config.js'
 import { clearSessionCookieOptions, SESSION_COOKIE, sessionCookieOptions } from '../lib/cookie.js'
 import type { Db } from '../lib/db/index.js'
@@ -13,8 +14,8 @@ import { getUser } from '../service/user.service.js'
 
 // Mirrors LoginRequest in .orchestrate/api-contract.yaml.
 const loginSchema = z.strictObject({
-  email: z.email().max(254),
-  password: z.string().min(1).max(128)
+  email: email().max(254),
+  password: text().min(1).max(128)
 })
 
 export function sessionRouter(db: Db, config: Config, loginLimiter: RateLimiterPostgres): Router {
