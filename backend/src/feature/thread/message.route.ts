@@ -4,7 +4,7 @@ import type { Db } from '../../lib/db/index.js'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, type TutorProvider } from '../../lib/tutor/tutor.js'
-import { assertAiEnabled } from '../ai/index.js'
+import type { AiApi } from '../ai/index.js'
 import { finishAsk, startAsk, type AskOutcome } from './message.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
@@ -36,17 +36,18 @@ export function messageRouter(
   tutor: TutorProvider,
   logger: Pick<Logger, 'error'>,
   inFlight: InFlightRegistry,
-  topic: TopicApi
+  topic: TopicApi,
+  ai: AiApi
 ): Router {
   const router = Router()
 
   router.post('/api/thread/:id/message', requireSession(db, config), async (req, res) => {
     // The AI switch is the first check, before the body is looked at (same order as the quiz).
-    assertAiEnabled(config)
+    ai.assertEnabled()
     const auth = getAuth(req)
     const { content } = askSchema.parse(req.body)
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
-    const ctx = await startAsk(db, auth, config, pathId(req), content, { topic })
+    const ctx = await startAsk(db, auth, pathId(req), content, { topic, ai })
     const requestId = String(res.locals.requestId)
     const out = eventWriter(res)
     const controller = new AbortController()
@@ -104,7 +105,7 @@ export function messageRouter(
     }
 
     try {
-      await finishAsk(db, auth, ctx, outcome, logger)
+      await finishAsk(db, auth, ctx, outcome, logger, { ai })
       if (outcome.kind === 'error') {
         errorEvent('ai_provider_error', PROVIDER_ERROR_MESSAGE)
       } else if (outcome.result.stopReason === 'refusal') {

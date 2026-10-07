@@ -17,6 +17,7 @@ import { healthRouter } from './feature/health/index.js'
 import { progressRouter } from './feature/progress/index.js'
 import { quizRouter } from './feature/quiz/index.js'
 import { threadRouter, messageRouter } from './feature/thread/index.js'
+import { createAiModule, type AiApi } from './feature/ai/index.js'
 import { createTopicModule, type TopicApi } from './feature/topic/index.js'
 import { userRouter, sessionRouter, warmDummyHash } from './feature/user/index.js'
 import { originCheck } from './http/origin-check.js'
@@ -37,7 +38,7 @@ export type AppDeps = {
 }
 
 /** The module APIs used outside HTTP: boot recovery in index.ts, and tests. Grows per module. */
-export type AppModules = { topic: TopicApi }
+export type AppModules = { topic: TopicApi; ai: AiApi }
 
 export function createApp({
   config,
@@ -50,6 +51,7 @@ export function createApp({
 }: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
   const topic = createTopicModule({ db })
+  const ai = createAiModule({ db, config, logger })
   app.disable('x-powered-by')
   warmDummyHash()
   app.use(requestId)
@@ -81,12 +83,12 @@ export function createApp({
   app.use(topic.router)
   app.use(threadRouter(db, config, topic.api))
   const provider = tutor ?? createTutorProvider(config)
-  app.use(messageRouter(db, config, provider, logger, inFlight, topic.api))
-  app.use(guideRouter(db, config, provider, logger, topic.api))
-  app.use(quizRouter(db, config, provider, logger, topic.api))
+  app.use(messageRouter(db, config, provider, logger, inFlight, topic.api, ai.api))
+  app.use(guideRouter(db, config, provider, logger, topic.api, ai.api))
+  app.use(quizRouter(db, config, provider, logger, topic.api, ai.api))
   app.use(progressRouter(db, config))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
-  return { app, modules: { topic: topic.api } }
+  return { app, modules: { topic: topic.api, ai: ai.api } }
 }

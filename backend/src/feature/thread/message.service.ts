@@ -1,17 +1,10 @@
 import { sql } from 'kysely'
-import type { Config } from '../../lib/config.js'
 import type { Db } from '../../lib/db/index.js'
 import { conflict } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
 import type { ExplainResult, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
 import { ZERO_USAGE } from '../../lib/tutor/tutor.js'
-import { assertAiEnabled } from '../ai/index.js'
-import { assertWithinBudget, recordAiCall } from '../ai/index.js'
-import {
-  acquireGenerationLock,
-  releaseGenerationLock,
-  type GenerationLockToken
-} from '../ai/index.js'
+import type { AiApi, GenerationLockToken } from '../ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import { DEFAULT_TITLE, requireThread } from './thread.service.js'
 import { recoverStaleTurn } from './stale-turn.js'
@@ -77,21 +70,20 @@ export async function buildHistory(db: Db, auth: Auth, threadId: string): Promis
 export async function startAsk(
   db: Db,
   auth: Auth,
-  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>,
   threadId: string,
   content: string,
-  deps: { topic: TopicApi }
+  deps: { topic: TopicApi; ai: AiApi }
 ): Promise<AskContext> {
-  assertAiEnabled(config)
+  deps.ai.assertEnabled()
   // A crashed generation must not count toward the thread cap or hold the lock for ever.
   await recoverStaleTurn(db, { auth })
   const thread = await requireThread(db, auth, threadId)
-  await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
+  await deps.ai.assertWithinBudget(auth)
   if (thread.messageCount + 2 > MAX_THREAD_MESSAGES) {
     throw conflict('thread_full', 'This thread is full. Start a new thread to keep asking.')
   }
   const topic = await deps.topic.require(thread.topicId)
-  const lockToken = await acquireGenerationLock(db, auth)
+  const lockToken = await deps.ai.acquireLock(auth)
   try {
     const history = await buildHistory(db, auth, thread.id)
     const ids = await db.transaction().execute(async (trx) => {
@@ -134,7 +126,7 @@ export async function startAsk(
     })
     return { threadId: thread.id, ...ids, lockToken, topicName: topic.name, history }
   } catch (err) {
-    await releaseGenerationLock(db, auth, lockToken)
+    await deps.ai.releaseLock(auth, lockToken)
     throw err
   }
 }
@@ -160,8 +152,10 @@ export async function finishAsk(
   auth: Auth,
   ctx: Pick<AskContext, 'userMessageId' | 'assistantMessageId' | 'lockToken'>,
   outcome: AskOutcome,
-  log: Pick<Logger, 'error'>
+  log: Pick<Logger, 'error'>,
+  deps: { ai: AiApi }
 ): Promise<void> {
+  const { ai } = deps
   const result = outcome.kind === 'result' ? outcome.result : undefined
   const stopReason = result ? result.stopReason : 'error'
   const failed = stopReason === 'refusal' || stopReason === 'error'
@@ -171,7 +165,7 @@ export async function finishAsk(
     result?.usage ?? (outcome.kind === 'error' ? outcome.usage : undefined) ?? ZERO_USAGE
   try {
     try {
-      await recordAiCall(db, auth, {
+      await ai.recordCall(auth, {
         kind: 'explain',
         model: outcome.kind === 'result' ? outcome.result.model : outcome.model,
         input_token: usage.inputTokens,
@@ -201,7 +195,7 @@ export async function finishAsk(
             .where(ownedBy('message', auth))
             .execute()
         }
-        await releaseGenerationLock(trx, auth, ctx.lockToken)
+        await ai.releaseLock(auth, ctx.lockToken, trx)
       })
     } catch (err) {
       log.error({ err, userMessageId: ctx.userMessageId }, 'persisting the outcome failed')
@@ -210,7 +204,7 @@ export async function finishAsk(
     }
   } finally {
     // Covers every path where the transaction did not commit; a no-op after it did.
-    await releaseGenerationLock(db, auth, ctx.lockToken)
+    await ai.releaseLock(auth, ctx.lockToken)
   }
 }
 

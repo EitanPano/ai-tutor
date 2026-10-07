@@ -1,9 +1,5 @@
-export { assertAiEnabled } from './ai-guard.js'
-export { assertWithinBudget, recordAiCall } from './ai-budget.js'
-export {
-  acquireGenerationLock,
-  releaseGenerationLock,
-  GENERATION_LOCK_TTL_SECONDS,
-  type GenerationLockToken
-} from './generation-lock.js'
-export { generateValidated } from './generate-validated.js'
+export { createAiModule } from './ai.module.js'
+export type { AiApi, AiModuleDeps } from './ai.module.js'
+export type { AiCallRecord } from './ai-budget.js'
+export type { GenerateOptions } from './generate-validated.js'
+export { GENERATION_LOCK_TTL_SECONDS, type GenerationLockToken } from './generation-lock.js'

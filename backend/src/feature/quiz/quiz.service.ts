@@ -1,16 +1,11 @@
 import { sql } from 'kysely'
-import type { Config } from '../../lib/config.js'
 import type { Db } from '../../lib/db/index.js'
 import type { QuizAttemptRow, QuizDifficulty, QuizRow } from '../../lib/db/schema.js'
 import { unprocessable } from '../../lib/error.js'
-import type { Logger } from '../../lib/logger.js'
 import { QuizDraftSchema, type QuizDraft } from '../../lib/tutor/quiz.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
-import { assertWithinBudget } from '../ai/index.js'
-import { assertAiEnabled } from '../ai/index.js'
+import type { AiApi } from '../ai/index.js'
 import { buildHistory } from '../thread/index.js'
-import { generateValidated } from '../ai/index.js'
-import { acquireGenerationLock, releaseGenerationLock } from '../ai/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
@@ -18,10 +13,9 @@ import type { TopicApi } from '../topic/index.js'
 export const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
 
 export type QuizDeps = {
-  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
   tutor: TutorProvider
-  logger: Pick<Logger, 'error'>
   topic: TopicApi
+  ai: AiApi
 }
 
 /** `{ threadId, difficulty? }` or `{ topicId, difficulty }`; the route validates the shape. */
@@ -126,8 +120,8 @@ export async function createQuiz(
   deps: QuizDeps,
   input: CreateQuizInput
 ): Promise<QuizDto> {
-  const { config, tutor, logger } = deps
-  assertAiEnabled(config)
+  const { tutor, ai } = deps
+  ai.assertEnabled()
   const difficulty = input.difficulty ?? DEFAULT_DIFFICULTY
   let threadId: string | null = null
   let topic: { id: string; name: string }
@@ -139,21 +133,20 @@ export async function createQuiz(
   } else {
     topic = await deps.topic.require(input.topicId)
   }
-  await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
-  const lockToken = await acquireGenerationLock(db, auth)
+  await ai.assertWithinBudget(auth)
+  const lockToken = await ai.acquireLock(auth)
   try {
     const history = threadId === null ? null : await buildHistory(db, auth, threadId)
-    const draft = await generateValidated(db, auth, {
+    const draft = await ai.generateValidated(auth, {
       kind: 'quiz',
       schema: QuizDraftSchema,
       call: () => tutor.generateQuiz({ topicName: topic.name, difficulty, history }),
       model: tutor.model,
-      logger,
       logContext: { topicId: topic.id }
     })
     return await saveQuiz(db, auth, { threadId, topicId: topic.id, difficulty, draft })
   } finally {
-    await releaseGenerationLock(db, auth, lockToken)
+    await ai.releaseLock(auth, lockToken)
   }
 }
 

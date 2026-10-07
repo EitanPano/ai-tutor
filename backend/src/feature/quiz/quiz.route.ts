@@ -4,7 +4,7 @@ import type { Config } from '../../lib/config.js'
 import type { Db } from '../../lib/db/index.js'
 import type { Logger } from '../../lib/logger.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
-import { assertAiEnabled } from '../ai/index.js'
+import type { AiApi } from '../ai/index.js'
 import {
   createQuiz,
   getAttempt,
@@ -23,16 +23,17 @@ export function quizRouter(
   config: Config,
   tutor: TutorProvider,
   logger: Pick<Logger, 'error'>,
-  topic: TopicApi
+  topic: TopicApi,
+  ai: AiApi
 ): Router {
   const router = Router()
   const session = requireSession(db, config)
 
   router.post('/api/quiz', session, async (req, res) => {
     // The AI switch is the first check, before the body is looked at.
-    assertAiEnabled(config)
+    ai.assertEnabled()
     const input: CreateQuizInput = createQuizSchema.parse(req.body)
-    const quiz = await createQuiz(db, getAuth(req), { config, tutor, logger, topic }, input)
+    const quiz = await createQuiz(db, getAuth(req), { tutor, topic, ai }, input)
     res.status(201).json({ quiz })
   })
 

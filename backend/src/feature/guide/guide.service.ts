@@ -1,24 +1,18 @@
 import { sql } from 'kysely'
-import type { Config } from '../../lib/config.js'
 import type { Db } from '../../lib/db/index.js'
 import type { GuideRow, GuideStepRow } from '../../lib/db/schema.js'
-import type { Logger } from '../../lib/logger.js'
 import { GuideDraftSchema, type GuideDraft } from '../../lib/tutor/guide.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
-import { assertWithinBudget } from '../ai/index.js'
-import { assertAiEnabled } from '../ai/index.js'
+import type { AiApi } from '../ai/index.js'
 import { buildHistory } from '../thread/index.js'
-import { generateValidated } from '../ai/index.js'
-import { acquireGenerationLock, releaseGenerationLock } from '../ai/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
 export type GuideDeps = {
-  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
   tutor: TutorProvider
-  logger: Pick<Logger, 'error'>
   topic: TopicApi
+  ai: AiApi
 }
 
 export type StepDto = {
@@ -77,26 +71,25 @@ export async function createGuide(
   deps: GuideDeps,
   threadId: string
 ): Promise<GuideDto> {
-  const { config, tutor, logger } = deps
-  assertAiEnabled(config)
+  const { tutor, ai } = deps
+  ai.assertEnabled()
   const thread = await requireThread(db, auth, threadId)
   await assertThreadHasAnswer(db, auth, thread.id)
-  await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
+  await ai.assertWithinBudget(auth)
   const topic = await deps.topic.require(thread.topicId)
-  const lockToken = await acquireGenerationLock(db, auth)
+  const lockToken = await ai.acquireLock(auth)
   try {
     const history = await buildHistory(db, auth, thread.id)
-    const draft = await generateValidated(db, auth, {
+    const draft = await ai.generateValidated(auth, {
       kind: 'guide',
       schema: GuideDraftSchema,
       call: () => tutor.generateGuide({ topicName: topic.name, history }),
       model: tutor.model,
-      logger,
       logContext: { threadId: thread.id }
     })
     return await saveGuide(db, auth, { threadId: thread.id, topicId: topic.id, draft })
   } finally {
-    await releaseGenerationLock(db, auth, lockToken)
+    await ai.releaseLock(auth, lockToken)
   }
 }
 

@@ -24,6 +24,18 @@ type RecordedCall = {
   latencyMs: number
 }
 
+/** What a caller passes; the ai module supplies the logger. */
+export type GenerateOptions<S extends z.ZodType> = {
+  kind: GenerationKind
+  schema: S
+  /** One provider call. */
+  call: () => Promise<StructuredResult>
+  /** Recorded for a call that threw before returning a result. */
+  model: string
+  /** Extra log fields (ids only, never content). */
+  logContext?: Record<string, string>
+}
+
 /**
  * Runs a structured-output provider call and validates the result with `schema`. Shared by guide
  * and quiz generation. Every provider call is recorded in `ai_call` (kind `kind`), independently
@@ -36,17 +48,7 @@ type RecordedCall = {
 export async function generateValidated<S extends z.ZodType>(
   db: Db,
   auth: Auth,
-  options: {
-    kind: GenerationKind
-    schema: S
-    /** One provider call. */
-    call: () => Promise<StructuredResult>
-    /** Recorded for a call that threw before returning a result. */
-    model: string
-    logger: Pick<Logger, 'error'>
-    /** Extra log fields (ids only, never content). */
-    logContext?: Record<string, string>
-  }
+  options: GenerateOptions<S> & { logger: Pick<Logger, 'error'> }
 ): Promise<z.output<S>> {
   const { kind, schema, call, model, logger } = options
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
