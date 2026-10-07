@@ -84,15 +84,18 @@ Browser ──► frontend/  Next.js 16 (App Router, client-side data fetching)
 ```
 
 SSE ask flow (`POST /api/thread/:id/message`):
-1. Validate the question (1–20,000 characters).
-2. Check the AI kill switch (first, at the route, before body validation; the guide and quiz routes do the same).
-3. Check the user's daily token budget, then the global daily cap, then take the per-user generation lock
-   (`AiApi.withGenerationLock`, shared with guide and quiz; ask holds the lock itself because it outlives the request).
-4. Save the user message.
-5. Stream the answer: `message.start`, then `delta` events, then either `message.complete` or `error`. The history
+1. Check the AI kill switch, first at the route, before the body is looked at (guide and quiz do the same).
+2. Validate the question (1–20,000 characters).
+3. Recover stale turns of the user, then look up the thread (404 if it is not theirs).
+4. Check the user's daily token budget, then the global daily cap.
+5. Check the thread is not full (`thread_full`), then look up the topic.
+6. Take the per-user generation lock (`AiApi.acquireLock`; ask holds it itself because it outlives the request,
+   while guide and quiz use `AiApi.withGenerationLock`, which runs the budget checks and then the lock).
+7. Save the user message.
+8. Stream the answer: `message.start`, then `delta` events, then either `message.complete` or `error`. The history
    sent to the model is capped at 64,000 characters, newest turns kept.
-6. Save the assistant message and the `ai_call` row.
-7. If the client disconnects, abort the upstream call and save the partial answer as `incomplete`.
+9. Save the assistant message and the `ai_call` row.
+10. If the client disconnects, abort the upstream call and save the partial answer as `incomplete`.
 
 - A heartbeat is sent every 15 s, and the response sets `X-Accel-Buffering: no`.
 - The upstream explain stream has a deadline: 45 s without a chunk (idle) or 180 s in total ends the call with an `error`
