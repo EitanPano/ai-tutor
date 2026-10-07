@@ -373,6 +373,44 @@ describe('Conversation', () => {
     expect(screen.getByRole('textbox', { name: 'Your question' })).toBeEnabled()
   })
 
+  it('shows a failed turn even when the first load of the thread answers after the failure', async () => {
+    sessionStorage.setItem(`pending-question:${THREAD_ID}`, 'Why?')
+    // The first load read the thread before the question was saved, and is the last to answer.
+    let firstLoad!: () => void
+    api.getThread.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          firstLoad = () => resolve({ thread: thread(), messages: [], guides: [], quizzes: [] })
+        })
+    )
+    let handlers!: AskHandlers
+    let fail!: (err: unknown) => void
+    api.askQuestion.mockImplementation(
+      (_id: string, _question: string, h: AskHandlers) =>
+        new Promise((_resolve, reject) => {
+          handlers = h
+          fail = reject
+        })
+    )
+    serve(thread({ messageCount: 0 }), [
+      message({ id: 'u2', role: 'user', content: 'Why?', status: 'failed' }),
+      message({ id: 'a2', role: 'assistant', content: '', status: 'failed', stopReason: 'error' })
+    ])
+    renderWithQuery(<Conversation threadId={THREAD_ID} />)
+    await waitFor(() => expect(api.askQuestion).toHaveBeenCalled())
+
+    act(() =>
+      handlers.onStart?.({ threadId: THREAD_ID, userMessageId: 'u2', assistantMessageId: 'a2' })
+    )
+    await act(async () =>
+      fail(new ApiError({ status: 0, code: 'ai_provider_error', message: 'x' }))
+    )
+    await act(async () => firstLoad())
+
+    expect(await screen.findByText('This answer failed.')).toBeInTheDocument()
+    expect(screen.getAllByRole('article', { name: 'Your question' })).toHaveLength(1)
+  })
+
   it('shows the full banner when the server answers thread_full', async () => {
     api.askQuestion.mockRejectedValue(
       new ApiError({ status: 409, code: 'thread_full', message: 'x' })

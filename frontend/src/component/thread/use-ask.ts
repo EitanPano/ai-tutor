@@ -81,11 +81,14 @@ export function useAsk(
       setAnnouncement('')
       setAsking({ phase: 'thinking', question, text: '' })
 
+      // Missing counts as not saved yet: while the thread's first load is in flight, an
+      // invalidation joins that load instead of starting a new one, and it may have read the
+      // thread before this question was saved.
       const stillSaving = (id: string | undefined) =>
         !!id &&
-        !!queryClient
+        !queryClient
           .getQueryData<ThreadDetailResponse>(threadKey.detail(threadId))
-          ?.messages.some((m) => m.id === id && isPending(m))
+          ?.messages.some((m) => m.id === id && !isPending(m))
 
       const update = (change: (current: Asking) => Asking) =>
         setAsking((current) => (current ? change(current) : current))
@@ -129,7 +132,8 @@ export function useAsk(
         // The saved thread is the truth: keep the streamed text on screen until it has loaded.
         // The controller stays set until then, so a second ask cannot start mid-handover.
         await queryClient.invalidateQueries({ queryKey: threadKey.all }).catch(() => undefined)
-        // After a Stop the server finishes saving the partial answer a moment later.
+        // After a Stop the server finishes saving the partial answer a moment later, and the
+        // first look may come from a load that started before this turn existed.
         for (let i = 0; i < 10 && mounted.current && stillSaving(answerId); i++) {
           await new Promise((resolve) => setTimeout(resolve, 300))
           await queryClient.invalidateQueries({ queryKey: threadKey.all }).catch(() => undefined)
