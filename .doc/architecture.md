@@ -45,6 +45,7 @@ SSE ask flow (`POST /api/thread/:id/message`):
 - `requireSession` middleware guards protected routes.
 - One ownership helper scopes every tenant query by `user_id`. Another user's resource returns 404, not 403.
 - Login is limited to 5/min per IP + email (429).
+- CORS: only `FRONTEND_URL` is allowed, with credentials. No wildcard origin is ever sent.
 
 ## External Dependencies
 - Anthropic Messages API via `@anthropic-ai/sdk`: model `claude-haiku-4-5`, thinking off. `AI_PROVIDER=fake` is the
@@ -57,7 +58,15 @@ SSE ask flow (`POST /api/thread/:id/message`):
 - `ai_call` ledger: tokens, cache reads, stop reason, refusal category, latency.
 - Daily token budget per user, and one generation in flight per user.
 - `AI_ENABLED=false` is the kill switch (503 `ai_unavailable`).
+- API headers: `helmet` defaults, with `Cross-Origin-Resource-Policy: same-site` (frontend :3000 and API :4000 are same-site).
+- Frontend headers: a per-request-nonce CSP set in `frontend/src/proxy.ts` (`script-src` `self` + nonce + `strict-dynamic`,
+  `connect-src` limited to self and the API origin, `frame-ancestors` none, no `wasm-unsafe-eval`: Shiki uses its JavaScript
+  regex engine), plus `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and a deny-all `Permissions-Policy`.
+  Every page renders per request (the root layout awaits `connection()`) so the nonce can be applied.
+- `bun run check:bundle` fails if `sk-ant` or `ANTHROPIC` appears anywhere in `frontend/.next` (AC12).
+- Practice Docker images and a `full` compose profile exist (see the README); nothing deploys them.
 - Local only — there is no hosted environment (plan 001, Q11).
 
 ## Change Log
+- 2026-10-07 — P6 hardening: CORS rule, API and frontend security headers, CSP, bundle secret check.
 - 2026-10-06 — Initial architecture for plan 001 (AI Tutor MVP).

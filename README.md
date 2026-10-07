@@ -26,7 +26,7 @@ See the product definition in .doc/product-definition.md.
 | CLAUDE.md | Loads AGENTS.md into compatible runtimes |
 | frontend/ | Next.js app |
 | backend/ | Express API |
-| compose.yaml | Local Postgres |
+| compose.yaml | Local Postgres, plus the `full` profile (migrate, backend, frontend images) |
 | .doc/ | Product and architecture source docs |
 | .plan/ | Prioritized backlog and approved implementation plans |
 | .claude/rules/ | Always-on coding and workflow constraints |
@@ -60,6 +60,77 @@ See the product definition in .doc/product-definition.md.
 - Generated, disposable artifacts:
   - .orchestrate/* (except .orchestrate/README.md, which documents the folder)
 
+## Run it locally
+
+Prerequisites: Node 24, Bun 1.4, Docker Desktop.
+
+```sh
+bun install
+docker compose up -d --wait db     # Postgres 18 on 127.0.0.1:5432
+bun run db:migrate
+bun run db:seed                    # demo user + sample data
+bun run dev                        # frontend :3000, backend :4000
+```
+
+Open http://localhost:3000 and sign in with `demo@example.com` / `demo-password`. The fake AI provider is the
+default: answers are canned, deterministic and cost nothing.
+
+**Real answers.** Copy `backend/.env.example` to `backend/.env`, set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
+(use a key from its own Console workspace with a low spend limit, plan P0.11), then restart `bun run dev`.
+
+### Quality gates
+
+| Command | What it does |
+|---|---|
+| `bun run typecheck` | `tsc` in both workspaces |
+| `bun run lint` | ESLint + Prettier check |
+| `bun run test` | Backend (real `ai_tutor_test` DB) and frontend unit suites, run sequentially |
+| `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and DB `ai_tutor_e2e` |
+| `bun run gen:api` | Regenerates `frontend/src/types/api.ts` from `.orchestrate/api-contract.yaml` |
+| `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in `frontend/.next` (run `bun run --filter frontend build` first) |
+
+Use `bun run test`, never `bun test`.
+
+### Full stack in Docker (practice only, nothing deploys it)
+
+Builds production images for the backend and frontend and runs them next to the same Postgres. Stop `bun run dev`
+first: the images use ports 3000 and 4000. Production mode refuses the fake provider, so a real provider is required.
+
+```powershell
+$env:AI_PROVIDER = 'anthropic'
+$env:ANTHROPIC_API_KEY = '<a low-spend-limit key>'
+docker compose --profile full up -d --build
+# http://localhost:3000  (API on http://localhost:4000)
+docker compose --profile full down      # keeps the pgdata volume
+docker compose up -d --wait db          # `down` also removes the db container; bring it back for dev
+```
+
+`docker compose up -d db` (no profile) starts only Postgres. Host ports are published on 127.0.0.1 only; inside the
+containers the servers listen on 0.0.0.0 so those mappings can reach them. A missing key fails the backend at start
+with `ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic`. `NEXT_PUBLIC_API_URL` is baked into the frontend
+image at build time (compose arg), so changing the API address means rebuilding it.
+
+## Operations
+
+- **Health:** `GET /health` is liveness (no dependencies). `GET /ready` checks the database and returns 503
+  `db_unavailable` when it is down.
+- **Logs:** pino JSON on stdout (pretty in development). Message content, passwords, hashes, session tokens, cookies
+  and API keys are never logged. Each response carries `X-Request-Id`, and error bodies repeat it as `requestId`.
+- **Kill switch:** `AI_ENABLED=false` makes the AI routes return 503 `ai_unavailable`; history and progress keep
+  working. `AI_PROVIDER=fake` stops all spend at once (not allowed in production).
+- **Daily budget:** `AI_DAILY_TOKEN_BUDGET` (default 50000) caps tokens per user per day; one generation runs per user
+  at a time.
+- **Operator password reset:** `bun run --filter backend user:reset-password <email>` ends that user's sessions and
+  prints a temporary password once.
+- **Log everyone out:** delete the rows of `session` (`DELETE FROM session;`).
+- **Rollback:** code, revert the merge commit. Database, `bun run db:rollback` undoes the last migration (each has a
+  tested `down`). Drops never ship in the same release as the code that stops using the dropped column.
+- **Dependency audit (`bun audit`, 2026-10-07):** two advisories, both dev/build-time only, no runtime exposure.
+
+| Package | Severity | Path | Runtime? | Triage |
+|---|---|---|---|---|
+| `braces@3.0.3` | high (stack exhaustion on deeply nested patterns) | `eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch` | No: ESLint only, patterns are our own globs | No fixed version is published; `bun audit fix` cannot help. Accepted, re-check on the next `eslint-config-next` bump |
+| `postcss-selector-parser@6.0.10` | moderate (quadratic CPU on flat selectors) | `@tailwindcss/typography` | No: Tailwind build time, input is our own CSS | Fix is 7.1.6 but `@tailwindcss/typography@0.5.20` pins `^6`; a major override is riskier than the exposure. Accepted, re-check on the next typography release |
 
 ## Troubleshooting
 

@@ -53,9 +53,8 @@ Tailwind utilities only, `sonner` for toasts, `lucide-react` for icons.
 Update `.orchestrate/api-contract.yaml` with the shape the future backend must implement
 for what you built — an OpenAPI 3.1 document.
 
-On a frontend-only task nothing implements this contract yet, and that is fine: it is the
-handoff artifact for a later full-stack task. Do not invent endpoints the feature
-does not need.
+If nothing implements a new endpoint yet, that is fine: the contract is the handoff
+artifact for whoever builds it. Do not invent endpoints the feature does not need.
 
 ### Step 4: Tests
 - `frontend/vitest.config.mts` — jsdom, `globals: false`, only picks up `tests/unit/**`
