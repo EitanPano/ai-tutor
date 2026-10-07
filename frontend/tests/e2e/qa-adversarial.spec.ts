@@ -1,17 +1,35 @@
-import { execSync } from 'node:child_process'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import pg from 'pg'
+import { E2E_BACKEND_ENV } from './e2e-env'
 
 // QA adversarial pass for plan 001: deep links, inert markdown, keyboard-only flow, budget banner.
 
 const password = 'e2e-password-1'
 let counter = 0
 
-/** Runs SQL against the isolated `ai_tutor_e2e` database through the compose Postgres container. */
-function sql(statement: string): string {
-  return execSync('docker exec -i ai-tutor-db-1 psql -U ai_tutor -d ai_tutor_e2e -tA -q', {
-    input: statement,
-    encoding: 'utf8'
-  }).trim()
+/**
+ * Runs one parameterised statement against the isolated `ai_tutor_e2e` database. It connects over
+ * the network, like the backend does, so it works against compose locally and the CI service container.
+ */
+async function sql(text: string, values: unknown[] = []): Promise<void> {
+  const client = new pg.Client({ connectionString: E2E_BACKEND_ENV.DATABASE_URL })
+  await client.connect()
+  try {
+    await client.query(text, values)
+  } finally {
+    await client.end()
+  }
+}
+
+/** Records more AI usage today than the e2e daily budget (50000 tokens) allows. */
+function spendDailyBudget(email: string): Promise<void> {
+  return sql(
+    `INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+       stop_reason, latency_ms)
+     SELECT id, 'explain', 'fake', 40000, 20000, 0, 'end_turn', 1
+     FROM app_user WHERE email = $1`,
+    [email]
+  )
 }
 
 async function signUp(page: Page, name = 'QA user') {
@@ -119,9 +137,11 @@ test('markdown with script, onerror and javascript: links renders inert', async 
     '',
     '<svg onload="window.__pwned=10"></svg>'
   ].join('\n')
-  sql(`UPDATE message SET content = $q$${payload}$q$
-       WHERE role = 'assistant'
-         AND user_id = (SELECT id FROM app_user WHERE email = '${email}')`)
+  await sql(
+    `UPDATE message SET content = $1
+     WHERE role = 'assistant' AND user_id = (SELECT id FROM app_user WHERE email = $2)`,
+    [payload, email]
+  )
   await page.reload()
   await expect(page.getByText('Safe lead sentence.')).toBeVisible()
   await page.waitForLoadState('networkidle')
@@ -193,10 +213,7 @@ test('a spent daily budget shows the banner, locks the composer and keeps the er
   page
 }) => {
   const email = await signUp(page)
-  sql(`INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
-         stop_reason, latency_ms)
-       SELECT id, 'explain', 'fake', 40000, 20000, 0, 'end_turn', 1
-       FROM app_user WHERE email = '${email}'`)
+  await spendDailyBudget(email)
 
   await page.getByRole('link', { name: 'New thread' }).first().click()
   await page.getByLabel('Topic').selectOption({ label: 'React' })
@@ -215,10 +232,7 @@ test('a spent daily budget shows the banner, locks the composer and keeps the er
 test('a spent budget also blocks guide generation with a toast, not a crash', async ({ page }) => {
   const email = await signUp(page)
   await ask(page, 'Why does my effect run twice?')
-  sql(`INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
-         stop_reason, latency_ms)
-       SELECT id, 'explain', 'fake', 40000, 20000, 0, 'end_turn', 1
-       FROM app_user WHERE email = '${email}'`)
+  await spendDailyBudget(email)
   await page.getByRole('button', { name: 'Guide me step by step' }).click()
   await expect(
     page.locator('[data-sonner-toast]').filter({ hasText: "You've used today's AI budget" })
