@@ -14,15 +14,17 @@ info:
     |---|---|---|
     | `validation_failed` | 400 | Request body, query or path failed validation; see `error.details` |
     | `malformed_json` | 400 | Request body is not parseable JSON |
+    | `bad_request` | 400 | Another client error in reading the request (e.g. an aborted or mis-sized body) |
     | `unauthenticated` | 401 | Missing, invalid or expired session cookie |
     | `invalid_credentials` | 401 | Email or password is wrong |
     | `forbidden_origin` | 403 | A state-changing request came from a foreign `Origin` |
     | `not_found` | 404 | Resource does not exist, or belongs to another user |
     | `email_taken` | 409 | An account with this email already exists |
-    | `generation_in_progress` | 409 | An AI generation is already running for this thread |
+    | `generation_in_progress` | 409 | An AI generation is already running for this user (one at a time per user, not per thread) |
     | `thread_full` | 409 | The thread reached its maximum message count |
     | `thread_empty` | 409 | The thread has no completed answer to build a guide or quiz from |
     | `payload_too_large` | 413 | Request body exceeds the size limit |
+    | `unsupported_media_type` | 415 | The request content type or encoding is not supported |
     | `ai_refused` | 422 | The model declined to produce the requested content |
     | `attempt_incomplete` | 422 | The quiz attempt does not answer every item |
     | `rate_limited` | 429 | Too many requests; retry later |

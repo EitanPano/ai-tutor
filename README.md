@@ -68,11 +68,11 @@ Prerequisites: Node 24, Bun 1.4, Docker Desktop.
 bun install
 docker compose up -d --wait db     # Postgres 18 on 127.0.0.1:5432
 bun run db:migrate
-bun run db:seed                    # demo user + sample data
+bun run db:seed                    # the demo user (no sample threads)
 bun run dev                        # frontend :3000, backend :4000
 ```
 
-Open http://localhost:3000 and sign in with `demo@example.com` / `demo-password`. The fake AI provider is the
+Open http://localhost:3000 (not 127.0.0.1: the API only trusts the `localhost` origin) and sign in with `demo@example.com` / `demo-password`. The fake AI provider is the
 default: answers are canned, deterministic and cost nothing.
 
 **Real answers.** Copy `backend/.env.example` to `backend/.env`, set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`
@@ -121,7 +121,7 @@ container id, so compose sets `HOSTNAME=0.0.0.0` at run time; a plain `docker ru
   and API keys are never logged. Each response carries `X-Request-Id`, and error bodies repeat it as `requestId`.
 - **Kill switch:** `AI_ENABLED=false` makes the AI routes return 503 `ai_unavailable`; history and progress keep
   working. `AI_PROVIDER=fake` stops all spend at once (not allowed in production).
-- **Daily budget:** `AI_DAILY_TOKEN_BUDGET` (default 50000) caps tokens per user per day; one generation runs per user
+- **Daily budget:** `AI_DAILY_TOKEN_BUDGET` caps tokens per user per day (default 50000 with `AI_PROVIDER=anthropic`, 1000000 with the free fake provider); one generation runs per user
   at a time.
 - **Time zones (migration 007):** it normalises stored `app_user.time_zone` values to Postgres spellings (for example
   `Asia/Calcutta` becomes `Asia/Kolkata`) and resets unknown or offset-style values (such as `+01:00`) to `UTC`. Its
@@ -140,4 +140,4 @@ container id, so compose sets `HOSTNAME=0.0.0.0` at run time; a plain `docker ru
 
 ## Troubleshooting
 
-- **Known issue:** On Windows with Node 24.15, running the backend and frontend Vitest suites concurrently under heavy CPU load can natively abort a test worker (exit code 3221226505). The root `bun run test` runs them sequentially to avoid it. Root cause unconfirmed (see the commit message for the investigation summary).
+- **Known issue:** Node 24.15 on Windows can natively abort the backend Vitest suite, even when it runs alone (about 1 run in 4 before the mitigations; exit code 127, 9 or 0xC0000409, no message). Mitigations in place: the root `bun run test` runs the workspaces sequentially, and the backend uses the threads pool, one shared keep-alive test server per app and `isolate: false` for integration tests (see `backend/vitest.config.ts`). Node 22.14 did not reproduce it. If you still see an abort, re-run; to find the cause, try a newer Node 24.x with `node --report-on-fatalerror` to capture the reason.
