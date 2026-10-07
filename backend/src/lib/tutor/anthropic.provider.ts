@@ -123,12 +123,12 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
   ): Promise<StructuredResult> {
     try {
       // No `thinking`, `effort` or `temperature`: Haiku 4.5 rejects effort and runs without
-      // thinking when it is omitted.
+      // thinking when it is omitted. No `cache_control` either: a one-off prompt would pay the
+      // 1.25x cache write and is almost never read back (explain caches its reused prefix).
       const message = await client.messages.create({
         model,
         max_tokens: MAX_STRUCTURED_OUTPUT_TOKENS,
         system: [{ type: 'text', text: system }],
-        cache_control: { type: 'ephemeral' },
         messages,
         output_config: { format: zodOutputFormat(schema) }
       })
@@ -178,6 +178,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
             model,
             max_tokens: MAX_OUTPUT_TOKENS,
             system: [{ type: 'text', text: EXPLAIN_SYSTEM_PROMPT_V1 }],
+            // Each turn re-sends the same prefix, so the cache write pays for itself.
             cache_control: { type: 'ephemeral' },
             messages
           },

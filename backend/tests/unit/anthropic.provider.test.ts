@@ -528,7 +528,7 @@ describe('anthropic provider generateGuide', () => {
     expect(body.model).toBe('claude-haiku-4-5')
     expect(body.max_tokens).toBe(4096)
     expect(body).not.toHaveProperty('stream')
-    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body).not.toHaveProperty('cache_control')
     expect(body.system).toEqual([{ type: 'text', text: GUIDE_SYSTEM_PROMPT_V1 }])
     expect(body.messages).toEqual([
       { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },
@@ -608,7 +608,7 @@ describe('anthropic provider generateQuiz', () => {
     const body = captured.body
     expect(body.max_tokens).toBe(4096)
     expect(body).not.toHaveProperty('stream')
-    expect(body.cache_control).toEqual({ type: 'ephemeral' })
+    expect(body).not.toHaveProperty('cache_control')
     expect(body.system).toEqual([{ type: 'text', text: QUIZ_SYSTEM_PROMPT_V1 }])
     expect(body.messages).toEqual([
       { role: 'user', content: 'Topic: React\n\nWhy does useEffect run twice?' },
