@@ -13,7 +13,7 @@ import { createLoginLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './feature/guide/index.js'
-import { healthRouter } from './feature/health/index.js'
+import { createHealthModule } from './feature/health/index.js'
 import { createProgressModule } from './feature/progress/index.js'
 import { createQuizModule } from './feature/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
@@ -50,6 +50,31 @@ export function createApp({
   inFlight = new InFlightRegistry()
 }: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
+  app.disable('x-powered-by')
+  app.use(requestId)
+  app.use(
+    pinoHttp({
+      logger,
+      genReqId: (_req, res) =>
+        String((res.locals as Record<string, unknown> | undefined)?.requestId),
+      serializers: {
+        req: (req: { method: string; url: string; id: string }) => ({
+          method: req.method,
+          url: req.url.split('?')[0],
+          requestId: req.id
+        }),
+        res: (res: { statusCode: number }) => ({ status: res.statusCode })
+      }
+    })
+  )
+  // API responses are JSON/SSE: helmet's defaults apply. The frontend (:3000) and API (:4000) are
+  // same-site, so CORP stays same-site rather than helmet's same-origin default.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
+  app.use(cors({ origin: config.frontendUrl, credentials: true }))
+  app.use(cookieParser())
+  app.use('/api', originCheck(config.frontendUrl))
+  app.use(express.json({ limit: '256kb' }))
+  // Modules are built in dependency order: a module only receives the APIs of modules built before it.
   const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
@@ -80,37 +105,18 @@ export function createApp({
     thread: thread.api
   })
   const progress = createProgressModule({ db, requireSession: user.requireSession })
-  app.disable('x-powered-by')
-  app.use(requestId)
-  app.use(
-    pinoHttp({
-      logger,
-      genReqId: (_req, res) =>
-        String((res.locals as Record<string, unknown> | undefined)?.requestId),
-      serializers: {
-        req: (req: { method: string; url: string; id: string }) => ({
-          method: req.method,
-          url: req.url.split('?')[0],
-          requestId: req.id
-        }),
-        res: (res: { statusCode: number }) => ({ status: res.statusCode })
-      }
-    })
-  )
-  // API responses are JSON/SSE: helmet's defaults apply. The frontend (:3000) and API (:4000) are
-  // same-site, so CORP stays same-site rather than helmet's same-origin default.
-  app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }))
-  app.use(cors({ origin: config.frontendUrl, credentials: true }))
-  app.use(cookieParser())
-  app.use('/api', originCheck(config.frontendUrl))
-  app.use(express.json({ limit: '256kb' }))
-  app.use(healthRouter(db))
-  app.use(user.router)
-  app.use(topic.router)
-  app.use(thread.router)
-  app.use(guide.router)
-  app.use(quiz.router)
-  app.use(progress.router)
+  const health = createHealthModule({ db })
+  for (const router of [
+    health.router,
+    user.router,
+    topic.router,
+    thread.router,
+    guide.router,
+    quiz.router,
+    progress.router
+  ]) {
+    app.use(router)
+  }
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
