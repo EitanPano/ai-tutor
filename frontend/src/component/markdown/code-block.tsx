@@ -10,11 +10,39 @@ const THEME = 'github-dark-default'
 // flash back to unhighlighted code.
 const highlighted = new Map<string, string>()
 
-async function highlight(code: string, language: string): Promise<string> {
+// Shiki's JavaScript regex engine, not its default Oniguruma WASM one: compiling WebAssembly
+// needs `'wasm-unsafe-eval'` in the page's CSP, which we deliberately do not grant.
+async function loadShiki() {
   // Loaded on demand: Shiki and its grammars stay out of the main bundle.
-  const { codeToHtml, bundledLanguages } = await import('shiki')
-  const lang = Object.hasOwn(bundledLanguages, language) ? language : 'text'
-  return codeToHtml(code, {
+  const [shiki, { createJavaScriptRegexEngine }] = await Promise.all([
+    import('shiki'),
+    import('shiki/engine/javascript')
+  ])
+  const highlighter = await shiki.createHighlighter({
+    themes: [THEME],
+    langs: [],
+    engine: createJavaScriptRegexEngine()
+  })
+  return { highlighter, bundledLanguages: shiki.bundledLanguages }
+}
+
+let shikiPromise: ReturnType<typeof loadShiki> | undefined
+
+function getShiki() {
+  shikiPromise ??= loadShiki().catch((err: unknown) => {
+    shikiPromise = undefined // Let the next block retry after a failed load.
+    throw err
+  })
+  return shikiPromise
+}
+
+async function highlight(code: string, language: string): Promise<string> {
+  const { highlighter, bundledLanguages } = await getShiki()
+  const lang = Object.hasOwn(bundledLanguages, language)
+    ? (language as keyof typeof bundledLanguages)
+    : 'text'
+  if (lang !== 'text') await highlighter.loadLanguage(lang)
+  return highlighter.codeToHtml(code, {
     lang,
     theme: THEME,
     // The block supplies its own background from the `--code` token.

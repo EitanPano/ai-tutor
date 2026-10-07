@@ -49,3 +49,23 @@ describe('proxy', () => {
     expect(location(proxy(request('/')))).toBe('http://localhost:3000/login')
   })
 })
+
+describe('proxy CSP', () => {
+  const csp = (response: Response) => response.headers.get('content-security-policy') ?? ''
+  const nonceOf = (value: string) => /'nonce-([^']+)'/.exec(value)?.[1]
+
+  it('sets a CSP with a nonce on a page response', () => {
+    const response = proxy(request('/login'))
+    expect(csp(response)).toContain("script-src 'self' 'nonce-")
+    expect(csp(response)).toContain("frame-ancestors 'none'")
+  })
+
+  it('uses a different nonce for every request', () => {
+    expect(nonceOf(csp(proxy(request('/login'))))).not.toBe(nonceOf(csp(proxy(request('/login')))))
+  })
+
+  it('forwards the same policy to the renderer so Next can stamp the nonce', () => {
+    const response = proxy(request('/thread', 'sid=abc'))
+    expect(response.headers.get('x-middleware-request-content-security-policy')).toBe(csp(response))
+  })
+})

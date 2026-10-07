@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next } from 'next/font/google'
+import { connection } from 'next/server'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -22,7 +23,10 @@ export const metadata: Metadata = {
   description: 'Ask a coding question and get a guided, step-by-step answer.'
 }
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  // Every page renders per request so Next can stamp the CSP nonce from src/proxy.ts on its
+  // scripts; a statically prerendered page has no nonce and its scripts would be blocked.
+  await connection()
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable} h-full antialiased`}>
       <body className="min-h-full">
