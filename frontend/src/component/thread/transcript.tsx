@@ -5,13 +5,21 @@ import { isPending, type Message } from '@/lib/api/thread'
 import { RetryIcon } from '@/lib/icon'
 import type { Asking } from './use-ask'
 
+/** A line that opens a code fence (three backticks or tildes): the author wrote Markdown. */
+const hasCodeFence = (text: string) => /^ {0,3}(```|~~~)/m.test(text)
+
 function Question({ content, dimmed = false }: { content: string; dimmed?: boolean }) {
   return (
     <article
       aria-label="Your question"
       className={`border-l-2 border-ink bg-ink/5 px-4 py-2 ${dimmed ? 'opacity-60' : ''}`}
     >
-      <Markdown className="prose-sm">{content}</Markdown>
+      {/* Pasted code is not Markdown: `__init__`, `#include` and line breaks must survive. */}
+      {hasCodeFence(content) ? (
+        <Markdown className="prose-sm">{content}</Markdown>
+      ) : (
+        <p className="text-sm break-words whitespace-pre-wrap">{content}</p>
+      )}
     </article>
   )
 }
