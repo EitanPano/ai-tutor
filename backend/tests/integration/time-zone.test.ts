@@ -17,14 +17,18 @@ async function postgresNames(): Promise<Set<string>> {
 }
 
 describe('normaliseTimeZone', () => {
+  // Exhaustive database sweep: its duration depends on the machine, so it gets its own budget.
   it('maps every Intl time zone to a name Postgres accepts', async () => {
     const known = await postgresNames()
     const names = Intl.supportedValuesOf('timeZone')
     const legacy = names.filter((name) => !known.has(name))
     // Guards the premise: this runtime really does emit names Postgres rejects.
     expect(legacy.length).toBeGreaterThan(0)
-    for (const name of names) {
-      const normalised = await normaliseTimeZone(ctx.db, name)
+    // One pg_timezone_names scan per zone (~420): run them through the pool, not one by one.
+    const results = await Promise.all(
+      names.map(async (name) => ({ name, normalised: await normaliseTimeZone(ctx.db, name) }))
+    )
+    for (const { name, normalised } of results) {
       expect(normalised, name).not.toBeNull()
       expect(known.has(normalised as string), `${name} -> ${normalised}`).toBe(true)
     }
@@ -32,7 +36,7 @@ describe('normaliseTimeZone', () => {
     for (const name of legacy) expect(LEGACY_TIME_ZONE[name], name).toBeDefined()
     for (const modern of Object.values(LEGACY_TIME_ZONE))
       expect(known.has(modern), modern).toBe(true)
-  })
+  }, 30_000)
 
   it('uses the Postgres spelling for a differently-cased name', async () => {
     expect(await normaliseTimeZone(ctx.db, 'europe/paris')).toBe('Europe/Paris')
