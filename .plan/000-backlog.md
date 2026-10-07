@@ -16,18 +16,6 @@ Rules:
 
 
 Current queue:
-- [ ] p0 foundation | stack:full | plan:001
-- [ ] p1 auth | stack:full | plan:001
-- [ ] p2 ask and explain | stack:full | plan:001
-- [ ] p3 guidance | stack:full | plan:001
-- [ ] p4 quiz | stack:full | plan:001
-- [ ] p5 progress | stack:full | plan:001
-- [ ] p6 hardening | stack:full | plan:001
-- [ ] backend module structure | stack:full | plan:002
-- [ ] review hardening | stack:full | plan:003
-
-Dependencies (plan `001`, Rollout Order): P0 → P1 → P2 run in order. P3 and P4 need only P2, so they can run in
-parallel. P5 needs P3 and P4. P6 is last.
 
 
 ## Later — not queued
@@ -57,3 +45,12 @@ Rejected for this project. They're listed so they aren't proposed again.
 ## DONE
 - [x] Setup
 - [x] ai tutor mvp: planned and split into phases P0–P6, plan `001` (2026-10-06)
+- [x] p0 foundation | stack:full | plan:001 (2026-10-07)
+- [x] p1 auth | stack:full | plan:001 (2026-10-07)
+- [x] p2 ask and explain | stack:full | plan:001 (2026-10-07)
+- [x] p3 guidance | stack:full | plan:001 (2026-10-07)
+- [x] p4 quiz | stack:full | plan:001 (2026-10-07)
+- [x] p5 progress | stack:full | plan:001 (2026-10-07)
+- [x] p6 hardening | stack:full | plan:001 (2026-10-07)
+- [x] backend module structure | stack:full | plan:002 (2026-10-07)
+- [x] review hardening | stack:full | plan:003 (2026-10-07)

@@ -1,6 +1,6 @@
 # 002 — Backend module structure
 
-Status: active
+Status: done
 Owner: Eitan
 Last updated: 2026-10-07
 Approval: design approved in chat on 2026-10-07 (four sections: layout, module contract, enforcement,
