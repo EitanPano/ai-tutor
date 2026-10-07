@@ -60,6 +60,9 @@ export function createApp({
   inFlight = new InFlightRegistry()
 }: AppDeps): { app: Express; modules: AppModules } {
   const app = express()
+  // An explicit hop count, never `true`: req.ip (and so the per-IP rate limits) must not be spoofable
+  // through X-Forwarded-For, yet behind a proxy it must not collapse to the proxy's address.
+  if (config.trustProxy > 0) app.set('trust proxy', config.trustProxy)
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(

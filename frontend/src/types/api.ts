@@ -673,6 +673,8 @@ export interface components {
   }
   requestBodies: never
   headers: {
+    /** @description Seconds to wait before retrying */
+    RetryAfter: number
     /** @description Session cookie `sid` (HttpOnly). Cleared with an expired cookie on logout. */
     SetCookie: string
   }
@@ -775,6 +777,7 @@ export interface operations {
       /** @description Too many sign-ups from this address (`rate_limited`) */
       429: {
         headers: {
+          'Retry-After': components['headers']['RetryAfter']
           [name: string]: unknown
         }
         content: {
@@ -882,6 +885,7 @@ export interface operations {
       /** @description Too many login attempts from this address or for this email (`rate_limited`) */
       429: {
         headers: {
+          'Retry-After': components['headers']['RetryAfter']
           [name: string]: unknown
         }
         content: {

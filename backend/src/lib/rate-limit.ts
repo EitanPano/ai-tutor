@@ -108,8 +108,10 @@ function expandIPv6(address: string): number[] {
 
 /**
  * `${ip}:${normalised email}`. The email part is hashed so the key always fits the table's
- * varchar(255) (an email can be 254 chars and an IPv6 address 45) and no address is stored
- * in the rate_limit table.
+ * varchar(255) (an email can be 254 chars and an IPv6 address 45) and no email is stored in
+ * the rate_limit table. The IP part stays readable, like the per-IP keys (`ipLimitKey`): a
+ * normalised address or /64 prefix is short-lived counter data (it expires with its window), and
+ * readable keys let an operator see which address is being throttled.
  */
 export function loginLimitKey(ip: string, email: string): string {
   const digest = createHash('sha256').update(email.trim().toLowerCase()).digest('hex')

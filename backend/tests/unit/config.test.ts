@@ -85,6 +85,14 @@ describe('loadConfig', () => {
     ).toBe(500_000)
   })
 
+  it('defaults TRUST_PROXY to 0, accepts a hop count and rejects anything else', () => {
+    expect(loadConfig({}).trustProxy).toBe(0)
+    expect(loadConfig({ TRUST_PROXY: '2' }).trustProxy).toBe(2)
+    for (const bad of ['-1', '1.5', 'true', 'abc']) {
+      expect(() => loadConfig({ TRUST_PROXY: bad })).toThrow(/TRUST_PROXY/)
+    }
+  })
+
   it('lets SIGNUP_RATE_LIMIT and LOGIN_IP_RATE_LIMIT override the defaults and rejects non-positive values', () => {
     const config = loadConfig({ SIGNUP_RATE_LIMIT: '3', LOGIN_IP_RATE_LIMIT: '7' })
     expect(config.signupRateLimit).toBe(3)

@@ -31,6 +31,7 @@ const envSchema = z.object({
   AI_GLOBAL_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
   SIGNUP_RATE_LIMIT: z.coerce.number().int().positive().default(10),
   LOGIN_IP_RATE_LIMIT: z.coerce.number().int().positive().default(30),
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   AI_ENABLED: boolString.default(true),
   AI_FAKE_DELAY_MS: z.coerce.number().int().min(0).default(20),
   RECOVER_STALE_ON_BOOT: boolString.default(true)
@@ -51,6 +52,8 @@ export type Config = {
   aiEnabled: boolean
   aiFakeDelayMs: number
   recoverStaleOnBoot: boolean
+  /** Reverse proxies in front of the backend whose X-Forwarded-For is trusted; 0 trusts none. */
+  trustProxy: number
   /** Sign-ups per hour per IP. */
   signupRateLimit: number
   /** Login attempts per 15 minutes per IP, on top of the ip + email limit. */
@@ -109,6 +112,7 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     aiEnabled: v.AI_ENABLED,
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS,
     recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
+    trustProxy: v.TRUST_PROXY,
     signupRateLimit: v.SIGNUP_RATE_LIMIT,
     loginIpRateLimit: v.LOGIN_IP_RATE_LIMIT
   }

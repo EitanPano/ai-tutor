@@ -128,6 +128,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Too many sign-ups from this address (`rate_limited`)
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
@@ -203,6 +206,9 @@ paths:
           $ref: '#/components/responses/ForbiddenOrigin'
         '429':
           description: Too many login attempts from this address or for this email (`rate_limited`)
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
@@ -717,6 +723,11 @@ components:
       in: cookie
       name: sid
   headers:
+    RetryAfter:
+      description: Seconds to wait before retrying
+      schema:
+        type: integer
+        minimum: 1
     SetCookie:
       description: Session cookie `sid` (HttpOnly). Cleared with an expired cookie on logout.
       schema:

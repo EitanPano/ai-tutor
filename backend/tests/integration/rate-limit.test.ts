@@ -120,3 +120,34 @@ describe('per-IP limits', () => {
     expect(keys.some((key) => key.startsWith('login:'))).toBe(true)
   })
 })
+
+describe('trust proxy', () => {
+  const signupFrom = (client: ReturnType<typeof createClient>, forwardedFor: string) =>
+    client.post('/api/user').set('X-Forwarded-For', forwardedFor).send(signUpBody())
+
+  describe('with TRUST_PROXY=1', () => {
+    const trusting = createTestApp({ config: { signupRateLimit: 1, trustProxy: 1 } })
+    const trustingClient = createClient(trusting.app, trusting.config)
+    beforeEach(() => truncateAll(trusting.db))
+    afterAll(() => trusting.close())
+
+    it('counts different X-Forwarded-For addresses in different buckets', async () => {
+      expect((await signupFrom(trustingClient, '198.51.100.1')).status).toBe(201)
+      expect((await signupFrom(trustingClient, '198.51.100.2')).status).toBe(201)
+      expect((await signupFrom(trustingClient, '198.51.100.1')).status).toBe(429)
+    })
+  })
+
+  describe('with the default TRUST_PROXY=0', () => {
+    const plain = createTestApp({ config: { signupRateLimit: 1 } })
+    const plainClient = createClient(plain.app, plain.config)
+    beforeEach(() => truncateAll(plain.db))
+    afterAll(() => plain.close())
+
+    it('ignores X-Forwarded-For, so a spoofed header shares the socket address bucket', async () => {
+      expect(plain.config.trustProxy).toBe(0)
+      expect((await signupFrom(plainClient, '198.51.100.1')).status).toBe(201)
+      expect((await signupFrom(plainClient, '198.51.100.2')).status).toBe(429)
+    })
+  })
+})
