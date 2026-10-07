@@ -20,6 +20,7 @@
   `bunx <bin>`. Never use npm, npx, yarn or pnpm. `bun.lock` is the only lockfile.
 - Run package scripts with `bun run test`, never `bun test`: `bun test` starts Bun's own
   test runner and skips the project's Vitest setup.
+- Next.js 16 docs are bundled at `frontend/node_modules/next/dist/docs/`; read them before using a Next API.
 
 ## Repository Layout
 - `.doc/` — hand-written product and architecture docs.
@@ -30,8 +31,13 @@
 - `.plan/` — `000-backlog.md` is the task queue; `NNN-YYYY-MM-DD-*.md` are the plans.
 - `.orchestrate/` — everything the dev loop generates (plan mirror, tickets, agent
   reports, QA report, API contract, cost traces). Never create a `docs/` directory.
-- `frontend/` — the Next.js app. `backend/` does not exist yet and is only created by a
-  task explicitly marked `stack:full`.
+  `.orchestrate/api-contract.yaml` is the one versioned file there: the frontend/backend
+  handshake (OpenAPI 3.1).
+- `frontend/` — the Next.js app.
+- `backend/` — the Express 5 API. Layers: `src/route` → `src/service` → `src/lib`.
+  Schema lives in `db/schema.sql` (full bootstrap) and `db/migration/` (`NNN-*.sql`);
+  change both together.
+- `compose.yaml` — local Postgres 18 (`docker compose up -d --wait db`).
 
 ## Rules — always in context
 @.claude/rules/code-style.md

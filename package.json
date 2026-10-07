@@ -1,0 +1,30 @@
+{
+  "name": "ai-tutor",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "bun run --filter '*' lint",
+    "test": "bun run --sequential --filter '*' test",
+    "test:e2e": "bun run --filter frontend test:e2e",
+    "gen:api": "bun run --filter frontend gen:api",
+    "format": "bun run --filter '*' format",
+    "db:migrate": "bun run --filter backend db:migrate",
+    "db:rollback": "bun run --filter backend db:rollback",
+    "db:reset": "bun run --filter backend db:reset",
+    "db:seed": "bun run --filter backend db:seed",
+    "check:bundle": "node scripts/check-bundle-secret.mjs"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9"
+  }
+}

@@ -1,0 +1,1434 @@
+openapi: 3.1.0
+info:
+  title: AI Tutor API
+  version: 0.1.0
+  description: |
+    MVP API for the AI Tutor for Developers app. JSON property names are camelCase; timestamps are
+    RFC 3339 `date-time` strings; ids are opaque strings.
+
+    Every non-2xx response is an `ErrorResponse`: `{ error: { code, message, details? }, requestId }`.
+
+    ## Error codes
+
+    | code | status | meaning |
+    |---|---|---|
+    | `validation_failed` | 400 | Request body, query or path failed validation; see `error.details` |
+    | `malformed_json` | 400 | Request body is not parseable JSON |
+    | `bad_request` | 400 | Another client error in reading the request (e.g. an aborted or mis-sized body) |
+    | `unauthenticated` | 401 | Missing, invalid or expired session cookie |
+    | `invalid_credentials` | 401 | Email or password is wrong |
+    | `forbidden_origin` | 403 | A state-changing request came from a foreign `Origin` |
+    | `not_found` | 404 | Resource does not exist, or belongs to another user |
+    | `email_taken` | 409 | An account with this email already exists |
+    | `generation_in_progress` | 409 | An AI generation is already running for this user (one at a time per user, not per thread) |
+    | `thread_full` | 409 | The thread reached its maximum message count |
+    | `thread_empty` | 409 | The thread has no completed answer to build a guide or quiz from |
+    | `payload_too_large` | 413 | Request body exceeds the size limit |
+    | `unsupported_media_type` | 415 | The request content type or encoding is not supported |
+    | `ai_refused` | 422 | The model declined to produce the requested content |
+    | `attempt_incomplete` | 422 | The quiz attempt does not answer every item |
+    | `rate_limited` | 429 | Too many requests; retry later |
+    | `ai_budget_exceeded` | 429 | The user's AI usage budget is exhausted |
+    | `internal_error` | 500 | Unexpected server error |
+    | `ai_invalid_output` | 502 | The model returned output that failed validation |
+    | `ai_provider_error` | 502 | The AI provider failed |
+    | `ai_unavailable` | 503 | AI features are temporarily unavailable |
+    | `db_unavailable` | 503 | The database is not reachable |
+servers:
+  - url: http://localhost:4000
+tags:
+  - name: system
+  - name: auth
+  - name: topic
+  - name: thread
+  - name: guide
+  - name: quiz
+  - name: progress
+security:
+  - cookieAuth: []
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: The process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /ready:
+    get:
+      tags: [system]
+      summary: Readiness (database reachable)
+      operationId: getReady
+      security: []
+      responses:
+        '200':
+          description: The database is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ready
+        '503':
+          description: The database is not reachable (`db_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/user:
+    post:
+      tags: [auth]
+      summary: Sign up and start a session
+      operationId: createUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Account created and signed in
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '409':
+          description: Email already registered (`email_taken`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [auth]
+      summary: Update the signed-in user's profile
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/session:
+    post:
+      tags: [auth]
+      summary: Log in
+      operationId: createSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          description: Wrong email or password (`invalid_credentials`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '429':
+          description: Too many login attempts (`rate_limited`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [auth]
+      summary: Get the current session's user
+      operationId: getSession
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [auth]
+      summary: Log out
+      operationId: deleteSession
+      responses:
+        '204':
+          description: Signed out; the session cookie is cleared
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/topic:
+    get:
+      tags: [topic]
+      summary: List the topic taxonomy
+      operationId: listTopics
+      security: []
+      responses:
+        '200':
+          description: All topics, in taxonomy order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/thread:
+    get:
+      tags: [thread]
+      summary: List the user's threads, most recently updated first
+      operationId: listThreads
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from a previous `nextCursor`
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: A page of threads
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [thread]
+      summary: Create a thread
+      description: '`topicId` defaults to `other`. An unknown topic is `validation_failed`.'
+      operationId: createThread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThreadRequest'
+      responses:
+        '201':
+          description: The new thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/thread/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [thread]
+      summary: Get a thread with its messages, guides and quizzes
+      operationId: getThread
+      responses:
+        '200':
+          description: The thread detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [thread]
+      summary: Rename or re-topic a thread
+      operationId: updateThread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateThreadRequest'
+      responses:
+        '200':
+          description: The updated thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [thread]
+      summary: Delete a thread
+      operationId: deleteThread
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/thread/{id}/message:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [thread]
+      summary: Ask a question and stream the answer
+      description: |
+        Streams Server-Sent Events. Events arrive in this order:
+
+        1. `message.start` - data is `StreamMessageStart`
+        2. `delta` (zero or more) - data is `StreamDelta`
+        3. exactly one of `message.complete` (data is `StreamMessageComplete`) or `error`
+           (data is `ErrorResponse`)
+
+        A `: ping` comment line is sent as a heartbeat every 15 seconds. Failures before the
+        stream starts use the plain error statuses below.
+      operationId: askQuestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: The event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another generation is running, or the thread is full (`generation_in_progress`, `thread_full`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: AI usage budget exhausted (`ai_budget_exceeded`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: AI is unavailable (`ai_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/thread/{id}/guide:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [guide]
+      summary: Generate a step-by-step guide from a thread
+      operationId: createGuide
+      responses:
+        '201':
+          description: The generated guide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another generation is running, or the thread has no answer yet (`generation_in_progress`, `thread_empty`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The model refused (`ai_refused`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: AI usage budget exhausted (`ai_budget_exceeded`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: The AI output was invalid or the provider failed (`ai_invalid_output`, `ai_provider_error`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: AI is unavailable (`ai_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/guide/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [guide]
+      summary: Get a guide
+      operationId: getGuide
+      responses:
+        '200':
+          description: The guide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuideResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/guide/{id}/step/{stepId}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: stepId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [guide]
+      summary: Mark a step done or reveal its hint
+      operationId: updateStep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStepRequest'
+      responses:
+        '200':
+          description: The updated step
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/quiz:
+    post:
+      tags: [quiz]
+      summary: Generate a quiz from a thread or a topic
+      operationId: createQuiz
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuizRequest'
+      responses:
+        '201':
+          description: The generated quiz (no answer key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another generation is running, or the thread has no answer yet (`generation_in_progress`, `thread_empty`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: The model refused (`ai_refused`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: AI usage budget exhausted (`ai_budget_exceeded`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: The AI output was invalid or the provider failed (`ai_invalid_output`, `ai_provider_error`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: AI is unavailable (`ai_unavailable`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/quiz/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [quiz]
+      summary: Get a quiz (never includes answers or explanations)
+      operationId: getQuiz
+      responses:
+        '200':
+          description: The quiz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuizResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/quiz/{id}/attempt:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [quiz]
+      summary: Submit and grade an attempt
+      operationId: submitAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAttemptRequest'
+      responses:
+        '201':
+          description: The graded attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Not every item was answered (`attempt_incomplete`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/quiz/{id}/attempt/{attemptId}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - name: attemptId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [quiz]
+      summary: Get a graded attempt
+      operationId: getAttempt
+      responses:
+        '200':
+          description: The graded attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/progress:
+    get:
+      tags: [progress]
+      summary: Get learning progress
+      operationId: getProgress
+      responses:
+        '200':
+          description: Totals, streak, per-topic progress and recent activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sid
+  headers:
+    SetCookie:
+      description: Session cookie `sid` (HttpOnly). Cleared with an expired cookie on logout.
+      schema:
+        type: string
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Opaque resource id
+      schema:
+        type: string
+  responses:
+    Unauthenticated:
+      description: Missing or invalid session (`unauthenticated`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource does not exist or belongs to another user (`not_found`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: Invalid input (`validation_failed`, `malformed_json`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Request body exceeds the size limit (`payload_too_large`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server error (`internal_error`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenOrigin:
+      description: Foreign Origin on a state-changing request (`forbidden_origin`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+        requestId:
+          type: string
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName, timeZone, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        timeZone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SignupRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, displayName, timeZone]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: IANA time zone name
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+    Topic:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    TopicListResponse:
+      type: object
+      additionalProperties: false
+      required: [topics]
+      properties:
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Topic'
+    Thread:
+      type: object
+      additionalProperties: false
+      required: [id, topicId, title, messageCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        topicId:
+          type: string
+        title:
+          type: string
+        messageCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ThreadListResponse:
+      type: object
+      additionalProperties: false
+      required: [threads, nextCursor]
+      properties:
+        threads:
+          type: array
+          items:
+            $ref: '#/components/schemas/Thread'
+        nextCursor:
+          type: [string, 'null']
+    CreateThreadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        topicId:
+          type: string
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+    UpdateThreadRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        topicId:
+          type: string
+    ThreadResponse:
+      type: object
+      additionalProperties: false
+      required: [thread]
+      properties:
+        thread:
+          $ref: '#/components/schemas/Thread'
+    MessageRole:
+      type: string
+      enum: [user, assistant]
+    MessageStatus:
+      type: string
+      enum: [complete, incomplete, failed]
+    StopReason:
+      type: string
+      enum: [end_turn, max_tokens, stop_sequence, refusal, aborted, error]
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, threadId, role, content, status, stopReason, createdAt]
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        role:
+          $ref: '#/components/schemas/MessageRole'
+        content:
+          type: string
+        status:
+          $ref: '#/components/schemas/MessageStatus'
+        stopReason:
+          oneOf:
+            - $ref: '#/components/schemas/StopReason'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+    Difficulty:
+      type: string
+      enum: [easy, medium, hard]
+    GuideSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, stepCount, doneCount, createdAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        stepCount:
+          type: integer
+          minimum: 0
+        doneCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+    QuizSummary:
+      type: object
+      additionalProperties: false
+      required: [id, difficulty, itemCount, bestScore, createdAt]
+      properties:
+        id:
+          type: string
+        difficulty:
+          $ref: '#/components/schemas/Difficulty'
+        itemCount:
+          type: integer
+          minimum: 0
+        bestScore:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 5
+        createdAt:
+          type: string
+          format: date-time
+    ThreadDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [thread, messages, guides, quizzes]
+      properties:
+        thread:
+          $ref: '#/components/schemas/Thread'
+        messages:
+          type: array
+          description: Oldest first
+          items:
+            $ref: '#/components/schemas/Message'
+        guides:
+          type: array
+          description: Newest first
+          items:
+            $ref: '#/components/schemas/GuideSummary'
+        quizzes:
+          type: array
+          description: Newest first
+          items:
+            $ref: '#/components/schemas/QuizSummary'
+    AskRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    StreamMessageStart:
+      description: Data of the `message.start` SSE event
+      type: object
+      additionalProperties: false
+      required: [threadId, userMessageId, assistantMessageId]
+      properties:
+        threadId:
+          type: string
+        userMessageId:
+          type: string
+        assistantMessageId:
+          type: string
+    StreamDelta:
+      description: Data of the `delta` SSE event
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+    TokenUsage:
+      type: object
+      additionalProperties: false
+      required: [inputTokens, outputTokens, cacheReadTokens]
+      properties:
+        inputTokens:
+          type: integer
+          minimum: 0
+        outputTokens:
+          type: integer
+          minimum: 0
+        cacheReadTokens:
+          type: integer
+          minimum: 0
+    StreamMessageComplete:
+      description: Data of the `message.complete` SSE event. The `error` event's data is an `ErrorResponse`.
+      type: object
+      additionalProperties: false
+      required: [messageId, status, stopReason, usage]
+      properties:
+        messageId:
+          type: string
+        status:
+          type: string
+          enum: [complete, incomplete]
+        stopReason:
+          $ref: '#/components/schemas/StopReason'
+        usage:
+          $ref: '#/components/schemas/TokenUsage'
+    Step:
+      type: object
+      additionalProperties: false
+      required: [id, position, title, body, code, codeLanguage, hint, hintRevealedAt, doneAt]
+      properties:
+        id:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        body:
+          type: string
+        code:
+          type: [string, 'null']
+        codeLanguage:
+          type: [string, 'null']
+        hint:
+          type: string
+        hintRevealedAt:
+          type: [string, 'null']
+          format: date-time
+        doneAt:
+          type: [string, 'null']
+          format: date-time
+    Guide:
+      type: object
+      additionalProperties: false
+      required: [id, threadId, topicId, title, createdAt, steps]
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        topicId:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        steps:
+          type: array
+          minItems: 3
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/Step'
+    GuideResponse:
+      type: object
+      additionalProperties: false
+      required: [guide]
+      properties:
+        guide:
+          $ref: '#/components/schemas/Guide'
+    UpdateStepRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        done:
+          type: boolean
+        hintRevealed:
+          type: boolean
+          const: true
+    StepResponse:
+      type: object
+      additionalProperties: false
+      required: [step]
+      properties:
+        step:
+          $ref: '#/components/schemas/Step'
+    CreateQuizRequest:
+      description: Either from a thread (`threadId`, optional `difficulty`) or from a topic (`topicId` and `difficulty`).
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [threadId]
+          properties:
+            threadId:
+              type: string
+            difficulty:
+              $ref: '#/components/schemas/Difficulty'
+        - type: object
+          additionalProperties: false
+          required: [topicId, difficulty]
+          properties:
+            topicId:
+              type: string
+            difficulty:
+              $ref: '#/components/schemas/Difficulty'
+    QuizItem:
+      description: Taker view; never includes the answer key.
+      type: object
+      additionalProperties: false
+      required: [id, position, prompt, choices]
+      properties:
+        id:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+          maximum: 5
+        prompt:
+          type: string
+        choices:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: string
+    AttemptSummary:
+      type: object
+      additionalProperties: false
+      required: [id, score, total, submittedAt]
+      properties:
+        id:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        total:
+          type: integer
+          const: 5
+        submittedAt:
+          type: string
+          format: date-time
+    Quiz:
+      type: object
+      additionalProperties: false
+      required: [id, threadId, topicId, difficulty, createdAt, items, attempts]
+      properties:
+        id:
+          type: string
+        threadId:
+          type: [string, 'null']
+        topicId:
+          type: string
+        difficulty:
+          $ref: '#/components/schemas/Difficulty'
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/QuizItem'
+        attempts:
+          type: array
+          description: Newest first
+          items:
+            $ref: '#/components/schemas/AttemptSummary'
+    QuizResponse:
+      type: object
+      additionalProperties: false
+      required: [quiz]
+      properties:
+        quiz:
+          $ref: '#/components/schemas/Quiz'
+    SubmitAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [itemId, choiceIndex]
+            properties:
+              itemId:
+                type: string
+              choiceIndex:
+                type: integer
+                minimum: 0
+                maximum: 3
+    GradedItem:
+      type: object
+      additionalProperties: false
+      required: [itemId, position, prompt, choices, choiceIndex, answerIndex, correct, explanation]
+      properties:
+        itemId:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+          maximum: 5
+        prompt:
+          type: string
+        choices:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: string
+        choiceIndex:
+          type: integer
+          minimum: 0
+          maximum: 3
+        answerIndex:
+          type: integer
+          minimum: 0
+          maximum: 3
+        correct:
+          type: boolean
+        explanation:
+          type: string
+    Attempt:
+      type: object
+      additionalProperties: false
+      required: [id, quizId, score, total, submittedAt, items]
+      properties:
+        id:
+          type: string
+        quizId:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 5
+        total:
+          type: integer
+          const: 5
+        submittedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/GradedItem'
+    AttemptResponse:
+      type: object
+      additionalProperties: false
+      required: [attempt]
+      properties:
+        attempt:
+          $ref: '#/components/schemas/Attempt'
+    TopicProgress:
+      type: object
+      additionalProperties: false
+      required:
+        - topicId
+        - topicName
+        - questions
+        - guidesCompleted
+        - stepsDone
+        - attempts
+        - bestScorePercent
+        - averageScorePercent
+        - lastActivityAt
+      properties:
+        topicId:
+          type: string
+        topicName:
+          type: string
+        questions:
+          type: integer
+          minimum: 0
+        guidesCompleted:
+          type: integer
+          minimum: 0
+        stepsDone:
+          type: integer
+          minimum: 0
+        attempts:
+          type: integer
+          minimum: 0
+        bestScorePercent:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: Highest single attempt, 0-100
+        averageScorePercent:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: Mean of each quiz's best attempt, 0-100 (the topic score)
+        lastActivityAt:
+          type: [string, 'null']
+          format: date-time
+    Streak:
+      type: object
+      additionalProperties: false
+      required: [current, longest, activeToday]
+      properties:
+        current:
+          type: integer
+          minimum: 0
+        longest:
+          type: integer
+          minimum: 0
+        activeToday:
+          type: boolean
+    ProgressTotals:
+      type: object
+      additionalProperties: false
+      required: [questions, guidesCompleted, stepsDone, attempts]
+      properties:
+        questions:
+          type: integer
+          minimum: 0
+        guidesCompleted:
+          type: integer
+          minimum: 0
+        stepsDone:
+          type: integer
+          minimum: 0
+        attempts:
+          type: integer
+          minimum: 0
+    ActivityKind:
+      type: string
+      enum: [question, step, attempt]
+    Activity:
+      type: object
+      additionalProperties: false
+      required: [kind, at, topicId, title, threadId, guideId, quizId]
+      properties:
+        kind:
+          $ref: '#/components/schemas/ActivityKind'
+        at:
+          type: string
+          format: date-time
+        topicId:
+          type: string
+        title:
+          type: string
+        threadId:
+          type: [string, 'null']
+        guideId:
+          type: [string, 'null']
+        quizId:
+          type: [string, 'null']
+    ProgressResponse:
+      type: object
+      additionalProperties: false
+      required: [totals, streak, topics, recent]
+      properties:
+        totals:
+          $ref: '#/components/schemas/ProgressTotals'
+        streak:
+          $ref: '#/components/schemas/Streak'
+        topics:
+          type: array
+          description: Every topic, in taxonomy order
+          items:
+            $ref: '#/components/schemas/TopicProgress'
+        recent:
+          type: array
+          maxItems: 10
+          description: Newest first
+          items:
+            $ref: '#/components/schemas/Activity'

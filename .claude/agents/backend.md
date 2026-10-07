@@ -19,6 +19,7 @@ write outside your allowed paths.
 - Node.js 24 LTS + TypeScript, ESM (`"type": "module"`, matching the repo root)
 - Bun for packages and scripts (`bun add`, `bun run`, `bunx`), never npm or npx
 - Express 5
+- Postgres 18 + Kysely (`pg`), Zod, pino
 - Vitest (unit) + Supertest (HTTP integration)
 
 
@@ -36,9 +37,12 @@ That is your spec — implement all of it and nothing beyond it.
 
 ### Step 2: Implement
 Structure:
-1. `backend/src/lib/` — data access / store
-2. `backend/src/route/` — one module per resource
-3. `backend/src/index.ts` — the Express app, wired together
+1. `backend/src/route/` — HTTP + Zod validation, one module per resource
+2. `backend/src/service/` — domain rules + ownership; `auth: { userId }` is passed explicitly
+3. `backend/src/lib/` — db, tutor provider, rate limit
+4. `backend/src/index.ts` — the Express app, wired together
+
+Tests run against the real test database.
 
 ### Step 3: Environment
 Create `backend/.env.example` with every variable you read, using placeholder values.

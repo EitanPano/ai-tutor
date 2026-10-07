@@ -1,0 +1,80 @@
+name: ai-tutor
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ai_tutor
+      POSTGRES_PASSWORD: ai_tutor # dev-only throwaway value, not a secret
+      POSTGRES_DB: ai_tutor
+    ports:
+      # Host port mappings must stay on 127.0.0.1 (never publish on all interfaces).
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql # Postgres 18 images keep data under /var/lib/postgresql/18/...
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ai_tutor -d ai_tutor']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # ---- Full-stack profile (practice only): `docker compose --profile full up --build`.
+  # `docker compose up -d db` still starts Postgres alone for development.
+  migrate:
+    profiles: ['full']
+    # Reuses the image the backend service builds (one build, not two).
+    image: ai-tutor-backend
+    # Built by the backend service; never try to pull it from a registry.
+    pull_policy: never
+    command: ['node', 'dist/lib/db/cli.js', 'migrate']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://ai_tutor:ai_tutor@db:5432/ai_tutor
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  backend:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ai-tutor-backend
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0 # inside the container; the host mapping below stays on loopback
+      DATABASE_URL: postgres://ai_tutor:ai_tutor@db:5432/ai_tutor
+      FRONTEND_URL: http://localhost:3000
+      # Production refuses the fake provider. A required-variable guard (colon-question-mark)
+      # would also break `up -d db`, because compose interpolates every service, so a missing
+      # key is reported by the backend's own config check at startup instead:
+      # "ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic".
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-haiku-4-5}
+    ports:
+      - '127.0.0.1:4000:4000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure:3 # a missing key fails fast instead of crash-looping
+
+  frontend:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    image: ai-tutor-frontend
+    environment:
+      HOSTNAME: 0.0.0.0 # inside the container; the host mapping below stays on loopback
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
