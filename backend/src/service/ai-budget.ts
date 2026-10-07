@@ -2,7 +2,7 @@ import { sql } from 'kysely'
 import type { Db } from '../lib/db/index.js'
 import type { NewAiCall } from '../lib/db/schema.js'
 import { AppError } from '../lib/error.js'
-import type { Auth } from './ownership.js'
+import { ownedBy, type Auth } from './ownership.js'
 
 /**
  * Throws 429 `ai_budget_exceeded` once the tokens (input, cache creation, cache read and output)
@@ -10,14 +10,21 @@ import type { Auth } from './ownership.js'
  * the start of today, in the user's time zone, reach `budget`.
  */
 export async function assertWithinBudget(db: Db, auth: Auth, budget: number): Promise<void> {
-  const { rows } = await sql<{ used: string }>`
-    SELECT COALESCE(SUM(c.input_token::bigint + c.cache_creation_token + c.cache_read_token + c.output_token), 0)::text AS used
-    FROM app_user u
-    LEFT JOIN ai_call c
-      ON c.user_id = u.id
-     AND c.created_at >= (date_trunc('day', now() AT TIME ZONE u.time_zone) AT TIME ZONE u.time_zone)
-    WHERE u.id = ${auth.userId}`.execute(db)
-  const used = Number(rows[0]?.used ?? 0)
+  // The user's own row holds the time zone; the ledger rows go through the ownership helper.
+  const userTimeZone = sql<string>`(SELECT time_zone FROM app_user WHERE id = ${auth.userId})`
+  const row = await db
+    .selectFrom('ai_call')
+    .select(
+      sql<string>`COALESCE(SUM(input_token::bigint + cache_creation_token + cache_read_token + output_token), 0)::text`.as(
+        'used'
+      )
+    )
+    .where(ownedBy('ai_call', auth))
+    .where(
+      sql<boolean>`created_at >= (date_trunc('day', now() AT TIME ZONE ${userTimeZone}) AT TIME ZONE ${userTimeZone})`
+    )
+    .executeTakeFirst()
+  const used = Number(row?.used ?? 0)
   if (used >= budget) {
     throw new AppError(
       429,

@@ -305,7 +305,7 @@ export async function submitAttempt(
   }
   const missingItemIds = items.filter((item) => !seen.has(item.id)).map((item) => item.id)
   if (missingItemIds.length > 0 || duplicateItemIds.length > 0 || unknownItemIds.length > 0) {
-    throw unprocessable('attempt_incomplete', 'Answer every question of the quiz exactly once.', {
+    throw unprocessable('attempt_incomplete', 'Answer every quiz item exactly once.', {
       missingItemIds,
       ...(duplicateItemIds.length > 0 ? { duplicateItemIds } : {}),
       ...(unknownItemIds.length > 0 ? { unknownItemIds } : {})

@@ -29,6 +29,9 @@ function sharedFor(app: Express) {
   const server = app.listen(0)
   server.unref()
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  // Node's 5 s default would let the server close an idle reused socket between two requests.
+  server.keepAliveTimeout = 60_000
+  server.headersTimeout = 65_000
   const entry = { server, url, agent: new Agent({ keepAlive: true }) }
   shared.set(app, entry)
   return entry

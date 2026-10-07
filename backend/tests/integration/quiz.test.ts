@@ -239,6 +239,9 @@ describe('attempts and grading', () => {
     expectContract(res, 'post', '/api/quiz/{id}/attempt')
     const body = res.body as ErrorBody
     expect(body.error.code).toBe('attempt_incomplete')
+    expect((body.error as { message?: string }).message).toBe(
+      'Answer every quiz item exactly once.'
+    )
     expect(body.error.details).toEqual({
       missingItemIds: quiz.items.slice(3).map((item) => item.id)
     })
