@@ -48,6 +48,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [leaving, setLeaving] = useState(false)
   const session = useSession({ enabled: !leaving })
   const user = session.data?.user
+  // A failed refetch keeps its cached data; only a first-load failure should replace the page.
+  const sessionFailed = session.isError && !session.data
 
   async function handleLogOut() {
     setLeaving(true)
@@ -106,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               : 'max-w-[72ch]'
           }`}
         >
-          {session.isError ? (
+          {sessionFailed ? (
             isApiError(session.error) && session.error.code === 'unauthenticated' ? null : (
               <div className="rounded-md border border-rule bg-sheet">
                 <EmptyState
