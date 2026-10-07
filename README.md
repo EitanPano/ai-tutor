@@ -87,9 +87,11 @@ default: answers are canned, deterministic and cost nothing.
 | `bun run test` | Backend (real test DB, named per checkout: `ai_tutor_test_<hash of the checkout path>`) and frontend unit suites, run sequentially |
 | `bun run test:e2e` | Playwright against an isolated stack on :3100 / :4100 and a per-checkout DB (same suffix rule) |
 | `bun run gen:api` | Regenerates `frontend/src/types/api.ts` from `.orchestrate/api-contract.yaml` |
-| `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in `frontend/.next` (run `bun run --filter frontend build` first; CI builds with canary key values so the check can really fail) |
+| `bun run check:bundle` | AC12: fails if `sk-ant` or `ANTHROPIC` appears in the client output (`frontend/.next/static`) of a production build; server-rendered output is out of its reach (run `bun run --filter frontend build` first; CI builds with canary key values so the check can really fail) |
 
 Use `bun run test`, never `bun test`.
+
+Test databases are named per checkout, so a moved or deleted clone leaves its databases behind; drop old ones by hand (`ai_tutor_test_*`, `ai_tutor_schema_check_*`, `ai_tutor_e2e_*`).
 
 CI (`.github/workflows/ci.yml`) runs the same gates on pushes to `main` and on pull requests, then builds the backend, runs e2e (traces are kept as an artifact
 on failure), and builds both Docker images in a parallel `image` job.

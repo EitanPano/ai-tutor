@@ -143,10 +143,10 @@ SSE ask flow (`POST /api/thread/:id/message`):
   `connect-src` limited to self and the API origin, `frame-ancestors` none, no `wasm-unsafe-eval`: Shiki uses its JavaScript
   regex engine), plus `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` and a deny-all `Permissions-Policy`.
   Every page renders per request (the root layout awaits `connection()`) so the nonce can be applied.
-- `bun run check:bundle` fails if `sk-ant` or `ANTHROPIC` appears anywhere in `frontend/.next` (AC12).
+- `bun run check:bundle` fails if `sk-ant` or `ANTHROPIC` appears in the client output (`frontend/.next/static`) of a production build (AC12); server-rendered output is out of its reach.
 - Practice Docker images and a `full` compose profile exist (see the README); nothing deploys them.
 - CI (`.github/workflows/ci.yml`) runs on push to `main` and on pull requests, with install and Playwright caches
-  and e2e traces kept on failure. `check:bundle` needs a production build and scans it for canary key values injected
+  and e2e traces kept on failure. `check:bundle` needs a production build and scans its client output for canary key values injected
   at build time. A parallel `image` job builds the backend and both Docker images.
 - Test databases are per checkout (a suffix from the hash of the checkout path), so two clones never reset each other's.
 - Local only — there is no hosted environment (plan 001, Q11).

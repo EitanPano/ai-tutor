@@ -35,6 +35,9 @@ info:
     | `ai_provider_error` | 502 | The AI provider failed |
     | `ai_unavailable` | 503 | AI features are temporarily unavailable |
     | `db_unavailable` | 503 | The database is not reachable |
+
+    Any endpoint that reads the database may answer 503 `db_unavailable`, whether or not its own
+    responses list it.
 servers:
   - url: http://localhost:4000
 tags:

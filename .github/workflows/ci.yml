@@ -79,8 +79,9 @@ jobs:
         run: bunx playwright install-deps chromium
       - name: Build frontend
         run: bun run --filter frontend build
-        # Canary provider keys, on this step only (backend tests must not see them): a client
-        # reference to either name is inlined at build time, and check:bundle then finds it.
+        # Canary provider keys, on this step only (backend tests must not see them). Only
+        # NEXT_PUBLIC_* values are inlined into client code, so check:bundle finds the public name's
+        # value; a client reference to the non-public name is caught by its marker text instead.
         env:
           ANTHROPIC_API_KEY: sk-ant-ci-canary-not-a-real-key
           NEXT_PUBLIC_ANTHROPIC_API_KEY: sk-ant-ci-canary-not-a-real-key
