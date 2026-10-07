@@ -121,7 +121,7 @@ container id, so compose sets `HOSTNAME=0.0.0.0` at run time; a plain `docker ru
   and API keys are never logged. Each response carries `X-Request-Id`, and error bodies repeat it as `requestId`.
 - **Kill switch:** `AI_ENABLED=false` makes the AI routes return 503 `ai_unavailable`; history and progress keep
   working. `AI_PROVIDER=fake` stops all spend at once (not allowed in production).
-- **Daily budget:** `AI_DAILY_TOKEN_BUDGET` caps tokens per user per day (default 50000 with `AI_PROVIDER=anthropic`, 1000000 with the free fake provider); one generation runs per user
+- **Daily budget:** `AI_DAILY_TOKEN_BUDGET` caps tokens per user per day (default 50000 with `AI_PROVIDER=anthropic`, 1000000 with the free fake provider); `AI_GLOBAL_DAILY_TOKEN_BUDGET` caps all users together per UTC day (default 500000 with anthropic; reached: 503 `ai_unavailable`); one generation runs per user
   at a time.
 - **Time zones (migration 007):** it normalises stored `app_user.time_zone` values to Postgres spellings (for example
   `Asia/Calcutta` becomes `Asia/Kolkata`) and resets unknown or offset-style values (such as `+01:00`) to `UTC`. Its

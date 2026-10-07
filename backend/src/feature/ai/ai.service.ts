@@ -16,7 +16,7 @@ import {
 
 export type AiServiceDeps = {
   db: Db
-  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
+  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget' | 'aiGlobalDailyTokenBudget'>
   logger: Pick<Logger, 'error'>
 }
 
@@ -46,7 +46,8 @@ export type AiService = {
 export function createAiService({ db, config, logger }: AiServiceDeps): AiService {
   return {
     assertEnabled: () => assertAiEnabled(config),
-    assertWithinBudget: (auth) => assertWithinBudget(db, auth, config.aiDailyTokenBudget),
+    assertWithinBudget: (auth) =>
+      assertWithinBudget(db, auth, config.aiDailyTokenBudget, config.aiGlobalDailyTokenBudget),
     recordCall: (auth, row) => recordAiCall(db, auth, row),
     acquireLock: (auth) => acquireGenerationLock(db, auth),
     releaseLock: (auth, token, tx = db) => releaseGenerationLock(tx, auth, token),

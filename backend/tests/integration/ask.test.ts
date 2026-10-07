@@ -8,6 +8,10 @@ import { parseSse, type SseEvent } from '../helper/sse.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
+// A private app whose global daily cap is small enough to reach with a few rows.
+const GLOBAL_CAP = 1000
+const capped = createTestApp({ config: { aiGlobalDailyTokenBudget: GLOBAL_CAP } })
+const cappedClient = createClient(capped.app, capped.config)
 
 type ThreadBody = { id: string; title: string; messageCount: number; updatedAt: string }
 type MessageBody = {
@@ -24,7 +28,10 @@ beforeEach(async () => {
   await truncateAll(ctx.db)
   ctx.tutor.reset()
 })
-afterAll(() => ctx.close())
+afterAll(async () => {
+  await capped.close()
+  await ctx.close()
+})
 
 async function newThread(cookie: string, body: Record<string, unknown> = {}) {
   const res = await client.post('/api/thread').set('Cookie', cookie).send(body)
@@ -863,5 +870,72 @@ describe('recovery of turns left in flight (I2)', () => {
       await stream.close()
       await own.close()
     }
+  })
+})
+
+describe('global daily cap', () => {
+  /** Inserts an ai_call at an explicit UTC instant for `userId`. */
+  async function spendAt(userId: string, token: number, at: 'utc-noon' | 'before-utc-midnight') {
+    const created =
+      at === 'utc-noon'
+        ? sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '12 hours'`
+        : sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - interval '1 minute'`
+    await sql`
+      INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+        stop_reason, latency_ms, created_at)
+      VALUES (${userId}, 'explain', 'fake', ${token}, 0, 0, 'end_turn', 1, ${created})`.execute(
+      capped.db
+    )
+  }
+
+  async function cappedUser() {
+    const session = await signUp(cappedClient)
+    const thread = (await cappedClient.post('/api/thread').set('Cookie', session.cookie).send({}))
+      .body as { thread: ThreadBody }
+    return { session, threadId: thread.thread.id }
+  }
+
+  function askCapped(cookie: string, threadId: string) {
+    return cappedClient
+      .post(`/api/thread/${threadId}/message`)
+      .set('Cookie', cookie)
+      .send({ content: 'hello' })
+  }
+
+  it('answers 503 ai_unavailable once all users together reach the cap', async () => {
+    const first = await cappedUser()
+    const second = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP / 2, 'utc-noon')
+    await spendAt(second.session.user.id, GLOBAL_CAP / 2, 'utc-noon')
+    const third = await cappedUser()
+    const res = await askCapped(third.session.cookie, third.threadId)
+    expect(res.status).toBe(503)
+    expectContract(res, 'post', '/api/thread/{id}/message')
+    expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+    expect(capped.tutor.calls).toHaveLength(0)
+  })
+
+  it('stays open while the total is below the cap', async () => {
+    const first = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP - 1, 'utc-noon')
+    const second = await cappedUser()
+    const res = await askCapped(second.session.cookie, second.threadId)
+    expect(res.status).toBe(200)
+  })
+
+  it('does not count spend from before UTC midnight', async () => {
+    const first = await cappedUser()
+    await spendAt(first.session.user.id, GLOBAL_CAP * 10, 'before-utc-midnight')
+    const second = await cappedUser()
+    const res = await askCapped(second.session.cookie, second.threadId)
+    expect(res.status).toBe(200)
+  })
+
+  it('checks the per-user budget first: 429 even when the cap is reached too', async () => {
+    const { session, threadId } = await cappedUser()
+    await spendAt(session.user.id, capped.config.aiDailyTokenBudget, 'utc-noon')
+    const res = await askCapped(session.cookie, threadId)
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('ai_budget_exceeded')
   })
 })

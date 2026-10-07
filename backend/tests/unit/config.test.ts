@@ -14,6 +14,7 @@ describe('loadConfig', () => {
       aiProvider: 'fake',
       aiModel: 'claude-haiku-4-5',
       aiDailyTokenBudget: 1_000_000,
+      aiGlobalDailyTokenBudget: 1_000_000_000,
       aiEnabled: true,
       aiFakeDelayMs: 20,
       recoverStaleOnBoot: true
@@ -73,6 +74,20 @@ describe('loadConfig', () => {
     expect(
       loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }).aiDailyTokenBudget
     ).toBe(50_000)
+  })
+
+  it('defaults the global daily budget per provider', () => {
+    expect(loadConfig({ AI_PROVIDER: 'fake' }).aiGlobalDailyTokenBudget).toBe(1_000_000_000)
+    expect(
+      loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }).aiGlobalDailyTokenBudget
+    ).toBe(500_000)
+  })
+
+  it('lets AI_GLOBAL_DAILY_TOKEN_BUDGET override the default and rejects a non-positive value', () => {
+    expect(loadConfig({ AI_GLOBAL_DAILY_TOKEN_BUDGET: '777' }).aiGlobalDailyTokenBudget).toBe(777)
+    expect(() => loadConfig({ AI_GLOBAL_DAILY_TOKEN_BUDGET: '0' })).toThrow(
+      /AI_GLOBAL_DAILY_TOKEN_BUDGET/
+    )
   })
 
   it('lets AI_DAILY_TOKEN_BUDGET override the default for either provider', () => {

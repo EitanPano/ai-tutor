@@ -280,6 +280,38 @@ describe('guards', () => {
     expect(await lockOf(session.user.id)).toBeNull()
   })
 
+  it('answers 503 ai_unavailable once the global daily cap is reached', async () => {
+    const small = createTestApp({ config: { aiGlobalDailyTokenBudget: 1000 } })
+    try {
+      const smallClient = createClient(small.app, small.config)
+      const session = await signUp(smallClient)
+      const thread = (
+        await smallClient
+          .post('/api/thread')
+          .set('Cookie', session.cookie)
+          .send({ topicId: 'react' })
+      ).body as { thread: { id: string } }
+      const asked = await smallClient
+        .post(`/api/thread/${thread.thread.id}/message`)
+        .set('Cookie', session.cookie)
+        .send({ content: 'Why does useEffect run twice?' })
+      expect(asked.status).toBe(200)
+      await sql`
+        INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+          stop_reason, latency_ms)
+        VALUES (${session.user.id}, 'explain', 'fake', 1000, 0, 0, 'end_turn', 1)`.execute(small.db)
+      const res = await smallClient
+        .post(`/api/thread/${thread.thread.id}/guide`)
+        .set('Cookie', session.cookie)
+      expect(res.status).toBe(503)
+      expectContract(res, 'post', '/api/thread/{id}/guide')
+      expect((res.body as ErrorBody).error.code).toBe('ai_unavailable')
+      expect(small.tutor.guideCalls).toHaveLength(0)
+    } finally {
+      await small.close()
+    }
+  })
+
   it('answers 503 ai_unavailable when AI is disabled', async () => {
     const off = createTestApp({ config: { aiEnabled: false } })
     try {

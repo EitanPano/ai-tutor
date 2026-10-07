@@ -100,6 +100,7 @@ CREATE TABLE ai_call (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ai_call_user_created_idx ON ai_call (user_id, created_at);
+CREATE INDEX ai_call_created_idx ON ai_call (created_at);
 
 CREATE TABLE guide (
   id text PRIMARY KEY DEFAULT uuidv7()::text,

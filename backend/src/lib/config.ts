@@ -5,6 +5,9 @@ const DEV_FRONTEND_URL = 'http://localhost:3000'
 /** The real provider spends money: 50k tokens a day. The free fake one is effectively unlimited. */
 const DEFAULT_BUDGET_ANTHROPIC = 50_000
 const DEFAULT_BUDGET_FAKE = 1_000_000
+/** Across all users, per UTC day: 500k tokens with the real provider, effectively unlimited with the fake one. */
+const DEFAULT_GLOBAL_BUDGET_ANTHROPIC = 500_000
+const DEFAULT_GLOBAL_BUDGET_FAKE = 1_000_000_000
 
 const boolString = z.enum(['true', 'false']).transform((value) => value === 'true')
 
@@ -25,6 +28,7 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   // The default depends on the provider, so it is applied in loadConfig.
   AI_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
+  AI_GLOBAL_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
   AI_ENABLED: boolString.default(true),
   AI_FAKE_DELAY_MS: z.coerce.number().int().min(0).default(20),
   RECOVER_STALE_ON_BOOT: boolString.default(true)
@@ -41,6 +45,7 @@ export type Config = {
   aiModel: string
   anthropicApiKey: string | undefined
   aiDailyTokenBudget: number
+  aiGlobalDailyTokenBudget: number
   aiEnabled: boolean
   aiFakeDelayMs: number
   recoverStaleOnBoot: boolean
@@ -92,6 +97,9 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     aiDailyTokenBudget:
       v.AI_DAILY_TOKEN_BUDGET ??
       (v.AI_PROVIDER === 'fake' ? DEFAULT_BUDGET_FAKE : DEFAULT_BUDGET_ANTHROPIC),
+    aiGlobalDailyTokenBudget:
+      v.AI_GLOBAL_DAILY_TOKEN_BUDGET ??
+      (v.AI_PROVIDER === 'fake' ? DEFAULT_GLOBAL_BUDGET_FAKE : DEFAULT_GLOBAL_BUDGET_ANTHROPIC),
     aiEnabled: v.AI_ENABLED,
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS,
     recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT
