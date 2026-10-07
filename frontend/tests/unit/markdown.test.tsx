@@ -53,6 +53,16 @@ describe('Markdown', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
+  it('treats protocol-relative links as external and keeps same-origin paths internal', () => {
+    render(<Markdown>{'[evil](//evil.test/x) and [home](/progress)'}</Markdown>)
+
+    const evil = screen.getByRole('link', { name: 'evil' })
+    expect(evil).toHaveAttribute('target', '_blank')
+    expect(evil).toHaveAttribute('rel', 'noopener noreferrer')
+    const home = screen.getByRole('link', { name: 'home' })
+    expect(home).not.toHaveAttribute('target')
+  })
+
   it('does not load remote images', () => {
     const { container } = render(<Markdown>{'![diagram](https://evil.test/x.png)'}</Markdown>)
 

@@ -46,10 +46,21 @@ function Pre({ children }: ComponentPropsWithoutRef<'pre'>) {
   return <CodeBlock code={textOf(children)} language={language} streaming={streaming} />
 }
 
+// Any other origin is external, including protocol-relative `//host/path` links. The fallback
+// base only applies during SSR, where no link can be the app's own origin.
+function isExternal(href: string): boolean {
+  const base = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+  try {
+    return new URL(href, base).origin !== base
+  } catch {
+    return true
+  }
+}
+
 function Anchor({ href, children }: ComponentPropsWithoutRef<'a'>) {
   // A URL react-markdown refused (such as `javascript:`) arrives empty: show it as text.
   if (!href) return <span>{children}</span>
-  const external = /^https?:\/\//i.test(href)
+  const external = isExternal(href)
   return (
     <a href={href} {...(external && { target: '_blank', rel: 'noopener noreferrer' })}>
       {children}
