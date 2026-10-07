@@ -9,7 +9,7 @@ import type { Db } from './lib/db/index.js'
 import { errorMiddleware, notFoundHandler } from './lib/error.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
-import { createLoginLimiter } from './lib/rate-limit.js'
+import { createLoginIpLimiter, createLoginLimiter, createSignupLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './feature/guide/index.js'
@@ -26,7 +26,7 @@ import { requestId } from './http/request-id.js'
 export type AppDeps = {
   config: Config
   db: Db
-  /** The pool behind `db`; the login limiter stores its counters through it. */
+  /** The pool behind `db`; the rate limiters store their counters through it. */
   pool: pg.Pool
   logger: Logger
   /** Defaults to the provider selected by `config.aiProvider`; tests inject the fake. */
@@ -85,7 +85,15 @@ export function createApp({
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
-  const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
+  const user = createUserModule({
+    db,
+    config,
+    limiters: {
+      login: createLoginLimiter(pool),
+      loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
+      signup: createSignupLimiter(pool, config.signupRateLimit)
+    }
+  })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
   const provider = tutor ?? createTutorProvider(config)

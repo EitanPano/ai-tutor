@@ -126,6 +126,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many sign-ups from this address (`rate_limited`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '500':
@@ -196,7 +202,7 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'
         '429':
-          description: Too many login attempts (`rate_limited`)
+          description: Too many login attempts from this address or for this email (`rate_limited`)
           content:
             application/json:
               schema:

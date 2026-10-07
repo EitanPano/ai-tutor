@@ -6,6 +6,9 @@ export const E2E_BACKEND_ENV = {
   AI_PROVIDER: 'fake',
   // Explicit: the budget specs spend 60000 tokens; the fake provider's default is far higher.
   AI_DAILY_TOKEN_BUDGET: '50000',
+  // The specs sign up and log in many users from one address.
+  SIGNUP_RATE_LIMIT: '100000',
+  LOGIN_IP_RATE_LIMIT: '100000',
   NODE_ENV: 'development',
   LOG_LEVEL: 'warn',
   // The backend must not query at boot: globalSetup resets this database after it started.

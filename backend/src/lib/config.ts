@@ -29,6 +29,8 @@ const envSchema = z.object({
   // The default depends on the provider, so it is applied in loadConfig.
   AI_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
   AI_GLOBAL_DAILY_TOKEN_BUDGET: z.coerce.number().int().positive().optional(),
+  SIGNUP_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  LOGIN_IP_RATE_LIMIT: z.coerce.number().int().positive().default(30),
   AI_ENABLED: boolString.default(true),
   AI_FAKE_DELAY_MS: z.coerce.number().int().min(0).default(20),
   RECOVER_STALE_ON_BOOT: boolString.default(true)
@@ -49,6 +51,10 @@ export type Config = {
   aiEnabled: boolean
   aiFakeDelayMs: number
   recoverStaleOnBoot: boolean
+  /** Sign-ups per hour per IP. */
+  signupRateLimit: number
+  /** Login attempts per 15 minutes per IP, on top of the ip + email limit. */
+  loginIpRateLimit: number
 }
 
 /** Treat empty strings (e.g. an empty ANTHROPIC_API_KEY in a copied template) as unset. */
@@ -102,7 +108,9 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
       (v.AI_PROVIDER === 'fake' ? DEFAULT_GLOBAL_BUDGET_FAKE : DEFAULT_GLOBAL_BUDGET_ANTHROPIC),
     aiEnabled: v.AI_ENABLED,
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS,
-    recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT
+    recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
+    signupRateLimit: v.SIGNUP_RATE_LIMIT,
+    loginIpRateLimit: v.LOGIN_IP_RATE_LIMIT
   }
 }
 

@@ -22,7 +22,10 @@ export default defineConfig({
       LOG_LEVEL: 'silent',
       // Explicit: budget tests (AC09) depend on it, not on the provider-specific default.
       AI_DAILY_TOKEN_BUDGET: '50000',
-      AI_FAKE_DELAY_MS: '0'
+      AI_FAKE_DELAY_MS: '0',
+      // Suites sign up and log in many users from one address; the limit tests set small ones.
+      SIGNUP_RATE_LIMIT: '100000',
+      LOGIN_IP_RATE_LIMIT: '100000'
     },
     projects: [
       // Unit tests keep a fresh module graph per file (some assert on module-level state).

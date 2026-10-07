@@ -17,7 +17,9 @@ describe('loadConfig', () => {
       aiGlobalDailyTokenBudget: 1_000_000_000,
       aiEnabled: true,
       aiFakeDelayMs: 20,
-      recoverStaleOnBoot: true
+      recoverStaleOnBoot: true,
+      signupRateLimit: 10,
+      loginIpRateLimit: 30
     })
     expect(config.anthropicApiKey).toBeUndefined()
   })
@@ -81,6 +83,15 @@ describe('loadConfig', () => {
     expect(
       loadConfig({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k' }).aiGlobalDailyTokenBudget
     ).toBe(500_000)
+  })
+
+  it('lets SIGNUP_RATE_LIMIT and LOGIN_IP_RATE_LIMIT override the defaults and rejects non-positive values', () => {
+    const config = loadConfig({ SIGNUP_RATE_LIMIT: '3', LOGIN_IP_RATE_LIMIT: '7' })
+    expect(config.signupRateLimit).toBe(3)
+    expect(config.loginIpRateLimit).toBe(7)
+    expect(() => loadConfig({ SIGNUP_RATE_LIMIT: '0' })).toThrow(/SIGNUP_RATE_LIMIT/)
+    expect(() => loadConfig({ LOGIN_IP_RATE_LIMIT: '-1' })).toThrow(/LOGIN_IP_RATE_LIMIT/)
+    expect(() => loadConfig({ LOGIN_IP_RATE_LIMIT: '1.5' })).toThrow(/LOGIN_IP_RATE_LIMIT/)
   })
 
   it('lets AI_GLOBAL_DAILY_TOKEN_BUDGET override the default and rejects a non-positive value', () => {

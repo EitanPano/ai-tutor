@@ -772,6 +772,15 @@ export interface operations {
         }
       }
       413: components['responses']['PayloadTooLarge']
+      /** @description Too many sign-ups from this address (`rate_limited`) */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
       500: components['responses']['InternalError']
     }
   }
@@ -870,7 +879,7 @@ export interface operations {
       }
       403: components['responses']['ForbiddenOrigin']
       413: components['responses']['PayloadTooLarge']
-      /** @description Too many login attempts (`rate_limited`) */
+      /** @description Too many login attempts from this address or for this email (`rate_limited`) */
       429: {
         headers: {
           [name: string]: unknown
