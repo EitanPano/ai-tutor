@@ -25,7 +25,10 @@ RUN bun install --frozen-lockfile --production --filter backend
 
 # ---- runtime
 FROM node:24-slim AS runtime
+# The API binds to loopback by default, which a published container port cannot reach. Bind to
+# all interfaces inside the container; compose publishes the port on 127.0.0.1 only.
 ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
     PORT=4000
 WORKDIR /app/backend
 COPY --from=prod-deps --chown=node:node /app/node_modules /app/node_modules

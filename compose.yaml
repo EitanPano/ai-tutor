@@ -23,6 +23,8 @@ services:
     profiles: ['full']
     # Reuses the image the backend service builds (one build, not two).
     image: ai-tutor-backend
+    # Built by the backend service; never try to pull it from a registry.
+    pull_policy: never
     command: ['node', 'dist/lib/db/cli.js', 'migrate']
     environment:
       NODE_ENV: production
