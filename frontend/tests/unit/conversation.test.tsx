@@ -95,9 +95,16 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   sessionStorage.clear()
 })
+
+/** Moves the clock past the grace period in which Stop ignores a click right after Ask. */
+function pastStopGrace() {
+  const realNow = Date.now.bind(Date)
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 1000)
+}
 
 async function open() {
   renderWithQuery(<Conversation threadId={THREAD_ID} />)
@@ -157,6 +164,7 @@ describe('Conversation', () => {
     await screen.findByText('Thinking…')
     await ask.start()
     await ask.delta('Partial')
+    pastStopGrace()
 
     serve(thread({ messageCount: 2 }), [
       message({ id: 'u2', role: 'user', content: 'Why?' }),
@@ -173,6 +181,35 @@ describe('Conversation', () => {
     expect(ask.signal()?.aborted).toBe(true)
     expect(await screen.findByText('Stopped before the answer finished.')).toBeInTheDocument()
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('keeps the answer running when Ask is double-clicked', async () => {
+    const ask = controlledAsk()
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+    await typist.dblClick(screen.getByRole('button', { name: 'Ask' }))
+
+    expect(api.askQuestion).toHaveBeenCalledTimes(1)
+    expect(ask.signal()?.aborted).toBe(false)
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('gives the question back to the composer when it is stopped before the server took it', async () => {
+    const ask = controlledAsk()
+    await open()
+    const typist = userEvent.setup()
+
+    await typist.type(screen.getByRole('textbox', { name: 'Your question' }), 'Why?')
+    await typist.click(screen.getByRole('button', { name: 'Ask' }))
+    pastStopGrace()
+    await typist.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(ask.signal()?.aborted).toBe(true)
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Your question' })).toHaveValue('Why?')
+    )
   })
 
   it('shows the cut-off note for an answer that hit the length limit', async () => {
@@ -363,6 +400,7 @@ describe('Conversation', () => {
     await ask.start()
     await ask.delta('Partial')
 
+    pastStopGrace()
     serve(thread({ messageCount: 2 }), [asked, placeholder])
     await userEvent.setup().click(screen.getByRole('button', { name: 'Stop' }))
     // The first look after Stop still finds the empty placeholder; a later one finds the answer.

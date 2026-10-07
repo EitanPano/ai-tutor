@@ -69,7 +69,7 @@ export function Conversation({ threadId }: { threadId: string }) {
   const submit = useCallback(
     async (question: string) => {
       const { started, outcome } = await ask(question)
-      if (!started && outcome === 'failed') setDraft((current) => current || question)
+      if (!started && outcome !== 'completed') setDraft((current) => current || question)
     },
     [ask]
   )

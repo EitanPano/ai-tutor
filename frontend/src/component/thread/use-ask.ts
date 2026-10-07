@@ -13,6 +13,9 @@ const RETRYABLE = new Set([
   'generation_in_progress'
 ])
 
+/** Ask turns into Stop in place, so a double click or key repeat must not stop the answer just asked for. */
+const STOP_GRACE_MS = 400
+
 export type Asking = {
   /** `thinking` until the first delta, `streaming` while text arrives, `finalizing` while the saved thread reloads. */
   phase: 'thinking' | 'streaming' | 'finalizing'
@@ -44,6 +47,7 @@ export function useAsk(
   const [budgetSpent, setBudgetSpent] = useState(false)
   const [threadFull, setThreadFull] = useState(false)
   const controller = useRef<AbortController | undefined>(undefined)
+  const askedAt = useRef(0)
   const mounted = useRef(true)
   const askRef =
     useRef<(question: string, onAccepted?: () => void) => Promise<AskResult>>(undefined)
@@ -75,6 +79,7 @@ export function useAsk(
       if (controller.current) return { started: false, outcome: 'failed' }
       const abort = new AbortController()
       controller.current = abort
+      askedAt.current = Date.now()
       let started = false
       let answerId: string | undefined
       let outcome: AskResult['outcome'] = 'failed'
@@ -150,7 +155,10 @@ export function useAsk(
     askRef.current = ask
   }, [ask])
 
-  const stop = useCallback(() => controller.current?.abort(), [])
+  const stop = useCallback(() => {
+    if (Date.now() - askedAt.current < STOP_GRACE_MS) return
+    controller.current?.abort()
+  }, [])
 
   return { asking, ask, stop, announcement, budgetSpent, threadFull }
 }
