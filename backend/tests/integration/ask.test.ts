@@ -874,12 +874,22 @@ describe('recovery of turns left in flight (I2)', () => {
 })
 
 describe('global daily cap', () => {
-  /** Inserts an ai_call at an explicit UTC instant for `userId`. */
-  async function spendAt(userId: string, token: number, at: 'utc-noon' | 'before-utc-midnight') {
+  /**
+   * Inserts an ai_call for `userId`. 'now' lies inside every window that ends later today (the UTC
+   * day and any time zone's local day), so tests that also depend on the per-user window use it;
+   * 'utc-noon' is only inside the UTC day's window.
+   */
+  async function spendAt(
+    userId: string,
+    token: number,
+    at: 'utc-noon' | 'before-utc-midnight' | 'now'
+  ) {
     const created =
-      at === 'utc-noon'
-        ? sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '12 hours'`
-        : sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - interval '1 minute'`
+      at === 'now'
+        ? sql`now()`
+        : at === 'utc-noon'
+          ? sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '12 hours'`
+          : sql`date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - interval '1 minute'`
     await sql`
       INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
         stop_reason, latency_ms, created_at)
@@ -933,7 +943,8 @@ describe('global daily cap', () => {
 
   it('checks the per-user budget first: 429 even when the cap is reached too', async () => {
     const { session, threadId } = await cappedUser()
-    await spendAt(session.user.id, capped.config.aiDailyTokenBudget, 'utc-noon')
+    // 'now', not 'utc-noon': the user's own day starts at local midnight, which can be after UTC noon.
+    await spendAt(session.user.id, capped.config.aiDailyTokenBudget, 'now')
     const res = await askCapped(session.cookie, threadId)
     expect(res.status).toBe(429)
     expect((res.body as ErrorBody).error.code).toBe('ai_budget_exceeded')

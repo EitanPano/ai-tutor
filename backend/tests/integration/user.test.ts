@@ -148,8 +148,10 @@ describe('PATCH /api/user', () => {
       expect(error.message).toBe('You can change your time zone once a day. Try again later.')
       const next = new Date(error.details?.nextChangeAt as string)
       const wait = next.getTime() - Date.now()
-      expect(wait).toBeGreaterThan(23.9 * 3_600_000)
-      expect(wait).toBeLessThanOrEqual(24 * 3_600_000)
+      // The database's now() and this host's clock can differ (Docker/WSL vs Windows): allow a minute.
+      const skew = 60_000
+      expect(wait).toBeGreaterThan(23.9 * 3_600_000 - skew)
+      expect(wait).toBeLessThanOrEqual(24 * 3_600_000 + skew)
 
       const row = await ctx.db.selectFrom('app_user').select('time_zone').executeTakeFirst()
       expect(row?.time_zone).toBe('America/New_York')
