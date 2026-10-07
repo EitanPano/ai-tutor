@@ -16,7 +16,7 @@ import { guideRouter } from './feature/guide/index.js'
 import { healthRouter } from './feature/health/index.js'
 import { progressRouter } from './feature/progress/index.js'
 import { quizRouter } from './feature/quiz/index.js'
-import { threadRouter, messageRouter } from './feature/thread/index.js'
+import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
 import { createAiModule, type AiApi } from './feature/ai/index.js'
 import { createTopicModule, type TopicApi } from './feature/topic/index.js'
 import { createUserModule } from './feature/user/index.js'
@@ -38,7 +38,7 @@ export type AppDeps = {
 }
 
 /** The module APIs used outside HTTP: boot recovery in index.ts, and tests. Grows per module. */
-export type AppModules = { topic: TopicApi; ai: AiApi }
+export type AppModules = { topic: TopicApi; ai: AiApi; thread: ThreadApi }
 
 export function createApp({
   config,
@@ -53,6 +53,16 @@ export function createApp({
   const user = createUserModule({ db, config, loginLimiter: createLoginLimiter(pool) })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
+  const provider = tutor ?? createTutorProvider(config)
+  const thread = createThreadModule({
+    db,
+    tutor: provider,
+    logger,
+    inFlight,
+    requireSession: user.requireSession,
+    topic: topic.api,
+    ai: ai.api
+  })
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(
@@ -80,14 +90,12 @@ export function createApp({
   app.use(healthRouter(db))
   app.use(user.router)
   app.use(topic.router)
-  app.use(threadRouter(db, user.requireSession, topic.api))
-  const provider = tutor ?? createTutorProvider(config)
-  app.use(messageRouter(db, user.requireSession, provider, logger, inFlight, topic.api, ai.api))
-  app.use(guideRouter(db, user.requireSession, provider, topic.api, ai.api))
-  app.use(quizRouter(db, user.requireSession, provider, topic.api, ai.api))
+  app.use(thread.router)
+  app.use(guideRouter(db, user.requireSession, provider, topic.api, ai.api, thread.api))
+  app.use(quizRouter(db, user.requireSession, provider, topic.api, ai.api, thread.api))
   app.use(progressRouter(db, user.requireSession))
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)
-  return { app, modules: { topic: topic.api, ai: ai.api } }
+  return { app, modules: { topic: topic.api, ai: ai.api, thread: thread.api } }
 }

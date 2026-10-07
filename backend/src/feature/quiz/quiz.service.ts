@@ -5,9 +5,8 @@ import { unprocessable } from '../../lib/error.js'
 import { QuizDraftSchema, type QuizDraft } from '../../lib/tutor/quiz.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../ai/index.js'
-import { buildHistory } from '../thread/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
-import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
+import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
 export const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
@@ -16,6 +15,7 @@ export type QuizDeps = {
   tutor: TutorProvider
   topic: TopicApi
   ai: AiApi
+  thread: ThreadApi
 }
 
 /** `{ threadId, difficulty? }` or `{ topicId, difficulty }`; the route validates the shape. */
@@ -126,8 +126,8 @@ export async function createQuiz(
   let threadId: string | null = null
   let topic: { id: string; name: string }
   if ('threadId' in input) {
-    const thread = await requireThread(db, auth, input.threadId)
-    await assertThreadHasAnswer(db, auth, thread.id)
+    const thread = await deps.thread.require(auth, input.threadId)
+    await deps.thread.assertHasAnswer(auth, thread.id)
     threadId = thread.id
     topic = await deps.topic.require(thread.topicId)
   } else {
@@ -136,7 +136,7 @@ export async function createQuiz(
   await ai.assertWithinBudget(auth)
   const lockToken = await ai.acquireLock(auth)
   try {
-    const history = threadId === null ? null : await buildHistory(db, auth, threadId)
+    const history = threadId === null ? null : await deps.thread.history(auth, threadId)
     const draft = await ai.generateValidated(auth, {
       kind: 'quiz',
       schema: QuizDraftSchema,

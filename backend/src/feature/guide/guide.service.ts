@@ -4,15 +4,15 @@ import type { GuideRow, GuideStepRow } from '../../lib/db/schema.js'
 import { GuideDraftSchema, type GuideDraft } from '../../lib/tutor/guide.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../ai/index.js'
-import { buildHistory } from '../thread/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
-import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
+import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
 export type GuideDeps = {
   tutor: TutorProvider
   topic: TopicApi
   ai: AiApi
+  thread: ThreadApi
 }
 
 export type StepDto = {
@@ -73,13 +73,13 @@ export async function createGuide(
 ): Promise<GuideDto> {
   const { tutor, ai } = deps
   ai.assertEnabled()
-  const thread = await requireThread(db, auth, threadId)
-  await assertThreadHasAnswer(db, auth, thread.id)
+  const thread = await deps.thread.require(auth, threadId)
+  await deps.thread.assertHasAnswer(auth, thread.id)
   await ai.assertWithinBudget(auth)
   const topic = await deps.topic.require(thread.topicId)
   const lockToken = await ai.acquireLock(auth)
   try {
-    const history = await buildHistory(db, auth, thread.id)
+    const history = await deps.thread.history(auth, thread.id)
     const draft = await ai.generateValidated(auth, {
       kind: 'guide',
       schema: GuideDraftSchema,

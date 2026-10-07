@@ -5,6 +5,7 @@ import { badRequest, conflict } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { recoverStaleTurn } from './stale-turn.js'
+import type { AiApi } from '../ai/index.js'
 import type { TopicApi } from '../topic/index.js'
 
 export const DEFAULT_TOPIC_ID = 'other'
@@ -108,57 +109,6 @@ async function loadThread(db: Db, auth: Auth, id: string): Promise<ThreadRecord>
   return requireFound(row)
 }
 
-/**
- * Throws 404 unless the thread exists, is owned by the user and is not deleted. Returns the
- * thread's topic id and title for callers that need them.
- */
-export async function requireThread(
-  db: Db,
-  auth: Auth,
-  id: string
-): Promise<{ id: string; topicId: string; title: string; messageCount: number }> {
-  const row = await loadThread(db, auth, id)
-  return { id: row.id, topicId: row.topic_id, title: row.title, messageCount: row.message_count }
-}
-
-/** The thread needs at least one answer to build a guide from. */
-export async function assertThreadHasAnswer(db: Db, auth: Auth, threadId: string): Promise<void> {
-  const row = await db
-    .selectFrom('message')
-    .select('id')
-    .where('thread_id', '=', threadId)
-    .where(ownedBy('message', auth))
-    .where('role', '=', 'assistant')
-    .where('status', '=', 'complete')
-    .limit(1)
-    .executeTakeFirst()
-  if (!row) {
-    throw conflict(
-      'thread_empty',
-      'Ask a question first, then build a guide or quiz from the answer.'
-    )
-  }
-}
-
-export async function createThread(
-  db: Db,
-  auth: Auth,
-  input: { topicId?: string | undefined; title?: string | undefined },
-  deps: { topic: TopicApi }
-): Promise<ThreadDto> {
-  const topic = await deps.topic.require(input.topicId ?? DEFAULT_TOPIC_ID)
-  const row = await db
-    .insertInto('thread')
-    .values({
-      user_id: auth.userId,
-      topic_id: topic.id,
-      title: input.title ?? DEFAULT_TITLE
-    })
-    .returning(['id', 'topic_id', 'title', 'created_at', 'updated_at'])
-    .executeTakeFirstOrThrow()
-  return toThreadDto({ ...row, message_count: 0 })
-}
-
 type Cursor = { u: string; i: string }
 // ISO-8601 UTC with up to microsecond precision, the precision Postgres stores.
 const CURSOR_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/
@@ -205,158 +155,218 @@ function decodeCursor(raw: string): Cursor {
   throw invalidCursor()
 }
 
-export async function listThreads(
-  db: Db,
-  auth: Auth,
-  input: { cursor?: string | undefined; limit?: number | undefined }
-): Promise<{ threads: ThreadDto[]; nextCursor: string | null }> {
-  const limit = input.limit ?? DEFAULT_PAGE_SIZE
-  const cursor = input.cursor === undefined ? undefined : decodeCursor(input.cursor)
-  let query = db
-    .selectFrom('thread')
-    .select([
-      'thread.id',
-      'thread.topic_id',
-      'thread.title',
-      'thread.created_at',
-      'thread.updated_at',
-      // The cursor carries Postgres' microsecond precision; a JS Date would truncate it and
-      // make a row reappear on the next page.
-      sql<string>`to_char(thread.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`.as(
-        'updated_at_iso'
-      ),
-      messageCountExpr.as('message_count')
-    ])
-    .where(ownedBy('thread', auth))
-    .where('thread.deleted_at', 'is', null)
-  if (cursor) {
-    query = query.where(
-      sql<boolean>`(thread.updated_at, thread.id) < (${cursor.u}::timestamptz, ${cursor.i})`
-    )
-  }
-  const rows = await query
-    .orderBy('thread.updated_at', 'desc')
-    .orderBy('thread.id', 'desc')
-    .limit(limit + 1)
-    .execute()
-  const page = rows.slice(0, limit)
-  const last = page[page.length - 1]
-  return {
-    threads: page.map(toThreadDto),
-    nextCursor:
-      rows.length > limit && last ? encodeCursor({ u: last.updated_at_iso, i: last.id }) : null
-  }
+/** A live thread owned by the user, as other modules see it. */
+export type ThreadSummary = { id: string; topicId: string; title: string; messageCount: number }
+
+export type ThreadServiceDeps = { db: Db; topic: TopicApi; ai: AiApi }
+
+export type ThreadService = {
+  list(
+    auth: Auth,
+    input: { cursor?: string | undefined; limit?: number | undefined }
+  ): Promise<{ threads: ThreadDto[]; nextCursor: string | null }>
+  create(
+    auth: Auth,
+    input: { topicId?: string | undefined; title?: string | undefined }
+  ): Promise<ThreadDto>
+  getDetail(auth: Auth, id: string): Promise<ThreadDetailDto>
+  update(
+    auth: Auth,
+    id: string,
+    input: { title?: string | undefined; topicId?: string | undefined }
+  ): Promise<ThreadDto>
+  /** Soft delete: afterwards every read and write on the thread is a 404. */
+  delete(auth: Auth, id: string): Promise<void>
+  /**
+   * Throws 404 unless the thread exists, is owned by the user and is not deleted. Returns the
+   * thread's topic id and title for callers that need them.
+   */
+  require(auth: Auth, id: string): Promise<ThreadSummary>
+  /** The thread needs at least one answer to build a guide or quiz from (409 `thread_empty`). */
+  assertHasAnswer(auth: Auth, id: string): Promise<void>
 }
 
-export async function getThreadDetail(db: Db, auth: Auth, id: string): Promise<ThreadDetailDto> {
-  let thread = await loadThread(db, auth, id)
-  // Recover a turn a crash left in flight, so the page never shows it pending for ever.
-  if ((await recoverStaleTurn(db, { auth, threadId: thread.id })) > 0) {
-    thread = await loadThread(db, auth, id)
-  }
-  const messages = await db
-    .selectFrom('message')
-    .selectAll()
-    .where('thread_id', '=', thread.id)
-    .where(ownedBy('message', auth))
-    .orderBy('created_at')
-    .orderBy('id')
-    .execute()
+export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDeps): ThreadService {
   return {
-    thread: toThreadDto(thread),
-    messages: messages.map(toMessageDto),
-    guides: (
-      await db
-        .selectFrom('guide')
+    async list(auth, input) {
+      const limit = input.limit ?? DEFAULT_PAGE_SIZE
+      const cursor = input.cursor === undefined ? undefined : decodeCursor(input.cursor)
+      let query = db
+        .selectFrom('thread')
         .select([
-          'guide.id',
-          'guide.title',
-          'guide.created_at',
-          sql<number>`(SELECT count(*)::int FROM guide_step WHERE guide_step.guide_id = guide.id)`.as(
-            'step_count'
+          'thread.id',
+          'thread.topic_id',
+          'thread.title',
+          'thread.created_at',
+          'thread.updated_at',
+          // The cursor carries Postgres' microsecond precision; a JS Date would truncate it and
+          // make a row reappear on the next page.
+          sql<string>`to_char(thread.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`.as(
+            'updated_at_iso'
           ),
-          sql<number>`(
+          messageCountExpr.as('message_count')
+        ])
+        .where(ownedBy('thread', auth))
+        .where('thread.deleted_at', 'is', null)
+      if (cursor) {
+        query = query.where(
+          sql<boolean>`(thread.updated_at, thread.id) < (${cursor.u}::timestamptz, ${cursor.i})`
+        )
+      }
+      const rows = await query
+        .orderBy('thread.updated_at', 'desc')
+        .orderBy('thread.id', 'desc')
+        .limit(limit + 1)
+        .execute()
+      const page = rows.slice(0, limit)
+      const last = page[page.length - 1]
+      return {
+        threads: page.map(toThreadDto),
+        nextCursor:
+          rows.length > limit && last ? encodeCursor({ u: last.updated_at_iso, i: last.id }) : null
+      }
+    },
+    async create(auth, input) {
+      const topic = await topicApi.require(input.topicId ?? DEFAULT_TOPIC_ID)
+      const row = await db
+        .insertInto('thread')
+        .values({
+          user_id: auth.userId,
+          topic_id: topic.id,
+          title: input.title ?? DEFAULT_TITLE
+        })
+        .returning(['id', 'topic_id', 'title', 'created_at', 'updated_at'])
+        .executeTakeFirstOrThrow()
+      return toThreadDto({ ...row, message_count: 0 })
+    },
+    async getDetail(auth, id) {
+      let thread = await loadThread(db, auth, id)
+      // Recover a turn a crash left in flight, so the page never shows it pending for ever.
+      if ((await recoverStaleTurn(db, ai.lockTtlSeconds, { auth, threadId: thread.id })) > 0) {
+        thread = await loadThread(db, auth, id)
+      }
+      const messages = await db
+        .selectFrom('message')
+        .selectAll()
+        .where('thread_id', '=', thread.id)
+        .where(ownedBy('message', auth))
+        .orderBy('created_at')
+        .orderBy('id')
+        .execute()
+      return {
+        thread: toThreadDto(thread),
+        messages: messages.map(toMessageDto),
+        guides: (
+          await db
+            .selectFrom('guide')
+            .select([
+              'guide.id',
+              'guide.title',
+              'guide.created_at',
+              sql<number>`(SELECT count(*)::int FROM guide_step WHERE guide_step.guide_id = guide.id)`.as(
+                'step_count'
+              ),
+              sql<number>`(
             SELECT count(*)::int FROM guide_step
             WHERE guide_step.guide_id = guide.id AND guide_step.done_at IS NOT NULL
           )`.as('done_count')
-        ])
-        .where('guide.thread_id', '=', thread.id)
-        .where(ownedBy('guide', auth))
-        .orderBy('guide.created_at', 'desc')
-        .orderBy('guide.id', 'desc')
-        .execute()
-    ).map((row) => ({
-      id: row.id,
-      title: row.title,
-      stepCount: row.step_count,
-      doneCount: row.done_count,
-      createdAt: row.created_at.toISOString()
-    })),
-    quizzes: (
-      await db
-        .selectFrom('quiz')
-        .select([
-          'quiz.id',
-          'quiz.difficulty',
-          'quiz.created_at',
-          sql<number>`(SELECT count(*)::int FROM quiz_item WHERE quiz_item.quiz_id = quiz.id)`.as(
-            'item_count'
-          ),
-          sql<number | null>`(
+            ])
+            .where('guide.thread_id', '=', thread.id)
+            .where(ownedBy('guide', auth))
+            .orderBy('guide.created_at', 'desc')
+            .orderBy('guide.id', 'desc')
+            .execute()
+        ).map((row) => ({
+          id: row.id,
+          title: row.title,
+          stepCount: row.step_count,
+          doneCount: row.done_count,
+          createdAt: row.created_at.toISOString()
+        })),
+        quizzes: (
+          await db
+            .selectFrom('quiz')
+            .select([
+              'quiz.id',
+              'quiz.difficulty',
+              'quiz.created_at',
+              sql<number>`(SELECT count(*)::int FROM quiz_item WHERE quiz_item.quiz_id = quiz.id)`.as(
+                'item_count'
+              ),
+              sql<number | null>`(
             SELECT max(quiz_attempt.score) FROM quiz_attempt WHERE quiz_attempt.quiz_id = quiz.id
           )`.as('best_score')
-        ])
-        .where('quiz.thread_id', '=', thread.id)
-        .where(ownedBy('quiz', auth))
-        .orderBy('quiz.created_at', 'desc')
-        .orderBy('quiz.id', 'desc')
-        .execute()
-    ).map((row) => ({
-      id: row.id,
-      difficulty: row.difficulty,
-      itemCount: row.item_count,
-      bestScore: row.best_score,
-      createdAt: row.created_at.toISOString()
-    }))
+            ])
+            .where('quiz.thread_id', '=', thread.id)
+            .where(ownedBy('quiz', auth))
+            .orderBy('quiz.created_at', 'desc')
+            .orderBy('quiz.id', 'desc')
+            .execute()
+        ).map((row) => ({
+          id: row.id,
+          difficulty: row.difficulty,
+          itemCount: row.item_count,
+          bestScore: row.best_score,
+          createdAt: row.created_at.toISOString()
+        }))
+      }
+    },
+    async update(auth, id, input) {
+      const topicId =
+        input.topicId === undefined ? undefined : (await topicApi.require(input.topicId)).id
+      const changes = {
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(topicId !== undefined ? { topic_id: topicId } : {})
+      }
+      if (Object.keys(changes).length > 0) {
+        const updated = await db
+          .updateTable('thread')
+          .set(changes)
+          .where('id', '=', id)
+          .where(ownedBy('thread', auth))
+          .where('deleted_at', 'is', null)
+          .returning('id')
+          .executeTakeFirst()
+        requireFound(updated)
+      }
+      return toThreadDto(await loadThread(db, auth, id))
+    },
+    async delete(auth, id) {
+      const deleted = await db
+        .updateTable('thread')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('id', '=', id)
+        .where(ownedBy('thread', auth))
+        .where('deleted_at', 'is', null)
+        .returning('id')
+        .executeTakeFirst()
+      requireFound(deleted)
+    },
+    async require(auth, id) {
+      const row = await loadThread(db, auth, id)
+      return {
+        id: row.id,
+        topicId: row.topic_id,
+        title: row.title,
+        messageCount: row.message_count
+      }
+    },
+    async assertHasAnswer(auth, threadId) {
+      const row = await db
+        .selectFrom('message')
+        .select('id')
+        .where('thread_id', '=', threadId)
+        .where(ownedBy('message', auth))
+        .where('role', '=', 'assistant')
+        .where('status', '=', 'complete')
+        .limit(1)
+        .executeTakeFirst()
+      if (!row) {
+        throw conflict(
+          'thread_empty',
+          'Ask a question first, then build a guide or quiz from the answer.'
+        )
+      }
+    }
   }
-}
-
-export async function updateThread(
-  db: Db,
-  auth: Auth,
-  id: string,
-  input: { title?: string | undefined; topicId?: string | undefined },
-  deps: { topic: TopicApi }
-): Promise<ThreadDto> {
-  const topicId =
-    input.topicId === undefined ? undefined : (await deps.topic.require(input.topicId)).id
-  const changes = {
-    ...(input.title !== undefined ? { title: input.title } : {}),
-    ...(topicId !== undefined ? { topic_id: topicId } : {})
-  }
-  if (Object.keys(changes).length > 0) {
-    const updated = await db
-      .updateTable('thread')
-      .set(changes)
-      .where('id', '=', id)
-      .where(ownedBy('thread', auth))
-      .where('deleted_at', 'is', null)
-      .returning('id')
-      .executeTakeFirst()
-    requireFound(updated)
-  }
-  return toThreadDto(await loadThread(db, auth, id))
-}
-
-/** Soft delete: afterwards every read and write on the thread is a 404. */
-export async function deleteThread(db: Db, auth: Auth, id: string): Promise<void> {
-  const deleted = await db
-    .updateTable('thread')
-    .set({ deleted_at: sql<Date>`now()` })
-    .where('id', '=', id)
-    .where(ownedBy('thread', auth))
-    .where('deleted_at', 'is', null)
-    .returning('id')
-    .executeTakeFirst()
-  requireFound(deleted)
 }

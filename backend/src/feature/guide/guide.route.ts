@@ -6,6 +6,7 @@ import { createGuide, getGuide, updateStep } from './guide.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
 import type { AiApi } from '../ai/index.js'
+import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 import { updateStepSchema } from './guide.schema.js'
 
@@ -14,12 +15,13 @@ export function guideRouter(
   requireSession: RequestHandler,
   tutor: TutorProvider,
   topic: TopicApi,
-  ai: AiApi
+  ai: AiApi,
+  thread: ThreadApi
 ): Router {
   const router = Router()
 
   router.post('/api/thread/:id/guide', requireSession, async (req, res) => {
-    const guide = await createGuide(db, getAuth(req), { tutor, topic, ai }, pathId(req))
+    const guide = await createGuide(db, getAuth(req), { tutor, topic, ai, thread }, pathId(req))
     res.status(201).json({ guide })
   })
 

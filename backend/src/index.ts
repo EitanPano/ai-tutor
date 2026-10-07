@@ -3,7 +3,6 @@ import { loadConfig } from './lib/config.js'
 import { createDb } from './lib/db/index.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import { createLogger } from './lib/logger.js'
-import { recoverStaleTurn } from './feature/thread/index.js'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
@@ -11,11 +10,12 @@ const config = loadConfig()
 const logger = createLogger(config)
 const { db, pool } = createDb(config.databaseUrl, logger)
 const inFlight = new InFlightRegistry()
-const { app } = createApp({ config, db, pool, logger, inFlight })
+const { app, modules } = createApp({ config, db, pool, logger, inFlight })
 
 // A single instance runs, so a turn left in flight by a crash is recovered once at boot.
 if (config.recoverStaleOnBoot) {
-  recoverStaleTurn(db)
+  modules.thread
+    .recoverStale()
     .then((count) => {
       if (count > 0) logger.warn({ count }, 'recovered turns left in flight by a previous run')
     })
@@ -38,7 +38,7 @@ function shutdown(signal: string): void {
   }, SHUTDOWN_TIMEOUT_MS)
   force.unref()
   // Abort running generations first: each one persists `aborted` and releases its lock through
-  // finishAsk, which ends its SSE response, so server.close() below can complete.
+  // `MessageService.finish`, which ends its SSE response, so server.close() below can complete.
   const aborted = inFlight.abortAll()
   if (aborted > 0) logger.info({ aborted }, 'aborted in-flight generations')
   server.close(() => {

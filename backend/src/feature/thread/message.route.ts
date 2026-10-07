@@ -1,13 +1,11 @@
 import { Router, type RequestHandler, type Response } from 'express'
-import type { Db } from '../../lib/db/index.js'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, type TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../ai/index.js'
-import { finishAsk, startAsk, type AskOutcome } from './message.service.js'
+import type { AskOutcome, MessageService } from './message.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
-import type { TopicApi } from '../topic/index.js'
 import { askSchema } from './message.schema.js'
 
 const HEARTBEAT_MS = 15_000
@@ -29,14 +27,16 @@ function eventWriter(res: Response) {
 }
 
 export function messageRouter(
-  db: Db,
-  requireSession: RequestHandler,
-  tutor: TutorProvider,
-  logger: Pick<Logger, 'error'>,
-  inFlight: InFlightRegistry,
-  topic: TopicApi,
-  ai: AiApi
+  service: MessageService,
+  deps: {
+    requireSession: RequestHandler
+    ai: AiApi
+    tutor: TutorProvider
+    logger: Pick<Logger, 'error'>
+    inFlight: InFlightRegistry
+  }
 ): Router {
+  const { requireSession, ai, tutor, logger, inFlight } = deps
   const router = Router()
 
   router.post('/api/thread/:id/message', requireSession, async (req, res) => {
@@ -45,7 +45,7 @@ export function messageRouter(
     const auth = getAuth(req)
     const { content } = askSchema.parse(req.body)
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
-    const ctx = await startAsk(db, auth, pathId(req), content, { topic, ai })
+    const ctx = await service.start(auth, pathId(req), content)
     const requestId = String(res.locals.requestId)
     const out = eventWriter(res)
     const controller = new AbortController()
@@ -54,12 +54,12 @@ export function messageRouter(
     const startedAt = Date.now()
     let heartbeat: NodeJS.Timeout | undefined
     // Shutdown aborts this controller; the normal path below then persists `aborted` and releases
-    // the lock through `finishAsk`. Nothing else may persist or release.
+    // the lock through `service.finish`. Nothing else may persist or release.
     const untrack = inFlight.track(controller)
     let outcome: AskOutcome
 
     // From here on the generation lock is held: every path, including a synchronous throw while
-    // setting up the stream, must reach `finishAsk` (which releases it) and clear the heartbeat.
+    // setting up the stream, must reach `service.finish` (which releases it) and clear the heartbeat.
     try {
       res.status(200)
       res.set({
@@ -103,7 +103,7 @@ export function messageRouter(
     }
 
     try {
-      await finishAsk(db, auth, ctx, outcome, logger, { ai })
+      await service.finish(auth, ctx, outcome)
       if (outcome.kind === 'error') {
         errorEvent('ai_provider_error', PROVIDER_ERROR_MESSAGE)
       } else if (outcome.result.stopReason === 'refusal') {

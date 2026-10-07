@@ -5,7 +5,6 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
 import { parseSse, type SseEvent } from '../helper/sse.js'
-import { recoverStaleTurn } from '../../src/feature/thread/stale-turn.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
@@ -766,7 +765,7 @@ describe('recovery of turns left in flight (I2)', () => {
       .where('role', '=', 'assistant')
       .executeTakeFirstOrThrow()
     expect(row.status).toBe('incomplete')
-    expect(await recoverStaleTurn(ctx.db)).toBe(1)
+    expect(await ctx.modules.thread.recoverStale()).toBe(1)
   })
 
   it('shutdown aborts a running generation; it persists aborted and releases the lock once', async () => {

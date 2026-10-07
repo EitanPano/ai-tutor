@@ -12,6 +12,7 @@ import {
 } from './quiz.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
+import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 import { createQuizSchema, submitAttemptSchema } from './quiz.schema.js'
 
@@ -20,7 +21,8 @@ export function quizRouter(
   requireSession: RequestHandler,
   tutor: TutorProvider,
   topic: TopicApi,
-  ai: AiApi
+  ai: AiApi,
+  thread: ThreadApi
 ): Router {
   const router = Router()
 
@@ -28,7 +30,7 @@ export function quizRouter(
     // The AI switch is the first check, before the body is looked at.
     ai.assertEnabled()
     const input: CreateQuizInput = createQuizSchema.parse(req.body)
-    const quiz = await createQuiz(db, getAuth(req), { tutor, topic, ai }, input)
+    const quiz = await createQuiz(db, getAuth(req), { tutor, topic, ai, thread }, input)
     res.status(201).json({ quiz })
   })
 

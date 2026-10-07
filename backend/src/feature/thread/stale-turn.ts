@@ -1,15 +1,14 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
-import { GENERATION_LOCK_TTL_SECONDS } from '../ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 
 /**
  * Recovers turns whose generation never finished (a crash, a restart past the shutdown timer).
- * Such a turn is an `incomplete` assistant message with a null `stop_reason`: `finishAsk` always
- * sets a stop reason. Once it is older than the generation lock TTL, no live generation can still
- * own it, so it is marked `failed` / `error` together with its question (the latest user message
- * before it in the thread), exactly like a provider error. Failed turns do not count toward the
- * thread cap, the history or progress.
+ * Such a turn is an `incomplete` assistant message with a null `stop_reason`: `finish` always
+ * sets a stop reason. Once it is older than the generation lock TTL (`ttlSeconds`, passed in by
+ * the caller), no live generation can still own it, so it is marked `failed` / `error` together
+ * with its question (the latest user message before it in the thread), exactly like a provider
+ * error. Failed turns do not count toward the thread cap, the history or progress.
  *
  * Scope: pass `auth` (and optionally `threadId`) for the lazy per-request recovery; pass nothing
  * for the one-off system-wide sweep at boot (the app runs as a single instance). Returns the
@@ -17,6 +16,7 @@ import { ownedBy, type Auth } from '../../lib/ownership.js'
  */
 export async function recoverStaleTurn(
   db: Db,
+  ttlSeconds: number,
   scope?: { auth: Auth; threadId?: string }
 ): Promise<number> {
   return db.transaction().execute(async (trx) => {
@@ -26,9 +26,7 @@ export async function recoverStaleTurn(
       .where('role', '=', 'assistant')
       .where('status', '=', 'incomplete')
       .where('stop_reason', 'is', null)
-      .where(
-        sql<boolean>`created_at < now() - make_interval(secs => ${GENERATION_LOCK_TTL_SECONDS})`
-      )
+      .where(sql<boolean>`created_at < now() - make_interval(secs => ${ttlSeconds})`)
     if (scope) {
       query = query.where(ownedBy('message', scope.auth))
       if (scope.threadId !== undefined) query = query.where('thread_id', '=', scope.threadId)
