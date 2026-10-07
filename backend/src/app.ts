@@ -148,8 +148,15 @@ export function createApp({
       ai: ai.api,
       thread: thread.api,
       recoverAtBoot: async () => {
-        const turns = await thread.recoverStale()
-        const locks = await ai.releaseAllLocks()
+        // A failed sweep must not leave users locked out: release the locks anyway, then let the
+        // sweep's error propagate so index.ts logs it.
+        let turns: number
+        let locks: number
+        try {
+          turns = await thread.recoverStale()
+        } finally {
+          locks = await ai.releaseAllLocks()
+        }
         return { turns, locks }
       }
     }
