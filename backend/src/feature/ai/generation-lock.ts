@@ -5,9 +5,10 @@ import type { Auth } from '../../lib/ownership.js'
 
 /**
  * How long a generation lock (and an in-flight assistant placeholder) is trusted before it counts
- * as abandoned. It must exceed the worst-case generation: a provider call may take 60 s per SDK
- * attempt (3 attempts: 1 + 2 retries) and guide/quiz generation makes up to 2 such calls
- * (`MAX_ATTEMPTS`), so about 6 minutes. Ten minutes leaves headroom; a unit test ties the numbers.
+ * as abandoned. It must exceed the worst case of both paths: guide/quiz generation makes up to 2
+ * (`MAX_ATTEMPTS`) provider calls of 60 s per SDK attempt (3 attempts: 1 + 2 retries), about
+ * 6 minutes; an explain stream is cut at its 3-minute total deadline. Ten minutes leaves
+ * headroom; a unit test ties the numbers.
  */
 export const GENERATION_LOCK_TTL_SECONDS = 600
 

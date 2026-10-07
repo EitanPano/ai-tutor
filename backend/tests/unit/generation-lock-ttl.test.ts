@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EXPLAIN_TOTAL_TIMEOUT_MS,
   PROVIDER_MAX_RETRIES,
   PROVIDER_TIMEOUT_MS
 } from '../../src/lib/tutor/anthropic.provider.js'
@@ -11,5 +12,9 @@ describe('generation lock TTL', () => {
     const worstCaseSeconds =
       (PROVIDER_TIMEOUT_MS / 1000) * (PROVIDER_MAX_RETRIES + 1) * MAX_ATTEMPTS
     expect(GENERATION_LOCK_TTL_SECONDS).toBeGreaterThan(worstCaseSeconds)
+  })
+
+  it('outlasts the explain total deadline', () => {
+    expect(GENERATION_LOCK_TTL_SECONDS).toBeGreaterThan(EXPLAIN_TOTAL_TIMEOUT_MS / 1000)
   })
 })

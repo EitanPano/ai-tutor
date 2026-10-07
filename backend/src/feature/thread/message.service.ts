@@ -87,7 +87,7 @@ export type MessageServiceDeps = {
   topic: TopicApi
   ai: AiApi
   thread: ThreadService
-  logger: Pick<Logger, 'error'>
+  logger: Pick<Logger, 'error' | 'warn'>
 }
 
 export type MessageService = {
@@ -217,13 +217,21 @@ export function createMessageService({
         }
         try {
           await db.transaction().execute(async (trx) => {
-            await trx
+            // `stop_reason IS NULL` = the placeholder is still in flight. A turn that lazy recovery
+            // already failed (this stream outlived the lock TTL) must not be overwritten.
+            const updated = await trx
               .updateTable('message')
               .set({ content: failed ? '' : (result?.text ?? ''), status, stop_reason: stopReason })
               .where('id', '=', ctx.assistantMessageId)
+              .where('stop_reason', 'is', null)
               .where(ownedBy('message', auth))
-              .execute()
-            if (failed) {
+              .executeTakeFirst()
+            if (updated.numUpdatedRows === 0n) {
+              logger.warn(
+                { userMessageId: ctx.userMessageId },
+                'the turn was recovered before it finished; keeping the recovered state'
+              )
+            } else if (failed) {
               await trx
                 .updateTable('message')
                 .set({ status: 'failed' })

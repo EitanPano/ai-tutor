@@ -23,9 +23,17 @@ import {
 
 export const MAX_OUTPUT_TOKENS = 2048
 export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
-/** Per-attempt request timeout and default SDK retries; the generation lock TTL must outlast them. */
+/**
+ * Bounds the wait for response headers per attempt (the SDK clears its timer once `fetch`
+ * resolves, so it does not cover a streamed body), and default SDK retries. The generation lock
+ * TTL must outlast them.
+ */
 export const PROVIDER_TIMEOUT_MS = 60_000
 export const PROVIDER_MAX_RETRIES = 2
+/** The explain stream fails after this long without any stream event. */
+export const EXPLAIN_IDLE_TIMEOUT_MS = 45_000
+/** The explain call fails after this long in total, SDK retries included. */
+export const EXPLAIN_TOTAL_TIMEOUT_MS = 180_000
 const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
 
 /** The final user turn of a quiz request. */
@@ -41,6 +49,10 @@ export type AnthropicProviderOptions = {
   model: string
   /** SDK retries on transient errors (default 2). */
   maxRetries?: number
+  /** Idle timeout of the explain stream (default `EXPLAIN_IDLE_TIMEOUT_MS`); tests shorten it. */
+  explainIdleTimeoutMs?: number
+  /** Total deadline of an explain call (default `EXPLAIN_TOTAL_TIMEOUT_MS`); tests shorten it. */
+  explainTotalTimeoutMs?: number
   /** Injectable for tests: the real SDK runs against canned SSE responses. */
   fetch?: typeof globalThis.fetch
 }
@@ -93,6 +105,8 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
     ...(options.fetch ? { fetch: options.fetch } : {})
   })
   const model = options.model
+  const idleTimeoutMs = options.explainIdleTimeoutMs ?? EXPLAIN_IDLE_TIMEOUT_MS
+  const totalTimeoutMs = options.explainTotalTimeoutMs ?? EXPLAIN_TOTAL_TIMEOUT_MS
 
   /**
    * One non-streaming structured-output call. `messages.create` is used instead of
@@ -147,6 +161,11 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
     async explain(input: ExplainInput, onDelta): Promise<ExplainResult> {
       let text = ''
       let seenUsage: TutorUsage = ZERO_USAGE
+      // The watchdog is ours (idle or total timeout); `input.signal` is the caller's abort. Which
+      // signal fired decides the outcome, not the error type the SDK surfaces.
+      const watchdog = new AbortController()
+      const total = setTimeout(() => watchdog.abort(), totalTimeoutMs)
+      const idle = setTimeout(() => watchdog.abort(), idleTimeoutMs)
       try {
         // No `thinking`, `output_config` or `temperature`: Haiku 4.5 runs without thinking when
         // it is omitted and rejects `effort`.
@@ -158,13 +177,14 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
             cache_control: { type: 'ephemeral' },
             messages: buildMessages(input)
           },
-          { signal: input.signal }
+          { signal: AbortSignal.any([input.signal, watchdog.signal]) }
         )
         stream.on('text', (delta) => {
           text += delta
           onDelta(delta)
         })
         stream.on('streamEvent', (_event, snapshot) => {
+          idle.refresh()
           seenUsage = toUsage(snapshot.usage)
         })
         const message = await stream.finalMessage()
@@ -177,6 +197,12 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
           model
         }
       } catch (err) {
+        if (watchdog.signal.aborted && !input.signal.aborted) {
+          throw new TutorProviderError('The AI provider timed out.', {
+            cause: err,
+            usage: partialUsage(seenUsage, text)
+          })
+        }
         if (err instanceof Anthropic.APIUserAbortError || input.signal.aborted) {
           return {
             text,
@@ -191,6 +217,9 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
           cause: err,
           usage: partialUsage(seenUsage, text)
         })
+      } finally {
+        clearTimeout(total)
+        clearTimeout(idle)
       }
     },
     generateGuide(input: GuideInput): Promise<StructuredResult> {

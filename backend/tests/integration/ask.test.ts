@@ -544,6 +544,30 @@ describe('client disconnect', () => {
       await stream.close()
     }
   })
+  it('leaves a turn that was already recovered failed when the late finish arrives', async () => {
+    const { session, threadId } = await setup()
+    const stream = await openSlowStream(session.cookie, threadId, session.user.id)
+    try {
+      // Lazy recovery marked the in-flight placeholder failed while its stream was still alive.
+      await ctx.db
+        .updateTable('message')
+        .set({ status: 'failed', stop_reason: 'error' })
+        .where('thread_id', '=', threadId)
+        .where('role', '=', 'assistant')
+        .execute()
+      await stream.abortOnly()
+      await waitSettled(session.user.id)
+      const { messages } = await detail(session.cookie, threadId)
+      expect(messages.map((m) => [m.role, m.status, m.stopReason, m.content === ''])).toEqual([
+        ['user', 'complete', null, false],
+        ['assistant', 'failed', 'error', true]
+      ])
+      expect(await lockOf(session.user.id)).toBeNull()
+      expect(await aiCalls(session.user.id)).toMatchObject([{ stop_reason: 'aborted' }])
+    } finally {
+      await stream.close()
+    }
+  })
 })
 
 describe('persistence failure', () => {

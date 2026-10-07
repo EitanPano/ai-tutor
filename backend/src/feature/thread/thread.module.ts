@@ -26,7 +26,7 @@ export type ThreadApi = {
 export type ThreadModuleDeps = {
   db: Db
   tutor: TutorProvider
-  logger: Pick<Logger, 'error'>
+  logger: Pick<Logger, 'error' | 'warn'>
   inFlight: InFlightRegistry
   requireSession: RequestHandler
   topic: TopicApi
