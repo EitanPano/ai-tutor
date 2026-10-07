@@ -4,12 +4,16 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract } from '../helper/contract.js'
 import { parseSse } from '../helper/sse.js'
-import { computeStreak, getProgress } from '../../src/feature/progress/progress.service.js'
+import {
+  computeStreak,
+  createProgressService
+} from '../../src/feature/progress/progress.service.js'
 
 // QA adversarial pass for plan 001. Everything here goes through the HTTP API (or the progress
 // service with an explicit clock), against the real test database and the fake provider.
 
 const ctx = createTestApp()
+const progressService = createProgressService({ db: ctx.db })
 const client = createClient(ctx.app, ctx.config)
 
 type Session = Awaited<ReturnType<typeof signUp>>
@@ -538,7 +542,7 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     await questionAt(session.user.id, threadId, at(6, '20:00'))
     await questionAt(session.user.id, threadId, at(5, '09:00'))
     await questionAt(session.user.id, threadId, at(4, '09:00'))
-    const progress = await getProgress(ctx.db, { userId: session.user.id }, { now })
+    const progress = await progressService.get({ userId: session.user.id }, { now })
     expect(progress.streak).toEqual({ current: 3, longest: 3, activeToday: true })
   })
 
@@ -547,7 +551,7 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     // Local 23:30 on Oct 6 is 03:30Z on Oct 7. Viewed at local 23:45 on Oct 6.
     await questionAt(session.user.id, threadId, at(6, '23:30'))
     const now = at(6, '23:45')
-    const progress = await getProgress(ctx.db, { userId: session.user.id }, { now })
+    const progress = await progressService.get({ userId: session.user.id }, { now })
     expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: true })
   })
 
@@ -564,15 +568,14 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     ] as const) {
       await questionAt(session.user.id, threadId, at(day, '12:00', month))
     }
-    const progress = await getProgress(ctx.db, { userId: session.user.id }, { now })
+    const progress = await progressService.get({ userId: session.user.id }, { now })
     expect(progress.streak).toEqual({ current: 2, longest: 4, activeToday: true })
   })
 
   it('answers current 1 and activeToday false when only yesterday is active', async () => {
     const { session, threadId } = await userWithThread()
     await questionAt(session.user.id, threadId, at(6, '12:00'))
-    const progress = await getProgress(
-      ctx.db,
+    const progress = await progressService.get(
       { userId: session.user.id },
       { now: new Date('2026-10-07T15:00:00Z') }
     )

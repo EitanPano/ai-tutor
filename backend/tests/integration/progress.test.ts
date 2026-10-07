@@ -1,10 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { getProgress, computeStreak } from '../../src/feature/progress/progress.service.js'
+import {
+  createProgressService,
+  computeStreak,
+  type ProgressDto
+} from '../../src/feature/progress/progress.service.js'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
 
 const ctx = createTestApp()
+const progressService = createProgressService({ db: ctx.db })
 const client = createClient(ctx.app, ctx.config)
 
 type Session = Awaited<ReturnType<typeof signUp>>
@@ -153,7 +158,7 @@ describe('GET /api/progress (AC08)', () => {
     const { user } = await newUser()
     const seeded = await seedFixture(user.id)
 
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     expectSchema(progress, 'ProgressResponse')
 
     expect(progress.topics.map((topic) => topic.topicId)).toEqual([
@@ -249,7 +254,7 @@ describe('GET /api/progress (AC08)', () => {
     const thread = await addThread(user.id, 'react', 'React effects')
     // 23:30 on Oct 6 in New York is 03:30Z on Oct 7: UTC would merge it into today.
     await addQuestion(user.id, thread.id, at(6, '23:30'))
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     // In UTC that question would fall on today (Oct 7) and activeToday would be true.
     expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: false })
   })
@@ -260,7 +265,7 @@ describe('GET /api/progress (AC08)', () => {
     await addQuestion(user.id, thread.id, at(6, '09:00'))
     await addQuestion(user.id, thread.id, at(5, '09:00'))
     await addQuestion(user.id, thread.id, at(4, '09:00'))
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     expect(progress.streak).toEqual({ current: 3, longest: 3, activeToday: false })
   })
 
@@ -269,7 +274,7 @@ describe('GET /api/progress (AC08)', () => {
     const thread = await addThread(user.id, 'react', 'React effects')
     await addQuestion(user.id, thread.id, at(5, '09:00'))
     await addQuestion(user.id, thread.id, at(4, '09:00'))
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     expect(progress.streak).toEqual({ current: 0, longest: 2, activeToday: false })
   })
 
@@ -278,7 +283,7 @@ describe('GET /api/progress (AC08)', () => {
     const res = await client.get('/api/progress').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expectContract(res, 'get', '/api/progress')
-    const body = res.body as Awaited<ReturnType<typeof getProgress>>
+    const body = res.body as ProgressDto
     expect(body.totals).toEqual({ questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 })
     expect(body.streak).toEqual({ current: 0, longest: 0, activeToday: false })
     expect(body.recent).toEqual([])
@@ -319,7 +324,7 @@ describe('GET /api/progress (AC08)', () => {
     await addQuestion(mine.user.id, thread.id, at(7, '09:00'), 'failed')
     await seedFixture(other.user.id)
 
-    const progress = await getProgress(ctx.db, { userId: mine.user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: mine.user.id }, { now: NOW })
     expect(progress.totals).toEqual({ questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 })
     expect(progress.streak).toEqual({ current: 0, longest: 0, activeToday: false })
     expect(progress.recent).toEqual([])
@@ -333,7 +338,7 @@ describe('GET /api/progress (AC08)', () => {
     await addQuiz(user.id, 'react', 'hard', [{ score: 5, at: at(7, '11:00') }], gone.id)
     await addQuiz(user.id, 'react', 'hard', [{ score: 1, at: at(6, '11:00') }])
 
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     expect(progress.totals).toEqual({ questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 1 })
     expect(progress.topics[0]).toMatchObject({
       attempts: 1,
@@ -353,7 +358,7 @@ describe('GET /api/progress (AC08)', () => {
     const { user } = await newUser()
     const thread = await addThread(user.id, 'react', 'React effects')
     await addGuide(user.id, thread.id, 'react', [])
-    const progress = await getProgress(ctx.db, { userId: user.id }, { now: NOW })
+    const progress = await progressService.get({ userId: user.id }, { now: NOW })
     expect(progress.totals.guidesCompleted).toBe(0)
   })
 })

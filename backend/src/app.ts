@@ -14,7 +14,7 @@ import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './feature/guide/index.js'
 import { healthRouter } from './feature/health/index.js'
-import { progressRouter } from './feature/progress/index.js'
+import { createProgressModule } from './feature/progress/index.js'
 import { createQuizModule } from './feature/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
 import { createAiModule, type AiApi } from './feature/ai/index.js'
@@ -79,6 +79,7 @@ export function createApp({
     ai: ai.api,
     thread: thread.api
   })
+  const progress = createProgressModule({ db, requireSession: user.requireSession })
   app.disable('x-powered-by')
   app.use(requestId)
   app.use(
@@ -109,7 +110,7 @@ export function createApp({
   app.use(thread.router)
   app.use(guide.router)
   app.use(quiz.router)
-  app.use(progressRouter(db, user.requireSession))
+  app.use(progress.router)
   extraRoutes?.(app)
   app.use(notFoundHandler)
   app.use(errorMiddleware)

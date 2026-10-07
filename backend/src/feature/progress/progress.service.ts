@@ -36,68 +36,74 @@ export type ProgressDto = {
 const RECENT_LIMIT = 10
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/**
- * Per-topic progress, totals, streak and recent activity, all from SQL aggregates.
- *
- * Content derived from a soft-deleted thread (its questions, guides, steps and thread-based
- * quizzes and attempts) is excluded; topic-only quizzes always count. `now` is explicit so
- * "today" is computed in the user's time zone from it, never from the database clock.
- */
-export async function getProgress(
-  db: Db,
-  auth: Auth,
-  { now = new Date() }: { now?: Date } = {}
-): Promise<ProgressDto> {
-  const nowIso = now.toISOString()
-  const user = requireFound(
-    await sql<{ time_zone: string; today: string }>`
-      SELECT time_zone, (${nowIso}::timestamptz AT TIME ZONE time_zone)::date::text AS today
-      FROM app_user WHERE id = ${auth.userId}`
-      .execute(db)
-      .then((result) => result.rows[0])
-  )
-  const [topicRows, dayRows, recentRows] = await Promise.all([
-    topicRowsQuery(db, auth),
-    activeDayRowsQuery(db, auth, user.time_zone),
-    recentRowsQuery(db, auth)
-  ])
+export type ProgressServiceDeps = { db: Db }
 
-  const topics = topicRows.map<TopicProgressDto>((row) => ({
-    topicId: row.id,
-    topicName: row.name,
-    questions: row.questions,
-    guidesCompleted: row.guides_completed,
-    stepsDone: row.steps_done,
-    attempts: row.attempts,
-    bestScorePercent: row.best_score_percent,
-    averageScorePercent: row.average_score_percent,
-    lastActivityAt: row.last_activity_at ? row.last_activity_at.toISOString() : null
-  }))
-  const totals = topics.reduce(
-    (sum, topic) => ({
-      questions: sum.questions + topic.questions,
-      guidesCompleted: sum.guidesCompleted + topic.guidesCompleted,
-      stepsDone: sum.stepsDone + topic.stepsDone,
-      attempts: sum.attempts + topic.attempts
-    }),
-    { questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 }
-  )
+export type ProgressService = {
+  /**
+   * Per-topic progress, totals, streak and recent activity, all from SQL aggregates.
+   *
+   * Content derived from a soft-deleted thread (its questions, guides, steps and thread-based
+   * quizzes and attempts) is excluded; topic-only quizzes always count. `now` is explicit so
+   * "today" is computed in the user's time zone from it, never from the database clock.
+   */
+  get(auth: Auth, options?: { now?: Date }): Promise<ProgressDto>
+}
+
+export function createProgressService({ db }: ProgressServiceDeps): ProgressService {
   return {
-    totals,
-    streak: computeStreak(
-      dayRows.map((row) => row.day),
-      user.today
-    ),
-    topics,
-    recent: recentRows.map((row) => ({
-      kind: row.kind,
-      at: row.at.toISOString(),
-      topicId: row.topic_id,
-      title: row.title,
-      threadId: row.thread_id,
-      guideId: row.guide_id,
-      quizId: row.quiz_id
-    }))
+    async get(auth, { now = new Date() } = {}) {
+      const nowIso = now.toISOString()
+      const user = requireFound(
+        await sql<{ time_zone: string; today: string }>`
+          SELECT time_zone, (${nowIso}::timestamptz AT TIME ZONE time_zone)::date::text AS today
+          FROM app_user WHERE id = ${auth.userId}`
+          .execute(db)
+          .then((result) => result.rows[0])
+      )
+      const [topicRows, dayRows, recentRows] = await Promise.all([
+        topicRowsQuery(db, auth),
+        activeDayRowsQuery(db, auth, user.time_zone),
+        recentRowsQuery(db, auth)
+      ])
+
+      const topics = topicRows.map<TopicProgressDto>((row) => ({
+        topicId: row.id,
+        topicName: row.name,
+        questions: row.questions,
+        guidesCompleted: row.guides_completed,
+        stepsDone: row.steps_done,
+        attempts: row.attempts,
+        bestScorePercent: row.best_score_percent,
+        averageScorePercent: row.average_score_percent,
+        lastActivityAt: row.last_activity_at ? row.last_activity_at.toISOString() : null
+      }))
+      const totals = topics.reduce(
+        (sum, topic) => ({
+          questions: sum.questions + topic.questions,
+          guidesCompleted: sum.guidesCompleted + topic.guidesCompleted,
+          stepsDone: sum.stepsDone + topic.stepsDone,
+          attempts: sum.attempts + topic.attempts
+        }),
+        { questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 }
+      )
+      return {
+        totals,
+        streak: computeStreak(
+          dayRows.map((row) => row.day),
+          user.today
+        ),
+        topics,
+        recent: recentRows.map((row) => ({
+          kind: row.kind,
+          at: row.at.toISOString(),
+          topicId: row.topic_id,
+          title: row.title,
+          threadId: row.thread_id,
+          guideId: row.guide_id,
+          quizId: row.quiz_id
+        }))
+      }
+    }
   }
 }
 
