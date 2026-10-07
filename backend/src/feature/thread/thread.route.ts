@@ -11,9 +11,10 @@ import {
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
 import { requireSession } from '../user/index.js'
+import type { TopicApi } from '../topic/index.js'
 import { listQuerySchema, createSchema, updateSchema } from './thread.schema.js'
 
-export function threadRouter(db: Db, config: Config): Router {
+export function threadRouter(db: Db, config: Config, topic: TopicApi): Router {
   const router = Router()
   const session = requireSession(db, config)
 
@@ -24,7 +25,7 @@ export function threadRouter(db: Db, config: Config): Router {
 
   router.post('/api/thread', session, async (req, res) => {
     const input = createSchema.parse(req.body)
-    res.status(201).json({ thread: await createThread(db, getAuth(req), input) })
+    res.status(201).json({ thread: await createThread(db, getAuth(req), input, { topic }) })
   })
 
   router.get('/api/thread/:id', session, async (req, res) => {
@@ -33,7 +34,7 @@ export function threadRouter(db: Db, config: Config): Router {
 
   router.patch('/api/thread/:id', session, async (req, res) => {
     const input = updateSchema.parse(req.body)
-    res.json({ thread: await updateThread(db, getAuth(req), pathId(req), input) })
+    res.json({ thread: await updateThread(db, getAuth(req), pathId(req), input, { topic }) })
   })
 
   router.delete('/api/thread/:id', session, async (req, res) => {

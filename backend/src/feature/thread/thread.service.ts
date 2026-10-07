@@ -5,7 +5,7 @@ import { badRequest, conflict } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { recoverStaleTurn } from './stale-turn.js'
-import { requireTopic } from '../topic/index.js'
+import type { TopicApi } from '../topic/index.js'
 
 export const DEFAULT_TOPIC_ID = 'other'
 export const DEFAULT_TITLE = 'New thread'
@@ -143,9 +143,10 @@ export async function assertThreadHasAnswer(db: Db, auth: Auth, threadId: string
 export async function createThread(
   db: Db,
   auth: Auth,
-  input: { topicId?: string | undefined; title?: string | undefined }
+  input: { topicId?: string | undefined; title?: string | undefined },
+  deps: { topic: TopicApi }
 ): Promise<ThreadDto> {
-  const topic = await requireTopic(db, input.topicId ?? DEFAULT_TOPIC_ID)
+  const topic = await deps.topic.require(input.topicId ?? DEFAULT_TOPIC_ID)
   const row = await db
     .insertInto('thread')
     .values({
@@ -324,10 +325,11 @@ export async function updateThread(
   db: Db,
   auth: Auth,
   id: string,
-  input: { title?: string | undefined; topicId?: string | undefined }
+  input: { title?: string | undefined; topicId?: string | undefined },
+  deps: { topic: TopicApi }
 ): Promise<ThreadDto> {
   const topicId =
-    input.topicId === undefined ? undefined : (await requireTopic(db, input.topicId)).id
+    input.topicId === undefined ? undefined : (await deps.topic.require(input.topicId)).id
   const changes = {
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(topicId !== undefined ? { topic_id: topicId } : {})

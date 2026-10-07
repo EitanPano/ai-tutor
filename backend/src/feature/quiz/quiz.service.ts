@@ -13,7 +13,7 @@ import { generateValidated } from '../ai/index.js'
 import { acquireGenerationLock, releaseGenerationLock } from '../ai/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
-import { requireTopic } from '../topic/index.js'
+import type { TopicApi } from '../topic/index.js'
 
 export const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
 
@@ -21,6 +21,7 @@ export type QuizDeps = {
   config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
   tutor: TutorProvider
   logger: Pick<Logger, 'error'>
+  topic: TopicApi
 }
 
 /** `{ threadId, difficulty? }` or `{ topicId, difficulty }`; the route validates the shape. */
@@ -134,9 +135,9 @@ export async function createQuiz(
     const thread = await requireThread(db, auth, input.threadId)
     await assertThreadHasAnswer(db, auth, thread.id)
     threadId = thread.id
-    topic = await requireTopic(db, thread.topicId)
+    topic = await deps.topic.require(thread.topicId)
   } else {
-    topic = await requireTopic(db, input.topicId)
+    topic = await deps.topic.require(input.topicId)
   }
   await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
   const lockToken = await acquireGenerationLock(db, auth)

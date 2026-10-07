@@ -9,6 +9,7 @@ import { finishAsk, startAsk, type AskOutcome } from './message.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
 import { requireSession } from '../user/index.js'
+import type { TopicApi } from '../topic/index.js'
 import { askSchema } from './message.schema.js'
 
 const HEARTBEAT_MS = 15_000
@@ -34,7 +35,8 @@ export function messageRouter(
   config: Config,
   tutor: TutorProvider,
   logger: Pick<Logger, 'error'>,
-  inFlight: InFlightRegistry
+  inFlight: InFlightRegistry,
+  topic: TopicApi
 ): Router {
   const router = Router()
 
@@ -44,7 +46,7 @@ export function messageRouter(
     const auth = getAuth(req)
     const { content } = askSchema.parse(req.body)
     // Any AppError here is a normal JSON error response: no SSE headers have been sent yet.
-    const ctx = await startAsk(db, auth, config, pathId(req), content)
+    const ctx = await startAsk(db, auth, config, pathId(req), content, { topic })
     const requestId = String(res.locals.requestId)
     const out = eventWriter(res)
     const controller = new AbortController()

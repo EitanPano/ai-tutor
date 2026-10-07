@@ -15,7 +15,7 @@ import {
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import { DEFAULT_TITLE, requireThread } from './thread.service.js'
 import { recoverStaleTurn } from './stale-turn.js'
-import { requireTopic } from '../topic/index.js'
+import type { TopicApi } from '../topic/index.js'
 
 /** A thread holds at most 25 non-failed messages (ledger ruling 14). */
 export const MAX_THREAD_MESSAGES = 25
@@ -79,7 +79,8 @@ export async function startAsk(
   auth: Auth,
   config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>,
   threadId: string,
-  content: string
+  content: string,
+  deps: { topic: TopicApi }
 ): Promise<AskContext> {
   assertAiEnabled(config)
   // A crashed generation must not count toward the thread cap or hold the lock for ever.
@@ -89,7 +90,7 @@ export async function startAsk(
   if (thread.messageCount + 2 > MAX_THREAD_MESSAGES) {
     throw conflict('thread_full', 'This thread is full. Start a new thread to keep asking.')
   }
-  const topic = await requireTopic(db, thread.topicId)
+  const topic = await deps.topic.require(thread.topicId)
   const lockToken = await acquireGenerationLock(db, auth)
   try {
     const history = await buildHistory(db, auth, thread.id)

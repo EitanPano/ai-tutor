@@ -1,2 +1,3 @@
-export { topicRouter } from './topic.route.js'
-export { requireTopic } from './topic.service.js'
+export { createTopicModule } from './topic.module.js'
+export type { TopicApi, TopicModuleDeps } from './topic.module.js'
+export type { TopicDto } from './topic.service.js'

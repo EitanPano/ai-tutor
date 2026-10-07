@@ -8,19 +8,21 @@ import { createGuide, getGuide, updateStep } from './guide.service.js'
 import { getAuth } from '../../http/get-auth.js'
 import { pathId } from '../../http/path-id.js'
 import { requireSession } from '../user/index.js'
+import type { TopicApi } from '../topic/index.js'
 import { updateStepSchema } from './guide.schema.js'
 
 export function guideRouter(
   db: Db,
   config: Config,
   tutor: TutorProvider,
-  logger: Pick<Logger, 'error'>
+  logger: Pick<Logger, 'error'>,
+  topic: TopicApi
 ): Router {
   const router = Router()
   const session = requireSession(db, config)
 
   router.post('/api/thread/:id/guide', session, async (req, res) => {
-    const guide = await createGuide(db, getAuth(req), { config, tutor, logger }, pathId(req))
+    const guide = await createGuide(db, getAuth(req), { config, tutor, logger, topic }, pathId(req))
     res.status(201).json({ guide })
   })
 

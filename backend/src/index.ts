@@ -11,7 +11,7 @@ const config = loadConfig()
 const logger = createLogger(config)
 const { db, pool } = createDb(config.databaseUrl, logger)
 const inFlight = new InFlightRegistry()
-const app = createApp({ config, db, pool, logger, inFlight })
+const { app } = createApp({ config, db, pool, logger, inFlight })
 
 // A single instance runs, so a turn left in flight by a crash is recovered once at boot.
 if (config.recoverStaleOnBoot) {

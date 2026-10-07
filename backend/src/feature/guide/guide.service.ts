@@ -12,12 +12,13 @@ import { generateValidated } from '../ai/index.js'
 import { acquireGenerationLock, releaseGenerationLock } from '../ai/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { assertThreadHasAnswer, requireThread } from '../thread/index.js'
-import { requireTopic } from '../topic/index.js'
+import type { TopicApi } from '../topic/index.js'
 
 export type GuideDeps = {
   config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget'>
   tutor: TutorProvider
   logger: Pick<Logger, 'error'>
+  topic: TopicApi
 }
 
 export type StepDto = {
@@ -81,7 +82,7 @@ export async function createGuide(
   const thread = await requireThread(db, auth, threadId)
   await assertThreadHasAnswer(db, auth, thread.id)
   await assertWithinBudget(db, auth, config.aiDailyTokenBudget)
-  const topic = await requireTopic(db, thread.topicId)
+  const topic = await deps.topic.require(thread.topicId)
   const lockToken = await acquireGenerationLock(db, auth)
   try {
     const history = await buildHistory(db, auth, thread.id)
