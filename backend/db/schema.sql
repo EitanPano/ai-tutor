@@ -84,6 +84,8 @@ CREATE TABLE message (
 );
 CREATE INDEX message_thread_created_idx ON message (thread_id, created_at);
 CREATE INDEX message_user_created_idx ON message (user_id, created_at);
+CREATE INDEX message_in_flight_idx ON message (user_id, created_at)
+  WHERE role = 'assistant' AND status = 'incomplete' AND stop_reason IS NULL;
 
 CREATE TABLE ai_call (
   id text PRIMARY KEY DEFAULT uuidv7()::text,

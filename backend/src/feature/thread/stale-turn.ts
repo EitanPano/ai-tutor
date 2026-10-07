@@ -7,6 +7,26 @@ export function olderThanTtl(ttlSeconds: number): RawBuilder<Date> {
   return sql<Date>`now() - make_interval(secs => ${ttlSeconds})`
 }
 
+/** The unfinished turns older than `cutoff`; its filter matches the partial `message_in_flight_idx`. */
+export function staleTurnQuery(
+  db: Db,
+  cutoff: RawBuilder<Date>,
+  scope?: { auth: Auth; threadId?: string }
+) {
+  let query = db
+    .selectFrom('message')
+    .select(['id', 'thread_id', 'user_id'])
+    .where('role', '=', 'assistant')
+    .where('status', '=', 'incomplete')
+    .where('stop_reason', 'is', null)
+    .where(sql<boolean>`created_at < ${cutoff}`)
+  if (scope) {
+    query = query.where(ownedBy('message', scope.auth))
+    if (scope.threadId !== undefined) query = query.where('thread_id', '=', scope.threadId)
+  }
+  return query
+}
+
 /**
  * Recovers turns whose generation never finished (a crash, a restart past the shutdown timer).
  * Such a turn is an `incomplete` assistant message with a null `stop_reason`: `finish` always
@@ -26,19 +46,13 @@ export async function recoverStaleTurn(
   cutoff: RawBuilder<Date>,
   scope?: { auth: Auth; threadId?: string }
 ): Promise<number> {
+  // A plain read first: nearly always nothing is stale, and the partial index makes this probe
+  // cheap, so the write transaction is only opened when there is something to recover.
+  const probe = await staleTurnQuery(db, cutoff, scope).limit(1).execute()
+  if (probe.length === 0) return 0
   return db.transaction().execute(async (trx) => {
-    let query = trx
-      .selectFrom('message')
-      .select(['id', 'thread_id', 'user_id'])
-      .where('role', '=', 'assistant')
-      .where('status', '=', 'incomplete')
-      .where('stop_reason', 'is', null)
-      .where(sql<boolean>`created_at < ${cutoff}`)
-    if (scope) {
-      query = query.where(ownedBy('message', scope.auth))
-      if (scope.threadId !== undefined) query = query.where('thread_id', '=', scope.threadId)
-    }
-    const stale = await query.forUpdate().skipLocked().execute()
+    // Re-select under the lock: another request may have recovered (or finished) these since.
+    const stale = await staleTurnQuery(trx, cutoff, scope).forUpdate().skipLocked().execute()
     let recovered = 0
     for (const row of stale) {
       const auth = { userId: row.user_id }
