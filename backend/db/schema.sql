@@ -91,6 +91,7 @@ CREATE TABLE ai_call (
   input_token integer NOT NULL,
   output_token integer NOT NULL,
   cache_read_token integer NOT NULL,
+  cache_creation_token integer NOT NULL DEFAULT 0,
   stop_reason text NULL,
   refusal_category text NULL,
   latency_ms integer NOT NULL,

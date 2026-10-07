@@ -8,6 +8,7 @@ import { QuizDraftSchema } from './quiz.schema.js'
 import { EXPLAIN_SYSTEM_PROMPT_V1 } from './prompt/explain.v1.js'
 import {
   buildMessages,
+  estimateOutputTokens,
   TutorProviderError,
   ZERO_USAGE,
   type ExplainInput,
@@ -58,12 +59,20 @@ function toUsage(usage: {
   input_tokens?: number | null
   output_tokens?: number | null
   cache_read_input_tokens?: number | null
+  cache_creation_input_tokens?: number | null
 }): TutorUsage {
   return {
+    // Uncached input only: cache writes and reads are reported (and budgeted) separately.
     inputTokens: usage.input_tokens ?? 0,
     outputTokens: usage.output_tokens ?? 0,
-    cacheReadTokens: usage.cache_read_input_tokens ?? 0
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheCreationTokens: usage.cache_creation_input_tokens ?? 0
   }
+}
+
+/** Usage for an interrupted stream: `output_tokens` only arrives at `message_delta`. */
+function partialUsage(seen: TutorUsage, text: string): TutorUsage {
+  return { ...seen, outputTokens: Math.max(seen.outputTokens, estimateOutputTokens(text)) }
 }
 
 /** `stop_details` may be absent on Haiku 4.5, so it is read defensively. */
@@ -166,10 +175,19 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
         }
       } catch (err) {
         if (err instanceof Anthropic.APIUserAbortError || input.signal.aborted) {
-          return { text, stopReason: 'aborted', refusalCategory: null, usage: seenUsage, model }
+          return {
+            text,
+            stopReason: 'aborted',
+            refusalCategory: null,
+            usage: partialUsage(seenUsage, text),
+            model
+          }
         }
         // Never leak the raw provider payload: callers only see a generic error.
-        throw new TutorProviderError('The AI provider failed.', { cause: err })
+        throw new TutorProviderError('The AI provider failed.', {
+          cause: err,
+          usage: partialUsage(seenUsage, text)
+        })
       }
     },
     generateGuide(input: GuideInput): Promise<StructuredResult> {

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import type { Logger } from '../lib/logger.js'
-import type { TutorProvider } from '../lib/tutor/tutor.js'
+import { TutorProviderError, type TutorProvider } from '../lib/tutor/tutor.js'
 import { finishAsk, startAsk, type AskOutcome } from '../service/ask.service.js'
 import { getAuth } from './middleware/get-auth.js'
 import { pathId } from './middleware/path-id.js'
@@ -95,7 +95,12 @@ export function messageRouter(
     } catch (err) {
       // Log the failure, never the question or answer text.
       logger.error({ err, requestId, threadId: ctx.threadId }, 'tutor provider failed')
-      outcome = { kind: 'error', model: tutor.model, latencyMs: Date.now() - startedAt }
+      outcome = {
+        kind: 'error',
+        model: tutor.model,
+        latencyMs: Date.now() - startedAt,
+        ...(err instanceof TutorProviderError && err.usage ? { usage: err.usage } : {})
+      }
     }
 
     try {
@@ -110,7 +115,12 @@ export function messageRouter(
           messageId: ctx.assistantMessageId,
           status: stopReason === 'max_tokens' ? 'incomplete' : 'complete',
           stopReason,
-          usage
+          // The contract declares three fields; cache creation is ledger-only.
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cacheReadTokens: usage.cacheReadTokens
+          }
         })
       }
     } catch (err) {

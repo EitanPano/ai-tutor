@@ -204,7 +204,8 @@ export class FakeTutorProvider implements TutorProvider {
       usage: {
         inputTokens: Math.ceil(inputChars / 4),
         outputTokens: Math.ceil(text.length / 4),
-        cacheReadTokens: 0
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0
       },
       model: 'fake'
     })
@@ -261,7 +262,8 @@ export class FakeTutorProvider implements TutorProvider {
       usage: {
         inputTokens: Math.ceil(inputChars / 4),
         outputTokens: Math.ceil(JSON.stringify(output).length / 4),
-        cacheReadTokens: 0
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0
       },
       model: 'fake'
     }
@@ -310,7 +312,8 @@ export class FakeTutorProvider implements TutorProvider {
       usage: {
         inputTokens: Math.ceil(inputChars / 4),
         outputTokens: Math.ceil(JSON.stringify(output).length / 4),
-        cacheReadTokens: 0
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0
       },
       model: 'fake'
     }

@@ -1,6 +1,11 @@
 export type TutorTurn = { role: 'user' | 'assistant'; content: string }
 export type TutorStopReason = 'end_turn' | 'max_tokens' | 'stop_sequence' | 'refusal' | 'aborted'
-export type TutorUsage = { inputTokens: number; outputTokens: number; cacheReadTokens: number }
+export type TutorUsage = {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+}
 export type ExplainInput = {
   topicName: string
   history: TutorTurn[]
@@ -48,13 +53,30 @@ export interface TutorProvider {
 
 /** Upstream failure (network, 4xx/5xx from the API). The message never carries provider payloads. */
 export class TutorProviderError extends Error {
-  constructor(message = 'The AI provider failed.', options?: { cause?: unknown }) {
-    super(message, options)
+  /** Usage observed before the failure (mid-stream), so the budget still counts it. */
+  readonly usage: TutorUsage | undefined
+
+  constructor(
+    message = 'The AI provider failed.',
+    options?: { cause?: unknown; usage?: TutorUsage }
+  ) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause })
     this.name = 'TutorProviderError'
+    this.usage = options?.usage
   }
 }
 
-export const ZERO_USAGE: TutorUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
+/** Rough output-token estimate for text that was streamed but never billed back to us. */
+export function estimateOutputTokens(text: string): number {
+  return Math.ceil(text.length / 3)
+}
+
+export const ZERO_USAGE: TutorUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0
+}
 
 /**
  * The messages sent to the model: the thread history in order, then the new question. The first

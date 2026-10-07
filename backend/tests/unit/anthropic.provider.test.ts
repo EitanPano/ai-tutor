@@ -112,7 +112,11 @@ describe('anthropic provider', () => {
       sseResponse([
         messageStart(),
         ...textFrames(['Hello', ', ', 'world']),
-        ...ending('end_turn', { output_tokens: 7, cache_read_input_tokens: 5 })
+        ...ending('end_turn', {
+          output_tokens: 7,
+          cache_read_input_tokens: 5,
+          cache_creation_input_tokens: 3
+        })
       ])
     )
     const deltas: string[] = []
@@ -122,7 +126,7 @@ describe('anthropic provider', () => {
       text: 'Hello, world',
       stopReason: 'end_turn',
       refusalCategory: null,
-      usage: { inputTokens: 12, outputTokens: 7, cacheReadTokens: 5 },
+      usage: { inputTokens: 12, outputTokens: 7, cacheReadTokens: 5, cacheCreationTokens: 3 },
       model: 'claude-haiku-4-5'
     })
   })
@@ -228,13 +232,70 @@ describe('anthropic provider', () => {
     expect(result.usage.inputTokens).toBe(12)
   })
 
+  it('estimates the output of an aborted answer from the streamed text', async () => {
+    const controller = new AbortController()
+    const encoder = new TextEncoder()
+    const partial = 'x'.repeat(300)
+    const { provider } = providerWith((init) => {
+      const head = sseBody([
+        messageStart({ cache_creation_input_tokens: 40 }),
+        ...textFrames([partial])
+      ])
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(encoder.encode(head))
+          init?.signal?.addEventListener('abort', () =>
+            stream.error(new DOMException('The operation was aborted.', 'AbortError'))
+          )
+        }
+      })
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    })
+    const result = await provider.explain(baseInput(controller.signal), () => controller.abort())
+    expect(result.stopReason).toBe('aborted')
+    // message_start reports output_tokens: 1; the estimate (ceil(300 / 3)) must win.
+    expect(result.usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 100,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 40
+    })
+  })
+
+  it('carries the usage seen so far on a mid-stream provider error', async () => {
+    const encoder = new TextEncoder()
+    const { provider } = providerWith(() => {
+      const head = sseBody([messageStart(), ...textFrames(['y'.repeat(90)])])
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(encoder.encode(head))
+          setTimeout(() => stream.error(new Error('connection reset')), 20)
+        }
+      })
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    })
+    const error = await provider.explain(baseInput(), () => {}).catch((err: unknown) => err)
+    expect(error).toBeInstanceOf(TutorProviderError)
+    expect((error as TutorProviderError).usage).toEqual({
+      inputTokens: 12,
+      outputTokens: 30,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0
+    })
+  })
+
   it('returns aborted with zero usage when aborted before the request starts', async () => {
     const controller = new AbortController()
     controller.abort()
     const { provider } = providerWith(() => sseResponse([]))
     const result = await provider.explain(baseInput(controller.signal), () => {})
     expect(result).toMatchObject({ stopReason: 'aborted', text: '' })
-    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 })
+    expect(result.usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0
+    })
   })
 
   it('sends the documented request body and nothing Haiku 4.5 rejects', async () => {
@@ -300,7 +361,12 @@ function jsonMessage(
       content: text === '' ? [] : [{ type: 'text', text }],
       stop_reason: stopReason,
       stop_sequence: null,
-      usage: { input_tokens: 30, output_tokens: 90, cache_read_input_tokens: 4 },
+      usage: {
+        input_tokens: 30,
+        output_tokens: 90,
+        cache_read_input_tokens: 4,
+        cache_creation_input_tokens: 6
+      },
       ...extra
     }),
     { status: 200, headers: { 'content-type': 'application/json' } }
@@ -323,7 +389,7 @@ describe('anthropic provider generateGuide', () => {
       output: GUIDE,
       stopReason: 'end_turn',
       refusalCategory: null,
-      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4 },
+      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4, cacheCreationTokens: 6 },
       model: 'claude-haiku-4-5'
     })
   })
@@ -413,7 +479,7 @@ describe('anthropic provider generateQuiz', () => {
       output: QUIZ,
       stopReason: 'end_turn',
       refusalCategory: null,
-      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4 },
+      usage: { inputTokens: 30, outputTokens: 90, cacheReadTokens: 4, cacheCreationTokens: 6 },
       model: 'claude-haiku-4-5'
     })
   })

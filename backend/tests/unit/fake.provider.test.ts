@@ -73,7 +73,8 @@ describe('FakeTutorProvider', () => {
     expect(result.usage).toEqual({
       inputTokens: Math.ceil(inputChars / 4),
       outputTokens: Math.ceil(result.text.length / 4),
-      cacheReadTokens: 0
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0
     })
   })
 

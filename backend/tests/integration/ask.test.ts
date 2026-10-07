@@ -283,6 +283,22 @@ describe('limits and locks (AC09)', () => {
     expect(ctx.tutor.calls).toHaveLength(0)
   })
 
+  it('counts cache creation and cache read tokens toward the daily budget', async () => {
+    const { session, threadId } = await setup()
+    const budget = ctx.config.aiDailyTokenBudget
+    await sql`
+      INSERT INTO ai_call (user_id, kind, model, input_token, output_token, cache_read_token,
+        cache_creation_token, stop_reason, latency_ms, created_at)
+      SELECT id, 'explain', 'fake', 1, 1, ${Math.floor(budget / 2)}, ${Math.ceil(budget / 2)},
+        'end_turn', 1,
+        (date_trunc('day', now() AT TIME ZONE time_zone) + interval '12 hours') AT TIME ZONE time_zone
+      FROM app_user WHERE id = ${session.user.id}`.execute(ctx.db)
+    const { res } = await ask(session.cookie, threadId, 'hello')
+    expect(res.status).toBe(429)
+    expect((res.body as ErrorBody).error.code).toBe('ai_budget_exceeded')
+    expect(ctx.tutor.calls).toHaveLength(0)
+  })
+
   it('ignores tokens spent before the start of today in the user time zone', async () => {
     const { session, threadId } = await setup()
     await ctx.db
@@ -460,7 +476,8 @@ describe('failure outcomes (AC10)', () => {
       model: 'fake',
       stop_reason: 'end_turn',
       refusal_category: null,
-      cache_read_token: 0
+      cache_read_token: 0,
+      cache_creation_token: 0
     })
     expect(calls[0]?.input_token).toBeGreaterThan(0)
     expect(calls[0]?.output_token).toBeGreaterThan(0)

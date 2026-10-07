@@ -3,7 +3,7 @@ import type { Config } from '../lib/config.js'
 import type { Db } from '../lib/db/index.js'
 import { conflict } from '../lib/error.js'
 import type { Logger } from '../lib/logger.js'
-import type { ExplainResult, TutorTurn } from '../lib/tutor/tutor.js'
+import type { ExplainResult, TutorTurn, TutorUsage } from '../lib/tutor/tutor.js'
 import { ZERO_USAGE } from '../lib/tutor/tutor.js'
 import { assertAiEnabled } from './ai-guard.js'
 import { assertWithinBudget, recordAiCall } from './ai-budget.js'
@@ -31,7 +31,7 @@ export type AskContext = {
 
 export type AskOutcome =
   | { kind: 'result'; result: ExplainResult; latencyMs: number }
-  | { kind: 'error'; model: string; latencyMs: number }
+  | { kind: 'error'; model: string; latencyMs: number; usage?: TutorUsage }
 
 function titleFrom(content: string): string {
   const firstLine = content.trim().split(/\r?\n/)[0] ?? ''
@@ -151,7 +151,8 @@ export async function finishAsk(
   const failed = stopReason === 'refusal' || stopReason === 'error'
   const incomplete = stopReason === 'max_tokens' || stopReason === 'aborted'
   const status = failed ? 'failed' : incomplete ? 'incomplete' : 'complete'
-  const usage = result?.usage ?? ZERO_USAGE
+  const usage =
+    result?.usage ?? (outcome.kind === 'error' ? outcome.usage : undefined) ?? ZERO_USAGE
   try {
     try {
       await recordAiCall(db, auth, {
@@ -160,6 +161,7 @@ export async function finishAsk(
         input_token: usage.inputTokens,
         output_token: usage.outputTokens,
         cache_read_token: usage.cacheReadTokens,
+        cache_creation_token: usage.cacheCreationTokens,
         stop_reason: stopReason,
         refusal_category: result?.refusalCategory ?? null,
         latency_ms: Math.max(0, Math.round(outcome.latencyMs))

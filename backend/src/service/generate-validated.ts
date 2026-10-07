@@ -2,7 +2,12 @@ import type { z } from 'zod'
 import type { Db } from '../lib/db/index.js'
 import { badGateway, unprocessable } from '../lib/error.js'
 import type { Logger } from '../lib/logger.js'
-import { ZERO_USAGE, type StructuredResult } from '../lib/tutor/tutor.js'
+import {
+  TutorProviderError,
+  ZERO_USAGE,
+  type StructuredResult,
+  type TutorUsage
+} from '../lib/tutor/tutor.js'
 import { recordAiCall } from './ai-budget.js'
 import type { Auth } from './ownership.js'
 
@@ -15,7 +20,7 @@ type RecordedCall = {
   model: string
   stopReason: string
   refusalCategory: string | null
-  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number }
+  usage: TutorUsage
   latencyMs: number
 }
 
@@ -56,7 +61,7 @@ export async function generateValidated<S extends z.ZodType>(
         model,
         stopReason: 'error',
         refusalCategory: null,
-        usage: ZERO_USAGE,
+        usage: err instanceof TutorProviderError ? (err.usage ?? ZERO_USAGE) : ZERO_USAGE,
         latencyMs: Date.now() - startedAt
       })
       throw badGateway('ai_provider_error', 'The AI service failed to answer. Retry in a moment.')
@@ -91,6 +96,7 @@ async function recordCall(
       input_token: call.usage.inputTokens,
       output_token: call.usage.outputTokens,
       cache_read_token: call.usage.cacheReadTokens,
+      cache_creation_token: call.usage.cacheCreationTokens,
       stop_reason: call.stopReason,
       refusal_category: call.refusalCategory,
       latency_ms: Math.max(0, Math.round(call.latencyMs))

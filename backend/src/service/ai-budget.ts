@@ -5,12 +5,13 @@ import { AppError } from '../lib/error.js'
 import type { Auth } from './ownership.js'
 
 /**
- * Throws 429 `ai_budget_exceeded` once the tokens (input + output) recorded in `ai_call` since
+ * Throws 429 `ai_budget_exceeded` once the tokens (input, cache creation, cache read and output)
+ * recorded in `ai_call` since
  * the start of today, in the user's time zone, reach `budget`.
  */
 export async function assertWithinBudget(db: Db, auth: Auth, budget: number): Promise<void> {
   const { rows } = await sql<{ used: string }>`
-    SELECT COALESCE(SUM(c.input_token + c.output_token), 0)::text AS used
+    SELECT COALESCE(SUM(c.input_token + c.cache_creation_token + c.cache_read_token + c.output_token), 0)::text AS used
     FROM app_user u
     LEFT JOIN ai_call c
       ON c.user_id = u.id

@@ -73,6 +73,7 @@ export interface AiCallTable {
   input_token: number
   output_token: number
   cache_read_token: number
+  cache_creation_token: Generated<number>
   stop_reason: string | null
   refusal_category: string | null
   latency_ms: number
