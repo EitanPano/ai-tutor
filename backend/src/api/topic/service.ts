@@ -1,5 +1,5 @@
 import type { Db } from '../../lib/db/index.js'
-import { badRequest } from '../../lib/error.js'
+import { fieldInvalid } from '../../lib/error.js'
 
 export type TopicDto = { id: string; name: string }
 
@@ -26,11 +26,7 @@ export function createTopicService({ db }: TopicServiceDeps): TopicService {
         .select(['id', 'name'])
         .where('id', '=', id)
         .executeTakeFirst()
-      if (!topic) {
-        throw badRequest('validation_failed', 'The request is invalid.', {
-          issues: [{ path: ['topicId'], message: 'Unknown topic' }]
-        })
-      }
+      if (!topic) throw fieldInvalid(['topicId'], 'Unknown topic')
       return topic
     }
   }

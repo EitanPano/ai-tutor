@@ -17,6 +17,7 @@ export class AppError extends Error {
 
 /** The one wording of each error the API sends from more than one place, keyed by its code. */
 export const ERROR_MESSAGE = {
+  validation_failed: 'The request is invalid.',
   internal_error: 'Something went wrong on our side. Try again.',
   db_unavailable: 'The database is not reachable.',
   unauthenticated: 'Sign in to continue.',
@@ -27,10 +28,13 @@ export const ERROR_MESSAGE = {
 
 export const badRequest = (code: string, message: string, details?: Details) =>
   new AppError(400, code, message, details)
-export const unauthorized = (
-  message: string = ERROR_MESSAGE.unauthenticated,
-  code = 'unauthorized'
-) => new AppError(401, code, message)
+/**
+ * 400 `validation_failed` for one field a service rejects after the schema passed, in the shape
+ * the error middleware gives a failed schema: `{ issues: [{ path, message }] }`.
+ */
+export const fieldInvalid = (path: (string | number)[], message: string) =>
+  badRequest('validation_failed', ERROR_MESSAGE.validation_failed, { issues: [{ path, message }] })
+export const unauthorized = (code: string, message: string) => new AppError(401, code, message)
 /** 401 `unauthenticated`: the request carries no valid session. */
 export const unauthenticated = () =>
   new AppError(401, 'unauthenticated', ERROR_MESSAGE.unauthenticated)
@@ -42,10 +46,8 @@ export const conflict = (code: string, message: string, details?: Details) =>
   new AppError(409, code, message, details)
 export const unprocessable = (code: string, message: string, details?: Details) =>
   new AppError(422, code, message, details)
-export const tooManyRequests = (
-  message = 'Too many requests. Try again later.',
-  details?: Details
-) => new AppError(429, 'rate_limited', message, details)
+export const tooManyRequests = (code: string, message: string, details?: Details) =>
+  new AppError(429, code, message, details)
 export const badGateway = (code: string, message: string, details?: Details) =>
   new AppError(502, code, message, details)
 export const serviceUnavailable = (code: string, message: string, details?: Details) =>

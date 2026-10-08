@@ -47,7 +47,7 @@ export async function generateValidated<S extends z.ZodType>(
       result = await call()
     } catch (err) {
       // Never log the conversation or the model output, only the failure.
-      logger.error({ err, ...options.logContext }, `${kind} generation failed`)
+      logger.error({ ...options.logContext, err }, `${kind} generation failed`)
       await recordCall(db, auth, logger, kind, {
         model,
         stopReason: 'error',

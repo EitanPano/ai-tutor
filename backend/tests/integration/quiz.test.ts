@@ -26,7 +26,10 @@ type GradedBody = {
   explanation: string
 }
 type AttemptBody = { id: string; quizId: string; score: number; total: number; items: GradedBody[] }
-type ErrorBody = { error: { code: string; details?: Record<string, unknown> }; requestId: string }
+type ErrorBody = {
+  error: { code: string; message: string; details?: Record<string, unknown> }
+  requestId: string
+}
 type Session = Awaited<ReturnType<typeof signUp>>
 
 beforeEach(async () => {
@@ -451,7 +454,9 @@ describe('invalid output, refusal and provider errors (AC10)', () => {
     const res = await generate(session, { threadId })
     expect(res.status).toBe(422)
     expectContract(res, 'post', '/api/quiz')
-    expect((res.body as ErrorBody).error.code).toBe('ai_refused')
+    const { error } = res.body as ErrorBody
+    expect(error.code).toBe('ai_refused')
+    expect(error.message).toBe("The tutor can't help with that question. Try rephrasing it.")
     const calls = await quizCalls(session.user.id)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ stop_reason: 'refusal', refusal_category: 'cyber' })

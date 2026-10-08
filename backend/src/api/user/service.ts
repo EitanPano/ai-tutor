@@ -1,6 +1,6 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
-import { badRequest, conflict } from '../../lib/error.js'
+import { conflict, fieldInvalid } from '../../lib/error.js'
 import { hashPassword } from '../../lib/password.js'
 import { normaliseTimeZone } from '../../lib/time-zone.js'
 import { requireFound, type Auth } from '../../lib/ownership.js'
@@ -21,9 +21,7 @@ export type CreateUserInput = {
 async function resolveTimeZone(db: Db, timeZone: string): Promise<string> {
   const normalised = await normaliseTimeZone(db, timeZone)
   if (normalised !== null) return normalised
-  throw badRequest('validation_failed', 'The request is invalid.', {
-    issues: [{ path: ['timeZone'], message: 'Must be an IANA time zone such as Europe/Paris.' }]
-  })
+  throw fieldInvalid(['timeZone'], 'Must be an IANA time zone such as Europe/Paris.')
 }
 
 function isUniqueViolation(err: unknown): boolean {

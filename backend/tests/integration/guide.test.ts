@@ -23,7 +23,7 @@ type StepBody = {
   doneAt: string | null
 }
 type GuideBody = { id: string; threadId: string; topicId: string; title: string; steps: StepBody[] }
-type ErrorBody = { error: { code: string }; requestId: string }
+type ErrorBody = { error: { code: string; message: string }; requestId: string }
 type Session = Awaited<ReturnType<typeof signUp>>
 
 beforeEach(async () => {
@@ -213,7 +213,9 @@ describe('invalid output, refusal and provider errors (AC10)', () => {
     const res = await generate(session, threadId)
     expect(res.status).toBe(422)
     expectContract(res, 'post', '/api/thread/{id}/guide')
-    expect((res.body as ErrorBody).error.code).toBe('ai_refused')
+    const { error } = res.body as ErrorBody
+    expect(error.code).toBe('ai_refused')
+    expect(error.message).toBe("The tutor can't help with that question. Try rephrasing it.")
     const calls = await guideCalls(session.user.id)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ stop_reason: 'refusal', refusal_category: 'cyber' })

@@ -59,7 +59,7 @@ export async function consumeOrThrow(
   } catch (err) {
     if (!(err instanceof RateLimiterRes)) throw err
     res.set('Retry-After', String(Math.max(1, Math.ceil(err.msBeforeNext / 1000))))
-    throw tooManyRequests(message)
+    throw tooManyRequests('rate_limited', message)
   }
 }
 

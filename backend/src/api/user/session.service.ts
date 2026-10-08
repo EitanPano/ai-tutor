@@ -29,7 +29,7 @@ export function warmDummyHash(): void {
 }
 
 function invalidCredentials() {
-  return unauthorized('Wrong email or password.', 'invalid_credentials')
+  return unauthorized('invalid_credentials', 'Wrong email or password.')
 }
 
 /** Inserts a session for `userId` and returns the raw token (only its hash is stored). */

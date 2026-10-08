@@ -32,7 +32,7 @@ function zodErrorReply(err: unknown): ErrorReply | undefined {
   return {
     status: 400,
     code: 'validation_failed',
-    message: 'The request is invalid.',
+    message: ERROR_MESSAGE.validation_failed,
     details: { issues }
   }
 }
@@ -55,6 +55,16 @@ const BODY_PARSER_ERROR_BY_TYPE = new Map<string, ErrorMatcher>([
 
 const CLIENT_ERROR_LOG = { level: 'warn', message: 'client error' } as const
 
+/**
+ * An exposed body-parser 4xx with no `type` entry above: 415 has a code of its own, any other 4xx
+ * is a bad request.
+ */
+const UNSUPPORTED_MEDIA_TYPE = {
+  code: 'unsupported_media_type',
+  message: 'The request content type or encoding is not supported.'
+}
+const BAD_REQUEST = { code: 'bad_request', message: 'The request could not be processed.' }
+
 function bodyParserReply(err: unknown): ErrorReply | undefined {
   const parserError = err as BodyParserError | null
   const type = parserError?.type
@@ -70,19 +80,8 @@ function bodyParserReply(err: unknown): ErrorReply | undefined {
     status >= 400 &&
     status < 500
   ) {
-    return status === 415
-      ? {
-          status,
-          code: 'unsupported_media_type',
-          message: 'The request content type or encoding is not supported.',
-          log: CLIENT_ERROR_LOG
-        }
-      : {
-          status,
-          code: 'bad_request',
-          message: 'The request could not be processed.',
-          log: CLIENT_ERROR_LOG
-        }
+    const { code, message } = status === 415 ? UNSUPPORTED_MEDIA_TYPE : BAD_REQUEST
+    return { status, code, message, log: CLIENT_ERROR_LOG }
   }
   return undefined
 }

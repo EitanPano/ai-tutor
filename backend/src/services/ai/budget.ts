@@ -1,7 +1,7 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 import type { AiCallTable, MessageStopReason } from '../../lib/db/schema.js'
-import { AppError, serviceUnavailable } from '../../lib/error.js'
+import { serviceUnavailable, tooManyRequests } from '../../lib/error.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
 import type { TutorUsage } from '../../lib/tutor/tutor.js'
 
@@ -30,8 +30,7 @@ export async function assertWithinBudget(
     .executeTakeFirst()
   const used = Number(row?.used ?? 0)
   if (used >= budget) {
-    throw new AppError(
-      429,
+    throw tooManyRequests(
       'ai_budget_exceeded',
       "You've used today's AI budget. It resets at midnight in your time zone."
     )

@@ -1,7 +1,7 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 import type { MessageRow } from '../../lib/db/schema.js'
-import { badRequest, conflict } from '../../lib/error.js'
+import { conflict, fieldInvalid } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { capHistory, type TutorTurn } from '../../lib/tutor/tutor.js'
@@ -127,12 +127,6 @@ function encodeCursor(cursor: Cursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString('base64url')
 }
 
-function invalidCursor() {
-  return badRequest('validation_failed', 'The request is invalid.', {
-    issues: [{ path: ['cursor'], message: 'Invalid cursor' }]
-  })
-}
-
 function decodeCursor(raw: string): Cursor {
   try {
     const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
@@ -153,7 +147,7 @@ function decodeCursor(raw: string): Cursor {
   } catch {
     // fall through to the 400 below
   }
-  throw invalidCursor()
+  throw fieldInvalid(['cursor'], 'Invalid cursor')
 }
 
 async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<TutorTurn[]> {
