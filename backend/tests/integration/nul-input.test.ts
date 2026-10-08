@@ -48,6 +48,14 @@ describe('NUL characters in text input', () => {
     expect(res.status).toBe(404)
   })
 
+  it('still answers 400 for an invalid body under a NUL path id', async () => {
+    // The path id parses to '' (it never throws), then validate parses the body.
+    const { cookie } = await signUp(client)
+    const res = await client.patch('/api/thread/ab%00cd').set('Cookie', cookie).send({ title: '' })
+    expect(res.status).toBe(400)
+    expect((res.body as ErrorBody).error.code).toBe('validation_failed')
+  })
+
   it('answers 404 for a NUL in any other thread, guide or quiz path id', async () => {
     const { cookie } = await signUp(client)
     const thread = await client.post('/api/thread').set('Cookie', cookie).send({ topicId: 'react' })
