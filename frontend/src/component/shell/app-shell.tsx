@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isLeaving, setIsLeaving] = useState(false)
-  const session = useSession({ enabled: !isLeaving })
+  const session = useSession({ isEnabled: !isLeaving })
   const user = session.data?.user
   // A failed refetch keeps its cached data; only a first-load failure should replace the page.
   const hasSessionFailed = session.isError && !session.data
