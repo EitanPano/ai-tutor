@@ -38,7 +38,7 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
       </div>
 
       {threads.isPending ? (
-        <SkeletonSection label="Loading threads" className="gap-2">
+        <SkeletonSection label="Loading threads" gap={2}>
           {[0, 1, 2].map((n) => (
             <SkeletonCard key={n} className="h-16" />
           ))}

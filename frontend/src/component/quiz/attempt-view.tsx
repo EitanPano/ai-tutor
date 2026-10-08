@@ -7,41 +7,24 @@ import { Markdown } from '@/component/markdown/markdown'
 import { buttonClass } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
 import { getAttempt, getQuiz, quizKey, type Attempt, type GradedItem } from '@/lib/api/quiz'
+import { cn } from '@/lib/cn'
 import { BackIcon, DoneIcon, RetryIcon, WrongIcon } from '@/lib/icon'
 import { difficultyLabel } from '@/lib/quiz'
 import { useTopics } from '@/lib/topic'
+import { CHOICE_STYLE, choiceState } from './choice-style'
 import { QuizSkeleton } from './quiz-skeleton'
 import { QuizMissing } from './quiz-state'
 
 function Choice({ text, index, item }: { text: string; index: number; item: GradedItem }) {
   const isAnswer = index === item.answerIndex
   const isPick = index === item.choiceIndex
-  const wrongPick = isPick && !isAnswer
-
-  const frame = isAnswer ? 'border-correct' : wrongPick ? 'border-wrong' : 'border-rule'
+  const style = CHOICE_STYLE[choiceState(index, item)]
 
   return (
-    <li className={`flex items-start gap-3 rounded-md border px-4 py-3 ${frame}`}>
-      <span className="mt-1 grid size-4 shrink-0 place-items-center">
-        {isAnswer ? (
-          <DoneIcon aria-hidden="true" className="size-4 text-correct" strokeWidth={3} />
-        ) : wrongPick ? (
-          <WrongIcon aria-hidden="true" className="size-4 text-wrong" strokeWidth={3} />
-        ) : (
-          <span aria-hidden="true" className="size-2 rounded-full bg-rule" />
-        )}
-      </span>
+    <li className={`flex items-start gap-3 rounded-md border px-4 py-3 ${style.frame}`}>
+      <span className="mt-1 grid size-4 shrink-0 place-items-center">{style.mark}</span>
       <div className="flex min-w-0 flex-col gap-1">
-        <Markdown
-          inline
-          className={`break-words ${
-            isAnswer
-              ? 'marker rounded-sm px-1 [--tw-prose-body:var(--marker-ink)] [--tw-prose-code:var(--marker-ink)] [--tw-prose-bold:var(--marker-ink)]'
-              : wrongPick
-                ? 'text-wrong line-through decoration-wrong decoration-2'
-                : ''
-          }`}
-        >
+        <Markdown inline className={cn('break-words', style.text)}>
           {text}
         </Markdown>
         {(isAnswer || isPick) && (

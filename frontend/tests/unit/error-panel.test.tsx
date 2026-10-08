@@ -4,10 +4,23 @@ import Link from 'next/link'
 import type { SVGProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { ErrorPanel } from '@/component/ui/error-panel'
+import { RetryIcon } from '@/lib/icon'
 
 const GoneIcon = (props: SVGProps<SVGSVGElement>) => <svg data-testid="gone-icon" {...props} />
 
 describe('ErrorPanel', () => {
+  it('shows the Retry icon as decoration when no icon is given', () => {
+    const { container } = render(
+      <ErrorPanel onRetry={vi.fn()}>The server hit a problem.</ErrorPanel>
+    )
+    const { container: retry } = render(<RetryIcon />)
+
+    const icons = container.querySelectorAll('svg')
+    expect(icons).toHaveLength(1)
+    expect(icons[0]).toHaveAttribute('aria-hidden', 'true')
+    expect(icons[0]!.innerHTML).toBe(retry.querySelector('svg')!.innerHTML)
+  })
+
   it('shows the message and a Retry button that calls onRetry with no arguments', async () => {
     const onRetry = vi.fn()
     render(<ErrorPanel onRetry={onRetry}>The server hit a problem.</ErrorPanel>)

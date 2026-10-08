@@ -6,8 +6,9 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { BackLink } from '@/component/ui/back-link'
 import { buttonClass } from '@/component/ui/button'
 import { ErrorPanel } from '@/component/ui/error-panel'
+import { NotFoundPanel } from '@/component/ui/not-found-panel'
 import { Sheet } from '@/component/ui/sheet'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isApiError, messageFor } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { usePageTitle } from '@/lib/page-title'
@@ -110,16 +111,7 @@ export function Conversation({ threadId }: { threadId: string }) {
   if (!detail.data) {
     const missing = isApiError(detail.error) && detail.error.code === 'not_found'
     return missing ? (
-      <ErrorPanel
-        icon={ThreadIcon}
-        action={
-          <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
-            Back to threads
-          </Link>
-        }
-      >
-        {describeError(detail.error)}
-      </ErrorPanel>
+      <NotFoundPanel icon={ThreadIcon}>{describeError(detail.error)}</NotFoundPanel>
     ) : (
       <ErrorPanel onRetry={() => detail.refetch()}>{describeError(detail.error)}</ErrorPanel>
     )
@@ -175,11 +167,7 @@ export function Conversation({ threadId }: { threadId: string }) {
 
       {/* Solid canvas behind the composer so transcript text never shows around it. */}
       <div className="sticky bottom-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-canvas before:to-transparent">
-        {budgetSpent && (
-          <Banner>
-            You&apos;ve used today&apos;s AI budget. It resets at midnight in your time zone.
-          </Banner>
-        )}
+        {budgetSpent && <Banner>{messageFor('ai_budget_exceeded')}</Banner>}
         {full && (
           <Banner
             action={
@@ -192,7 +180,7 @@ export function Conversation({ threadId }: { threadId: string }) {
               </Link>
             }
           >
-            This thread is full. Start a new thread to keep going.
+            {messageFor('thread_full')}
           </Banner>
         )}
         <Sheet className="p-4 shadow-lg shadow-ink/10">

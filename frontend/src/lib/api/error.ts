@@ -25,7 +25,7 @@ export class ApiError extends Error {
 
 export const isApiError = (err: unknown): err is ApiError => err instanceof ApiError
 
-const MESSAGE_BY_CODE: Record<string, string> = {
+const MESSAGE_BY_CODE = {
   network_error:
     "Can't reach the server. Make sure the API is running and you opened http://localhost:3000.",
   rate_limited: 'Too many attempts. Try again later.',
@@ -49,7 +49,16 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   attempt_incomplete: 'Answer every item before submitting.',
   ai_invalid_output: 'The tutor produced something unusable. Try again.',
   stream_interrupted: 'The answer stopped unexpectedly. Retry to ask again.'
-}
+} satisfies Record<string, string>
+
+type KnownCode = keyof typeof MESSAGE_BY_CODE
+
+// `hasOwn`, not `in` or a plain index: the code comes off the wire and must never match a
+// prototype key such as `constructor`.
+const isKnownCode = (code: string): code is KnownCode => Object.hasOwn(MESSAGE_BY_CODE, code)
+
+/** The sentence for a known code, for a component that states it without an error at hand. */
+export const messageFor = (code: KnownCode): string => MESSAGE_BY_CODE[code]
 
 const RETRYABLE_BY_KIND = {
   ask: new Set([
@@ -66,11 +75,13 @@ const RETRYABLE_BY_KIND = {
   ])
 } as const
 
+export type RetryKind = keyof typeof RETRYABLE_BY_KIND
+
 /**
  * Whether a failure is worth a one-tap Retry: nothing about the request itself is wrong, so
  * asking again could work. `ask` streams an answer; `generate` writes a guide or a quiz.
  */
-export function isRetryable(err: unknown, kind: keyof typeof RETRYABLE_BY_KIND): boolean {
+export function isRetryable(err: unknown, kind: RetryKind): boolean {
   return isApiError(err) && RETRYABLE_BY_KIND[kind].has(err.code)
 }
 
@@ -79,8 +90,7 @@ export function describeError(err: unknown): string {
   if (isApiError(err)) {
     // Both causes share the code, and the server's message names the right one (and is safe to show).
     if (err.code === 'ai_unavailable' && err.message) return err.message
-    const known = MESSAGE_BY_CODE[err.code]
-    if (known) return known
+    if (isKnownCode(err.code)) return MESSAGE_BY_CODE[err.code]
     if (err.status >= 500) return 'The server hit a problem. Try again in a moment.'
     return err.message
   }

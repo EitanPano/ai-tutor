@@ -134,6 +134,105 @@ describe('askQuestion', () => {
     expect(failure).toMatchObject({ code: 'stream_interrupted' })
   })
 
+  it('ignores every event after message.complete', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        sseResponse([
+          frame('message.start', start),
+          frame('delta', { text: 'a' }),
+          frame('message.complete', complete),
+          frame('delta', { text: 'late' }),
+          frame('error', {
+            error: { code: 'ai_provider_error', message: 'Boom' },
+            requestId: 'r9'
+          }),
+          frame('message.complete', complete)
+        ])
+      )
+    )
+    const h = handlers()
+
+    await expect(askQuestion('t1', 'q', h)).resolves.toBe('completed')
+    expect(h.calls).toEqual(['start', 'delta:a', 'complete'])
+  })
+
+  it('ignores every event after an error event in the same chunk', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        sseResponse([
+          frame('message.start', start) +
+            frame('error', {
+              error: { code: 'ai_provider_error', message: 'Boom' },
+              requestId: 'r9'
+            }) +
+            frame('delta', { text: 'late' }) +
+            frame('message.complete', complete)
+        ])
+      )
+    )
+    const h = handlers()
+
+    const failure = await askQuestion('t1', 'q', h).catch((err: unknown) => err)
+
+    expect(failure).toMatchObject({ code: 'ai_provider_error', status: 200 })
+    expect(h.calls).toEqual(['start'])
+  })
+
+  it.each([
+    ['a payload that is not an ErrorResponse', JSON.stringify({ oops: true })],
+    ['a payload that is not JSON', 'not json']
+  ])('turns an error event with %s into stream_interrupted', async (_name, data) => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        sseResponse([frame('message.start', start), `event: error\ndata: ${data}\n\n`])
+      )
+    )
+
+    const failure = await askQuestion('t1', 'q', handlers()).catch((err: unknown) => err)
+
+    expect(failure).toBeInstanceOf(ApiError)
+    expect(failure).toMatchObject({ code: 'stream_interrupted', status: 0 })
+  })
+
+  it.each(['ping', 'message', 'constructor', 'toString', '__proto__'])(
+    'ignores the unknown event %s',
+    async (event) => {
+      vi.stubGlobal('fetch', () =>
+        Promise.resolve(
+          sseResponse([
+            frame('message.start', start),
+            frame(event, { text: 'x' }),
+            frame('delta', { text: 'a' }),
+            frame('message.complete', complete)
+          ])
+        )
+      )
+      const h = handlers()
+
+      await expect(askQuestion('t1', 'q', h)).resolves.toBe('completed')
+      expect(h.calls).toEqual(['start', 'delta:a', 'complete'])
+    }
+  )
+
+  it('reads the event payloads as JSON', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        sseResponse([
+          frame('message.start', start),
+          frame('delta', { text: 'a' }),
+          frame('message.complete', complete)
+        ])
+      )
+    )
+    const onStart = vi.fn()
+    const onComplete = vi.fn()
+
+    await askQuestion('t1', 'q', { onStart, onComplete })
+
+    expect(onStart).toHaveBeenCalledWith(start)
+    expect(onComplete).toHaveBeenCalledWith(complete)
+  })
+
   it('maps a network failure to network_error', async () => {
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')))
 

@@ -1,60 +1,39 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState, useSyncExternalStore, type FormEvent } from 'react'
-import { toast } from 'sonner'
 import { Button } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
 import { TextField } from '@/component/ui/text-field'
-import { describeError, fieldIssues, isApiError } from '@/lib/api/error'
 import { signUp } from '@/lib/api/user'
 import { DEFAULT_PATH } from '@/lib/route'
-import { SESSION_KEY } from '@/lib/session'
+import { useAuthForm, type FieldIssues } from './use-auth-form'
 
 const FALLBACK_TIME_ZONE = 'UTC'
 const noSubscription = () => () => {}
 const detectTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIME_ZONE
 
 export function SignupForm() {
-  const router = useRouter()
-  const queryClient = useQueryClient()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   // The browser's zone on the client, a fixed fallback during server render and hydration.
   const timeZone = useSyncExternalStore(noSubscription, detectTimeZone, () => FALLBACK_TIME_ZONE)
-  const [issues, setIssues] = useState<Record<string, string>>({})
   const [emailTaken, setEmailTaken] = useState(false)
-
-  const signup = useMutation({
-    mutationFn: signUp,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: SESSION_KEY, refetchType: 'all' })
-      router.replace(DEFAULT_PATH)
-    },
-    onError: (err) => {
-      if (isApiError(err) && err.code === 'email_taken') {
-        setEmailTaken(true)
-      } else if (isApiError(err) && err.code === 'validation_failed') {
-        setIssues(fieldIssues(err))
-      } else {
-        toast.error(describeError(err))
-      }
-    }
+  const { issues, isPending, submit } = useAuthForm({
+    send: signUp,
+    nextPath: DEFAULT_PATH,
+    onErrorCode: { email_taken: () => setEmailTaken(true) }
   })
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setEmailTaken(false)
-    const nextIssues: Record<string, string> = {}
-    if (!displayName.trim()) nextIssues.displayName = 'Enter your name.'
-    if (!email.trim()) nextIssues.email = 'Enter your email.'
-    if (password.length < 8) nextIssues.password = 'Use at least 8 characters.'
-    setIssues(nextIssues)
-    if (Object.keys(nextIssues).length > 0) return
-    signup.mutate({ displayName: displayName.trim(), email: email.trim(), password, timeZone })
+    const checks: FieldIssues = {}
+    if (!displayName.trim()) checks.displayName = 'Enter your name.'
+    if (!email.trim()) checks.email = 'Enter your email.'
+    if (password.length < 8) checks.password = 'Use at least 8 characters.'
+    submit(checks, { displayName: displayName.trim(), email: email.trim(), password, timeZone })
   }
 
   return (
@@ -109,7 +88,7 @@ export function SignupForm() {
             The server did not accept the time zone {timeZone}: {issues.timeZone}
           </p>
         )}
-        <Button type="submit" size="lg" loading={signup.isPending} className="mt-2">
+        <Button type="submit" size="lg" loading={isPending} className="mt-2">
           Create account
         </Button>
       </form>

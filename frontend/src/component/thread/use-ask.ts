@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
 import { askQuestion } from '@/lib/api/ask'
-import { describeError, isApiError, isRetryable } from '@/lib/api/error'
+import { isApiError } from '@/lib/api/error'
 import { isPending, threadKey, type ThreadDetailResponse } from '@/lib/api/thread'
+import { useRetryToast } from '@/lib/retry-toast'
 
 /** Ask turns into Stop in place, so a double click or key repeat must not stop the answer just asked for. */
 const STOP_GRACE_MS = 400
@@ -48,7 +48,7 @@ export function useAsk(
   const askRef =
     useRef<(question: string, onAccepted?: () => void) => Promise<AskResult>>(undefined)
   const retryAccepted = useRef(onRetryAccepted)
-  const toastIds = useRef(new Set<string | number>())
+  const showError = useRetryToast('ask')
 
   useEffect(() => {
     retryAccepted.current = onRetryAccepted
@@ -56,7 +56,6 @@ export function useAsk(
 
   useEffect(() => {
     mounted.current = true
-    const ids = toastIds.current
     return () => {
       mounted.current = false
       if (frame.current !== undefined) cancelAnimationFrame(frame.current)
@@ -66,9 +65,6 @@ export function useAsk(
       setTimeout(() => {
         if (mounted.current) return
         controller.current?.abort()
-        // A toast's Retry must not outlive the page it belongs to.
-        for (const id of ids) toast.dismiss(id)
-        ids.clear()
       })
     }
   }, [])
@@ -145,18 +141,9 @@ export function useAsk(
           const code = isApiError(err) ? err.code : ''
           if (code === 'ai_budget_exceeded') setBudgetSpent(true)
           if (code === 'thread_full') setThreadFull(true)
-          const id = toast.error(describeError(err), {
-            ...(isRetryable(err, 'ask') && {
-              action: {
-                label: 'Retry',
-                onClick: () => {
-                  if (!mounted.current) return
-                  void askRef.current?.(question, () => retryAccepted.current?.(question))
-                }
-              }
-            })
+          showError(err, () => {
+            void askRef.current?.(question, () => retryAccepted.current?.(question))
           })
-          if (id !== undefined) toastIds.current.add(id)
         }
       } finally {
         flush()
@@ -177,7 +164,7 @@ export function useAsk(
       }
       return { started, outcome }
     },
-    [threadId, queryClient]
+    [threadId, queryClient, showError]
   )
 
   useEffect(() => {

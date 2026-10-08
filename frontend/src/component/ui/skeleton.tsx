@@ -2,21 +2,25 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import { Sheet } from './sheet'
 
+// Whole class names, so Tailwind finds them in the source.
+const GAP_CLASS = { 2: 'gap-2', 4: 'gap-4', 5: 'gap-5' } as const
+
 /**
  * A busy placeholder named by `label` ("Loading guide"); its bars and cards are decoration.
- * A `div`, not a `section`: a loading state is not a landmark. Set the gap with `className`.
+ * A `div`, not a `section`: a loading state is not a landmark. `gap` spaces them on Tailwind's
+ * scale; the default matches a page's sections.
  */
 export function SkeletonSection({
   label,
-  className,
+  gap = 5,
   children
 }: {
   label: string
-  className: string
+  gap?: keyof typeof GAP_CLASS
   children: ReactNode
 }) {
   return (
-    <div aria-busy="true" aria-label={label} className={cn('flex flex-col', className)}>
+    <div aria-busy="true" aria-label={label} className={cn('flex flex-col', GAP_CLASS[gap])}>
       {children}
     </div>
   )

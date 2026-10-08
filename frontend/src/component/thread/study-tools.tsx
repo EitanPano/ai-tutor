@@ -3,17 +3,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { memo, useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { memo, useState } from 'react'
 import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { Button } from '@/component/ui/button'
 import { Select } from '@/component/ui/select'
-import { describeError, isRetryable } from '@/lib/api/error'
 import { createGuide, guideKey, type GuideSummary } from '@/lib/api/guide'
 import type { Difficulty, QuizSummary } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
 import { GuideIcon, QuizIcon } from '@/lib/icon'
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, difficultyLabel } from '@/lib/quiz'
+import { useRetryToast } from '@/lib/retry-toast'
 
 type StudyToolsProps = {
   threadId: string
@@ -46,17 +45,9 @@ export const StudyTools = memo(function StudyTools({
 }: StudyToolsProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const toastId = useRef<string | number | undefined>(undefined)
+  const showError = useRetryToast('generate')
   const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY)
   const quiz = useCreateQuiz()
-
-  // A toast's Retry must not outlive the page it belongs to.
-  useEffect(
-    () => () => {
-      if (toastId.current !== undefined) toast.dismiss(toastId.current)
-    },
-    []
-  )
 
   const create = useMutation({
     mutationFn: () => createGuide(threadId),
@@ -65,12 +56,7 @@ export const StudyTools = memo(function StudyTools({
       queryClient.setQueryData(guideKey.detail(guide.id), { guide })
       router.push(`/guide/${encodeURIComponent(guide.id)}`)
     },
-    onError: (err) => {
-      const retryable = isRetryable(err, 'generate')
-      toastId.current = toast.error(describeError(err), {
-        ...(retryable && { action: { label: 'Retry', onClick: () => create.mutate() } })
-      })
-    }
+    onError: (err) => showError(err, () => create.mutate())
   })
 
   const reason = !hasAnswer ? 'Ask a question first' : busy ? 'Wait for the answer to finish' : ''

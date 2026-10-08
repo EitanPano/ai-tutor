@@ -2,7 +2,7 @@ import { SkeletonBar, SkeletonCard, SkeletonSection } from '@/component/ui/skele
 
 export function ProgressSkeleton() {
   return (
-    <SkeletonSection label="Loading progress" className="gap-5">
+    <SkeletonSection label="Loading progress">
       <SkeletonCard className="h-32" />
       <SkeletonBar className="h-5 w-2/3" />
       <SkeletonCard className="h-80" />

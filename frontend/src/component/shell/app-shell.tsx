@@ -11,14 +11,21 @@ import { SkeletonBar, SkeletonCard, SkeletonSection } from '@/component/ui/skele
 import { Wordmark } from '@/component/ui/wordmark'
 import { describeError, isApiError } from '@/lib/api/error'
 import { logOut } from '@/lib/api/session'
+import { cn } from '@/lib/cn'
 import { LogOutIcon, ProgressIcon, ThreadIcon } from '@/lib/icon'
-import { isPathUnder } from '@/lib/route'
+import { LOGIN_PATH, isPathUnder } from '@/lib/route'
 import { useSession } from '@/lib/session'
 
 const NAV = [
   { href: '/thread', label: 'Threads', icon: ThreadIcon },
   { href: '/progress', label: 'Progress', icon: ProgressIcon }
 ] as const
+
+/** Pages with a side list (threads, guide steps) or a wide table (progress) get the wide column. */
+const WIDE_PREFIXES = ['/thread', '/guide', '/progress']
+
+const isWidePath = (pathname: string) =>
+  WIDE_PREFIXES.some((prefix) => isPathUnder(pathname, prefix))
 
 function NavLinks({ pathname }: { pathname: string }) {
   return (
@@ -66,7 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     }
     queryClient.clear()
-    router.replace('/login')
+    router.replace(LOGIN_PATH)
     toast('Logged out')
   }
 
@@ -99,13 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="graph-paper min-w-0 flex-1 px-4 py-8 md:px-10 md:py-10">
         <div
-          className={`mx-auto w-full ${
-            pathname.startsWith('/thread') ||
-            pathname.startsWith('/guide') ||
-            pathname.startsWith('/progress')
-              ? 'max-w-[76rem]'
-              : 'max-w-[72ch]'
-          }`}
+          className={cn('mx-auto w-full', isWidePath(pathname) ? 'max-w-[76rem]' : 'max-w-[72ch]')}
         >
           {sessionFailed ? (
             isApiError(session.error) && session.error.code === 'unauthenticated' ? null : (
@@ -116,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ) : user ? (
             children
           ) : (
-            <SkeletonSection label="Loading" className="gap-4">
+            <SkeletonSection label="Loading" gap={4}>
               <SkeletonBar className="h-8 w-40" />
               <SkeletonCard className="h-48" />
             </SkeletonSection>

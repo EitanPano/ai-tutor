@@ -2,7 +2,7 @@ import { SkeletonBar, SkeletonCard, SkeletonSection } from '@/component/ui/skele
 
 export function QuizSkeleton() {
   return (
-    <SkeletonSection label="Loading quiz" className="gap-5">
+    <SkeletonSection label="Loading quiz">
       <SkeletonBar className="h-9 w-2/3" />
       <SkeletonCard className="h-96" />
     </SkeletonSection>

@@ -3,6 +3,7 @@ import { Markdown } from '@/component/markdown/markdown'
 import { Button } from '@/component/ui/button'
 import { isPending, type Message } from '@/lib/api/thread'
 import { RetryIcon } from '@/lib/icon'
+import { FAILED_NOTE, noteFor } from './answer-note'
 import type { Asking } from './use-ask'
 
 /** A line that opens a code fence (three backticks or tildes): the author wrote Markdown. */
@@ -33,21 +34,6 @@ function Note({ children, action }: { children: string; action?: ReactNode }) {
   )
 }
 
-function noteFor(message: Message): string | null {
-  if (message.status === 'failed') {
-    return message.stopReason === 'refusal'
-      ? "The tutor can't help with that question. Try rephrasing it."
-      : 'This answer failed.'
-  }
-  if (message.status === 'incomplete') {
-    if (message.stopReason === 'max_tokens') {
-      return 'This answer was cut off at the length limit. Ask a follow-up to continue.'
-    }
-    if (message.stopReason === 'aborted') return 'Stopped before the answer finished.'
-  }
-  return null
-}
-
 function Answer({
   message,
   stalled,
@@ -60,7 +46,7 @@ function Answer({
   onRetry?: (() => void) | undefined
 }) {
   const pending = isPending(message)
-  const note = pending && stalled ? 'This answer failed.' : noteFor(message)
+  const note = pending && stalled ? FAILED_NOTE : noteFor(message)
   const failed = message.status === 'failed' || (pending && stalled)
   if (pending && !stalled) {
     return (

@@ -21,6 +21,28 @@ export function isErrorResponse(value: unknown): value is ErrorResponse {
   return typeof code === 'string' && typeof message === 'string'
 }
 
+/** True when the caller cancelled the request through its `AbortSignal`: nothing failed. */
+export const isAbortError = (err: unknown) =>
+  err instanceof DOMException && err.name === 'AbortError'
+
+/** The request never got an answer: the server is down, unreachable or refused the connection. */
+export const networkError = () =>
+  new ApiError({
+    status: 0,
+    code: 'network_error',
+    message: 'The request did not reach the server.'
+  })
+
+/** The `ApiError` for an `ErrorResponse` body, from a JSON response or a stream `error` event. */
+export const apiErrorFrom = (status: number, { error, requestId }: ErrorResponse) =>
+  new ApiError({
+    status,
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    requestId
+  })
+
 export async function toApiError(response: Response): Promise<ApiError> {
   let parsed: unknown
   try {
@@ -28,15 +50,7 @@ export async function toApiError(response: Response): Promise<ApiError> {
   } catch {
     parsed = undefined
   }
-  if (isErrorResponse(parsed)) {
-    return new ApiError({
-      status: response.status,
-      code: parsed.error.code,
-      message: parsed.error.message,
-      details: parsed.error.details,
-      requestId: parsed.requestId
-    })
-  }
+  if (isErrorResponse(parsed)) return apiErrorFrom(response.status, parsed)
   return new ApiError({
     status: response.status,
     code: 'unexpected_response',
@@ -60,12 +74,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       ...(signal && { signal })
     })
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err
-    throw new ApiError({
-      status: 0,
-      code: 'network_error',
-      message: 'The request did not reach the server.'
-    })
+    if (isAbortError(err)) throw err
+    throw networkError()
   }
 
   if (!response.ok) throw await toApiError(response)

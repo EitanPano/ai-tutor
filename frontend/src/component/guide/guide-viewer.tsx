@@ -7,6 +7,7 @@ import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
 import { BackLink } from '@/component/ui/back-link'
 import { Button, buttonClass } from '@/component/ui/button'
 import { ErrorPanel } from '@/component/ui/error-panel'
+import { NotFoundPanel } from '@/component/ui/not-found-panel'
 import { Sheet } from '@/component/ui/sheet'
 import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { describeError, isApiError } from '@/lib/api/error'
@@ -159,16 +160,7 @@ export function GuideViewer({ guideId }: { guideId: string }) {
   if (!query.data) {
     const missing = isApiError(query.error) && query.error.code === 'not_found'
     return missing ? (
-      <ErrorPanel
-        icon={GuideIcon}
-        action={
-          <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
-            Back to threads
-          </Link>
-        }
-      >
-        This guide doesn&apos;t exist or was deleted.
-      </ErrorPanel>
+      <NotFoundPanel icon={GuideIcon}>This guide doesn&apos;t exist or was deleted.</NotFoundPanel>
     ) : (
       <ErrorPanel onRetry={() => query.refetch()}>{describeError(query.error)}</ErrorPanel>
     )

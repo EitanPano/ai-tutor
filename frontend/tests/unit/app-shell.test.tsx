@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/api/error'
 import { SESSION_KEY } from '@/lib/session'
 
 const api = vi.hoisted(() => ({ getSession: vi.fn(), logOut: vi.fn() }))
+const nav = vi.hoisted(() => ({ pathname: '/thread' }))
 
 vi.mock('@/lib/api/session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api/session')>()),
@@ -14,7 +15,7 @@ vi.mock('@/lib/api/session', async (importOriginal) => ({
 }))
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/thread',
+  usePathname: () => nav.pathname,
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() })
 }))
 
@@ -41,7 +42,10 @@ function setup() {
 }
 
 describe('AppShell', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    nav.pathname = '/thread'
+  })
 
   it('keeps the page when a background session refetch fails', async () => {
     api.getSession.mockResolvedValueOnce(session)
@@ -66,5 +70,23 @@ describe('AppShell', () => {
 
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument()
     expect(screen.queryByText('page content')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['/thread', true],
+    ['/thread/t1', true],
+    ['/guide/g1', true],
+    ['/progress', true],
+    ['/quiz/q1', false],
+    ['/quiz/q1/attempt/a1', false],
+    ['/threads-x', false]
+  ])('lays %s out wide: %s', async (pathname, isWide) => {
+    nav.pathname = pathname
+    api.getSession.mockResolvedValue(session)
+    setup()
+
+    const column = (await screen.findByText('page content')).parentElement!
+    expect(column).toHaveClass(isWide ? 'max-w-[76rem]' : 'max-w-[72ch]')
+    expect(column).not.toHaveClass(isWide ? 'max-w-[72ch]' : 'max-w-[76rem]')
   })
 })
