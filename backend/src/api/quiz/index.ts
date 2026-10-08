@@ -1,2 +1,3 @@
-export { createQuizModule } from './quiz.module.js'
-export type { QuizModuleDeps } from './quiz.module.js'
+export { default as quizRouter } from './route.js'
+export { createQuizService } from './service.js'
+export type { QuizDto, QuizService } from './service.js'

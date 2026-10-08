@@ -1,17 +1,18 @@
 import { z } from 'zod'
-import { text } from '../../lib/validation.js'
+import { pathSegment, text } from '../../lib/validation.js'
 
 const difficulty = z.enum(['easy', 'medium', 'hard'])
 
 // Mirrors CreateQuizRequest in .orchestrate/api-contract.yaml: exactly one of `threadId`
 // (optional difficulty) or `topicId` (difficulty required).
-export const createQuizSchema = z.union([
+export const createBody = z.union([
   z.strictObject({ threadId: text().min(1), difficulty: difficulty.optional() }),
   z.strictObject({ topicId: text().min(1), difficulty })
 ])
+export type CreateBody = z.output<typeof createBody>
 
 // Mirrors SubmitAttemptRequest. The service checks the ids against the quiz.
-export const submitAttemptSchema = z.strictObject({
+export const submitAttemptBody = z.strictObject({
   answers: z
     .array(
       z.strictObject({
@@ -21,3 +22,7 @@ export const submitAttemptSchema = z.strictObject({
     )
     .max(5)
 })
+export type SubmitAttemptBody = z.output<typeof submitAttemptBody>
+
+export const attemptParams = z.object({ id: pathSegment(), attemptId: pathSegment() })
+export type AttemptParams = z.output<typeof attemptParams>

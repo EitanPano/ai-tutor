@@ -5,7 +5,10 @@ import type { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
 import type { UserLimiters } from './lib/rate-limit.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
+import type { GuideService } from './api/guide/index.js'
 import type { HealthService } from './api/health/index.js'
+import type { ProgressService } from './api/progress/index.js'
+import type { QuizService } from './api/quiz/index.js'
 import type { TopicService } from './api/topic/index.js'
 import type { SessionService, UserService } from './api/user/index.js'
 import type { AiService } from './services/ai/index.js'
@@ -16,7 +19,10 @@ export type Limiters = UserLimiters
 /** The services `createApp` builds, by name; controllers read them through `servicesOf(req)`. */
 export type Services = {
   ai: AiService
+  guide: GuideService
   health: HealthService
+  progress: ProgressService
+  quiz: QuizService
   session: SessionService
   topic: TopicService
   user: UserService

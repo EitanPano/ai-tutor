@@ -20,3 +20,7 @@ export function pathParam(value: unknown): string {
  * 400 (a NUL can never name a row).
  */
 export const pathSegment = () => z.string().transform((value) => (hasNoNul(value) ? value : ''))
+
+/** The `:id` path segment of a route; shared by every route keyed by one id. */
+export const idParams = z.object({ id: pathSegment() })
+export type IdParams = z.output<typeof idParams>

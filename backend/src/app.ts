@@ -11,10 +11,10 @@ import type { Logger } from './lib/logger.js'
 import { createLoginIpLimiter, createLoginLimiter, createSignupLimiter } from './lib/rate-limit.js'
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
-import { createGuideModule } from './api/guide/index.js'
+import { createGuideService, guideRouter } from './api/guide/index.js'
 import { createHealthService, healthRouter } from './api/health/index.js'
-import { createProgressModule } from './api/progress/index.js'
-import { createQuizModule } from './api/quiz/index.js'
+import { createProgressService, progressRouter } from './api/progress/index.js'
+import { createQuizService, quizRouter } from './api/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './api/thread/index.js'
 import { createTopicService, topicRouter, type TopicApi } from './api/topic/index.js'
 import {
@@ -117,23 +117,9 @@ export function createApp({
     topic,
     ai
   })
-  const guide = createGuideModule({
-    db,
-    tutor: provider,
-    requireSession,
-    topic,
-    ai,
-    thread: thread.api
-  })
-  const quiz = createQuizModule({
-    db,
-    tutor: provider,
-    requireSession,
-    topic,
-    ai,
-    thread: thread.api
-  })
-  const progress = createProgressModule({ db, requireSession })
+  const guide = createGuideService({ db, tutor: provider, topic, ai, thread: thread.api })
+  const quiz = createQuizService({ db, tutor: provider, topic, ai, thread: thread.api })
+  const progress = createProgressService({ db })
   const health = createHealthService({ db })
   // Before any router: route handlers read their dependencies per request through ctxOf(req).
   attachContext(app, {
@@ -143,16 +129,16 @@ export function createApp({
     tutor: provider,
     inFlight,
     limiters,
-    services: { ai, health, session, topic, user }
+    services: { ai, guide, health, progress, quiz, session, topic, user }
   })
   for (const router of [
     healthRouter,
     userRouter,
     topicRouter,
     thread.router,
-    guide.router,
-    quiz.router,
-    progress.router
+    guideRouter,
+    quizRouter,
+    progressRouter
   ]) {
     app.use(router)
   }

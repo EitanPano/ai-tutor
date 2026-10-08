@@ -3,7 +3,7 @@ import {
   createProgressService,
   computeStreak,
   type ProgressDto
-} from '../../src/api/progress/progress.service.js'
+} from '../../src/api/progress/service.js'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
