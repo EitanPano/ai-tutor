@@ -3,9 +3,11 @@ import type { Db } from '../../lib/db/index.js'
 import { unauthorized } from '../../lib/error.js'
 import { hashPassword, verifyPassword } from '../../lib/password.js'
 import { createSessionToken, hashSessionToken } from '../../lib/session-token.js'
-import { toUserDto, type UserDto } from './user.dto.js'
+import { toUserDto, type UserDto } from './dto.js'
 
-export type ResolvedSession = {
+const DAY_MS = 24 * 60 * 60 * 1000
+
+type ResolvedSession = {
   sessionId: string
   userId: string
   expiresAt: Date
@@ -51,8 +53,34 @@ export async function startSession(db: Db, userId: string): Promise<string> {
 }
 
 /** The furthest a session created at `createdAt` may be extended to: now + 30 days, capped. */
-export function slidingExpiry(createdAt: Date): Date {
+function slidingExpiry(createdAt: Date): Date {
   return new Date(Math.min(Date.now() + SESSION_TTL_MS, createdAt.getTime() + SESSION_MAX_AGE_MS))
+}
+
+/** The session for a valid, unexpired token of a non-deleted user, else undefined. */
+async function resolveSession(db: Db, token: string): Promise<ResolvedSession | undefined> {
+  const row = await db
+    .selectFrom('session')
+    .innerJoin('app_user', 'app_user.id', 'session.user_id')
+    .select([
+      'session.id as sessionId',
+      'session.user_id as userId',
+      'session.expires_at',
+      'session.created_at'
+    ])
+    .where('session.token_hash', '=', hashSessionToken(token))
+    .where('session.expires_at', '>', new Date())
+    .where('session.created_at', '>', new Date(Date.now() - SESSION_MAX_AGE_MS))
+    .where('app_user.deleted_at', 'is', null)
+    .executeTakeFirst()
+  return (
+    row && {
+      sessionId: row.sessionId,
+      userId: row.userId,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at
+    }
+  )
 }
 
 export type SessionServiceDeps = { db: Db }
@@ -63,10 +91,12 @@ export type SessionService = {
     input: { email: string; password: string },
     currentToken?: string
   ): Promise<{ user: UserDto; token: string }>
-  /** The session for a valid, unexpired token of a non-deleted user, else undefined. */
-  resolve(token: string): Promise<ResolvedSession | undefined>
-  /** Pushes the session expiry to `slidingExpiry` (never past the absolute cap) and returns it. */
-  extend(sessionId: string, createdAt: Date): Promise<Date>
+  /**
+   * The user of a valid, unexpired token of a non-deleted user, else undefined. Slides the expiry
+   * (never past the absolute cap) when the session could gain a day; `isExtended` reports that the
+   * expiry moved, so the caller re-sends the cookie.
+   */
+  authenticate(token: string): Promise<{ userId: string; isExtended: boolean } | undefined>
   logout(token: string): Promise<void>
 }
 
@@ -96,39 +126,21 @@ export function createSessionService({ db }: SessionServiceDeps): SessionService
       return { user: toUserDto(row), token }
     },
 
-    async resolve(token) {
-      const row = await db
-        .selectFrom('session')
-        .innerJoin('app_user', 'app_user.id', 'session.user_id')
-        .select([
-          'session.id as sessionId',
-          'session.user_id as userId',
-          'session.expires_at',
-          'session.created_at'
-        ])
-        .where('session.token_hash', '=', hashSessionToken(token))
-        .where('session.expires_at', '>', new Date())
-        .where('session.created_at', '>', new Date(Date.now() - SESSION_MAX_AGE_MS))
-        .where('app_user.deleted_at', 'is', null)
-        .executeTakeFirst()
-      return (
-        row && {
-          sessionId: row.sessionId,
-          userId: row.userId,
-          expiresAt: row.expires_at,
-          createdAt: row.created_at
-        }
-      )
-    },
-
-    async extend(sessionId, createdAt) {
-      const expiresAt = slidingExpiry(createdAt)
-      await db
-        .updateTable('session')
-        .set({ expires_at: expiresAt })
-        .where('id', '=', sessionId)
-        .execute()
-      return expiresAt
+    async authenticate(token) {
+      const session = await resolveSession(db, token)
+      if (!session) return undefined
+      const expiresAt = slidingExpiry(session.createdAt)
+      // Extend only once the session could gain a day, so it is written at most daily. Near the
+      // absolute cap the target stops moving, so it stops being written too.
+      const isExtended = expiresAt.getTime() - session.expiresAt.getTime() > DAY_MS
+      if (isExtended) {
+        await db
+          .updateTable('session')
+          .set({ expires_at: expiresAt })
+          .where('id', '=', session.sessionId)
+          .execute()
+      }
+      return { userId: session.userId, isExtended }
     },
 
     async logout(token) {

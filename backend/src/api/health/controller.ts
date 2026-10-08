@@ -1,18 +1,14 @@
-import type { RequestHandler } from 'express'
 import { servicesOf } from '../../context.js'
 import { ERROR_MESSAGE, serviceUnavailable } from '../../lib/error.js'
-import type { ParamsDictionary, Query } from '../../middleware/validate.js'
+import type { Handler } from '../../middleware/validate.js'
 
 /** Liveness: checks no dependency, so a database outage fails readiness and never liveness. */
-export const live: RequestHandler<ParamsDictionary, unknown, unknown, Query> = (_req, res) => {
+export const live: Handler = (_req, res) => {
   res.json({ status: 'ok' })
 }
 
 /** Readiness: 503 `db_unavailable` while the database does not answer. */
-export const ready: RequestHandler<ParamsDictionary, unknown, unknown, Query> = async (
-  req,
-  res
-) => {
+export const ready: Handler = async (req, res) => {
   // Resolved outside the try: only a failed ping means "not ready".
   const { health } = servicesOf(req)
   try {

@@ -7,6 +7,7 @@ import type { UserLimiters } from './lib/rate-limit.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import type { HealthService } from './api/health/index.js'
 import type { TopicService } from './api/topic/index.js'
+import type { SessionService, UserService } from './api/user/index.js'
 import type { AiService } from './services/ai/index.js'
 
 /** The Postgres-backed rate limiters, built once per app. */
@@ -16,7 +17,9 @@ export type Limiters = UserLimiters
 export type Services = {
   ai: AiService
   health: HealthService
+  session: SessionService
   topic: TopicService
+  user: UserService
 }
 
 /** Everything a request handler depends on, built once per app by `createApp`. */

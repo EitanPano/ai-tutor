@@ -17,9 +17,15 @@ import { createProgressModule } from './api/progress/index.js'
 import { createQuizModule } from './api/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './api/thread/index.js'
 import { createTopicService, topicRouter, type TopicApi } from './api/topic/index.js'
-import { createUserModule } from './api/user/index.js'
+import {
+  createSessionService,
+  createUserService,
+  userRouter,
+  warmDummyHash
+} from './api/user/index.js'
 import { createAiService, type AiApi } from './services/ai/index.js'
 import { attachContext, type Limiters } from './context.js'
+import { requireSession } from './middleware/auth.js'
 import { errorMiddleware, notFoundHandler } from './middleware/error.js'
 import { originCheck } from './middleware/origin-check.js'
 import { requestId } from './middleware/request-id.js'
@@ -88,7 +94,7 @@ export function createApp({
   app.use(cookieParser())
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
-  // Built once per app: the module and the context share the same limiters and provider.
+  // Built once per app; the modules and the context share the same provider.
   const limiters: Limiters = {
     login: createLoginLimiter(pool),
     loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
@@ -96,7 +102,10 @@ export function createApp({
   }
   const provider = tutor ?? createTutorProvider(config)
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
-  const user = createUserModule({ db, config, limiters })
+  const session = createSessionService({ db })
+  // Computed at startup so the first unknown-email login is not ~2x slower.
+  warmDummyHash()
+  const user = createUserService({ db })
   const topic = createTopicService({ db })
   const ai = createAiService({ db, config, logger })
   const thread = createThreadModule({
@@ -104,14 +113,14 @@ export function createApp({
     tutor: provider,
     logger,
     inFlight,
-    requireSession: user.requireSession,
+    requireSession,
     topic,
     ai
   })
   const guide = createGuideModule({
     db,
     tutor: provider,
-    requireSession: user.requireSession,
+    requireSession,
     topic,
     ai,
     thread: thread.api
@@ -119,12 +128,12 @@ export function createApp({
   const quiz = createQuizModule({
     db,
     tutor: provider,
-    requireSession: user.requireSession,
+    requireSession,
     topic,
     ai,
     thread: thread.api
   })
-  const progress = createProgressModule({ db, requireSession: user.requireSession })
+  const progress = createProgressModule({ db, requireSession })
   const health = createHealthService({ db })
   // Before any router: route handlers read their dependencies per request through ctxOf(req).
   attachContext(app, {
@@ -134,11 +143,11 @@ export function createApp({
     tutor: provider,
     inFlight,
     limiters,
-    services: { ai, health, topic }
+    services: { ai, health, session, topic, user }
   })
   for (const router of [
     healthRouter,
-    user.router,
+    userRouter,
     topicRouter,
     thread.router,
     guide.router,

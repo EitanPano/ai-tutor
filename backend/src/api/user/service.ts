@@ -5,7 +5,7 @@ import { hashPassword } from '../../lib/password.js'
 import { normaliseTimeZone } from '../../lib/time-zone.js'
 import { requireFound, type Auth } from '../../lib/ownership.js'
 import { startSession } from './session.service.js'
-import { toUserDto, type UserDto } from './user.dto.js'
+import { toUserDto, type UserDto } from './dto.js'
 
 /** A time-zone change moves the daily AI budget window, so it is limited to one per this window. */
 export const TIME_ZONE_CHANGE_WINDOW_HOURS = 24

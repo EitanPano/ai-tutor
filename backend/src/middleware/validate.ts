@@ -11,6 +11,9 @@ export type Query = Request['query']
  */
 export type Middleware = RequestHandler<ParamsDictionary, unknown, unknown, unknown>
 
+/** The type of every controller handler: a `RequestHandler` whose response body is `unknown`. */
+export type Handler<P = ParamsDictionary, B = unknown, Q = Query> = RequestHandler<P, unknown, B, Q>
+
 export type ValidateSpec = { params?: z.ZodType; query?: z.ZodType; body?: z.ZodType }
 
 export type InferParams<S extends ValidateSpec> = S extends { params: infer P extends z.ZodType }
