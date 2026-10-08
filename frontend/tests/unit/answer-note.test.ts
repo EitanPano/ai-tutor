@@ -26,6 +26,18 @@ describe('noteFor', () => {
     expect(noteFor({ status, stopReason })).toBe(note)
   })
 
+  it.each([
+    ['failed', 'toString', FAILED_NOTE],
+    ['failed', 'fallback', FAILED_NOTE],
+    ['incomplete', 'constructor', null],
+    ['incomplete', '__proto__', null],
+    ['toString', null, null],
+    ['constructor', 'aborted', null]
+  ])('never reads the off-contract pair %s / %s as a prototype key', (status, stopReason, note) => {
+    const off = { status, stopReason } as unknown as Pick<Message, 'status' | 'stopReason'>
+    expect(noteFor(off)).toBe(note)
+  })
+
   it('says a failed answer failed', () => {
     expect(FAILED_NOTE).toBe('This answer failed.')
   })

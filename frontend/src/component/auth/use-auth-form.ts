@@ -2,13 +2,21 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { describeError, fieldIssues, isApiError, type ApiError } from '@/lib/api/error'
+import {
+  describeError,
+  fieldIssues,
+  isApiError,
+  isKnownCode,
+  type ApiError,
+  type KnownCode
+} from '@/lib/api/error'
 import { SESSION_KEY } from '@/lib/session'
 
 /** Field name to the message shown under that field. */
 export type FieldIssues = Record<string, string>
 
-type ErrorHandlers = Record<string, (err: ApiError) => void>
+/** Keyed by known code only, so a misspelt code fails to compile instead of never matching. */
+type ErrorHandlers = Partial<Record<KnownCode, (err: ApiError) => void>>
 
 type AuthFormOptions<Input> = {
   /** Logs in or signs up; resolves once the server has set the session cookie. */
@@ -40,8 +48,11 @@ export function useAuthForm<Input>({ send, nextPath, onErrorCode }: AuthFormOpti
         validation_failed: (failure) => setIssues(fieldIssues(failure)),
         ...onErrorCode
       }
-      // `hasOwn`: the code comes off the wire and must never match a prototype key.
-      if (isApiError(err) && Object.hasOwn(handlers, err.code)) return handlers[err.code](err)
+      // `isKnownCode` checks with `hasOwn`: a code off the wire must never match a prototype key.
+      if (isApiError(err) && isKnownCode(err.code)) {
+        const handle = handlers[err.code]
+        if (handle) return handle(err)
+      }
       toast.error(describeError(err))
     }
   })

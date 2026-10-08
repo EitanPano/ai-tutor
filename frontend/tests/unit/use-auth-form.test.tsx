@@ -16,8 +16,9 @@ afterEach(() => {
 })
 
 type Input = { email: string }
+type Options = Parameters<typeof useAuthForm<Input>>[0]
 
-function setup(send: (input: Input) => Promise<unknown>, onErrorCode = {}) {
+function setup(send: Options['send'], onErrorCode: Options['onErrorCode'] = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const invalidate = vi.spyOn(client, 'invalidateQueries')
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -90,5 +91,16 @@ describe('useAuthForm', () => {
     act(() => result.current.submit({}, { email: 'a@b.co' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(sentence))
+  })
+
+  it('takes handlers only for codes the API is known to send', () => {
+    const options: Options = {
+      send: vi.fn(),
+      nextPath: '/thread',
+      // @ts-expect-error: a misspelt code must not compile, or it would silently never match.
+      onErrorCode: { invalid_credential: vi.fn() }
+    }
+
+    expect(options.onErrorCode).toHaveProperty('invalid_credential')
   })
 })

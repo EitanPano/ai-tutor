@@ -51,11 +51,12 @@ const MESSAGE_BY_CODE = {
   stream_interrupted: 'The answer stopped unexpectedly. Retry to ask again.'
 } satisfies Record<string, string>
 
-type KnownCode = keyof typeof MESSAGE_BY_CODE
+/** A code this module has a sentence for: the codes the API is known to send. */
+export type KnownCode = keyof typeof MESSAGE_BY_CODE
 
 // `hasOwn`, not `in` or a plain index: the code comes off the wire and must never match a
 // prototype key such as `constructor`.
-const isKnownCode = (code: string): code is KnownCode => Object.hasOwn(MESSAGE_BY_CODE, code)
+export const isKnownCode = (code: string): code is KnownCode => Object.hasOwn(MESSAGE_BY_CODE, code)
 
 /** The sentence for a known code, for a component that states it without an error at hand. */
 export const messageFor = (code: KnownCode): string => MESSAGE_BY_CODE[code]

@@ -6,7 +6,7 @@ import { Button } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
 import { TextField } from '@/component/ui/text-field'
 import { signUp } from '@/lib/api/user'
-import { DEFAULT_PATH } from '@/lib/route'
+import { DEFAULT_PATH, LOGIN_PATH } from '@/lib/route'
 import { useAuthForm, type FieldIssues } from './use-auth-form'
 
 const FALLBACK_TIME_ZONE = 'UTC'
@@ -61,7 +61,7 @@ export function SignupForm() {
             emailTaken ? (
               <>
                 An account with this email already exists.{' '}
-                <Link href="/login" className="font-semibold underline underline-offset-2">
+                <Link href={LOGIN_PATH} className="font-semibold underline underline-offset-2">
                   Log in
                 </Link>
               </>
@@ -94,7 +94,7 @@ export function SignupForm() {
       </form>
       <p className="text-sm text-ink-muted">
         Already have an account?{' '}
-        <Link href="/login" className="font-semibold underline underline-offset-2">
+        <Link href={LOGIN_PATH} className="font-semibold underline underline-offset-2">
           Log in
         </Link>
       </p>
