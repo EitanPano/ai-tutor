@@ -1,9 +1,9 @@
 import type { Db } from '../../lib/db/index.js'
 import { fieldInvalid } from '../../lib/error.js'
 
-export type TopicDto = { id: string; name: string }
+type TopicDto = { id: string; name: string }
 
-export type TopicServiceDeps = { db: Db }
+type TopicServiceDeps = { db: Db }
 
 export type TopicService = {
   /** Reference data, not tenant data: no ownership scoping. */

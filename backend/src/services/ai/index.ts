@@ -1,5 +1,3 @@
 export { createAiService } from './service.js'
-export type { AiApi, AiService, AiServiceDeps } from './service.js'
-export type { AiCall } from './budget.js'
-export type { GenerateOptions } from './generate-validated.js'
+export type { AiApi, AiService } from './service.js'
 export type { GenerationLockToken } from './generation-lock.js'

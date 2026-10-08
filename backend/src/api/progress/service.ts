@@ -36,7 +36,7 @@ export type ProgressDto = {
 
 const RECENT_LIMIT = 10
 
-export type ProgressServiceDeps = { db: Db }
+type ProgressServiceDeps = { db: Db }
 
 export type ProgressService = {
   /**

@@ -13,7 +13,7 @@ import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { TopicApi } from '../topic/index.js'
 
 /** A thread holds at most 25 non-failed messages (ledger ruling 14). */
-export const MAX_THREAD_MESSAGES = 25
+const MAX_THREAD_MESSAGES = 25
 const MAX_TITLE_CHARS = 80
 
 export type AskContext = {
@@ -55,7 +55,7 @@ export type ExplainOptions = {
  * Over 80 characters it is cut at the last word boundary within 79 characters and gets an
  * ellipsis (a single long word is cut hard). The default title when no such line exists.
  */
-export function titleFrom(content: string): string {
+function titleFrom(content: string): string {
   const line = content
     .split(/\r?\n/)
     .map((raw) => raw.replace(/\s+/g, ' ').trim())
@@ -92,7 +92,7 @@ async function markTurnFailed(
   }
 }
 
-export type MessageServiceDeps = {
+type MessageServiceDeps = {
   db: Db
   tutor: TutorProvider
   topic: TopicApi

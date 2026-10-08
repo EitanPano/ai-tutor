@@ -14,7 +14,7 @@ import {
   type GenerationLockToken
 } from './generation-lock.js'
 
-export type AiServiceDeps = {
+type AiServiceDeps = {
   db: Db
   config: Pick<Config, 'isAiEnabled' | 'aiDailyTokenBudget' | 'aiGlobalDailyTokenBudget'>
   logger: Pick<Logger, 'error'>

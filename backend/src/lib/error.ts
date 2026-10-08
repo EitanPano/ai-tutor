@@ -26,7 +26,7 @@ export const ERROR_MESSAGE = {
   ai_unavailable: 'AI features are temporarily unavailable.'
 } as const
 
-export const badRequest = (code: string, message: string, details?: Details) =>
+const badRequest = (code: string, message: string, details?: Details) =>
   new AppError(400, code, message, details)
 /**
  * 400 `validation_failed` for one field a service rejects after the schema passed, in the shape

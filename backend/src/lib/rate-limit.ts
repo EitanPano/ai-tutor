@@ -5,8 +5,8 @@ import type pg from 'pg'
 import { RateLimiterPostgres, RateLimiterRes } from 'rate-limiter-flexible'
 import { tooManyRequests } from './error.js'
 
-export const LOGIN_POINTS = 5
-export const LOGIN_DURATION_SECONDS = 60
+const LOGIN_POINTS = 5
+const LOGIN_DURATION_SECONDS = 60
 
 /**
  * Postgres-backed login limiter: 5 attempts per minute per ip + email.

@@ -8,7 +8,7 @@ import { isThreadLive, ownedBy, requireFound, type Auth } from '../../lib/owners
 import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
-export type GuideServiceDeps = {
+type GuideServiceDeps = {
   db: Db
   tutor: TutorProvider
   topic: TopicApi
@@ -28,7 +28,7 @@ export type StepDto = {
   doneAt: string | null
 }
 
-export type GuideDto = {
+type GuideDto = {
   id: string
   threadId: string
   topicId: string

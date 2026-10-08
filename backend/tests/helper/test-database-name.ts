@@ -6,7 +6,7 @@ import path from 'node:path'
 // databases. frontend/tests/e2e/e2e-env.ts applies the same rule; keep the two in step.
 
 /** The checkout root: this file is `<root>/backend/tests/helper/`. */
-export const CHECKOUT_ROOT = path.resolve(import.meta.dirname, '../../..')
+const CHECKOUT_ROOT = path.resolve(import.meta.dirname, '../../..')
 
 export function checkoutSuffix(root: string = CHECKOUT_ROOT): string {
   return createHash('sha256').update(root).digest('hex').slice(0, 8)

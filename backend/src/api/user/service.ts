@@ -8,7 +8,7 @@ import { startSession } from './session.service.js'
 import { toUserDto, type UserDto } from './dto.js'
 
 /** A time-zone change moves the daily AI budget window, so it is limited to one per this window. */
-export const TIME_ZONE_CHANGE_WINDOW_HOURS = 24
+const TIME_ZONE_CHANGE_WINDOW_HOURS = 24
 
 export type CreateUserInput = {
   email: string
@@ -38,7 +38,7 @@ async function getUser(db: Db, auth: Auth): Promise<UserDto> {
   return toUserDto(requireFound(row))
 }
 
-export type UserServiceDeps = { db: Db }
+type UserServiceDeps = { db: Db }
 
 export type UserService = {
   /** Creates the user and their first session in one transaction. */

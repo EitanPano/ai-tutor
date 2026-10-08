@@ -1,4 +1,4 @@
-import type { ColumnType, Generated, Insertable, Selectable, Updateable } from 'kysely'
+import type { ColumnType, Generated, Selectable } from 'kysely'
 
 /** Kysely types mirror the database (snake_case). Later tasks add tables here. */
 type CreatedAt = ColumnType<Date, Date | string | undefined, never>
@@ -159,13 +159,8 @@ export interface Database {
 }
 
 export type AppUserRow = Selectable<AppUserTable>
-export type NewAppUser = Insertable<AppUserTable>
-export type AppUserUpdate = Updateable<AppUserTable>
-export type SessionRow = Selectable<SessionTable>
-export type ThreadRow = Selectable<ThreadTable>
 export type MessageRow = Selectable<MessageTable>
 export type GuideRow = Selectable<GuideTable>
 export type GuideStepRow = Selectable<GuideStepTable>
-export type NewAiCall = Insertable<AiCallTable>
 export type QuizRow = Selectable<QuizTable>
 export type QuizAttemptRow = Selectable<QuizAttemptTable>

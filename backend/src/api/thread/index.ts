@@ -1,5 +1,5 @@
 export { default as threadRouter } from './route.js'
 export { createThreadService } from './service.js'
 export { createMessageService } from './message.service.js'
-export type { ThreadApi, ThreadService, ThreadSummary } from './service.js'
+export type { ThreadApi, ThreadService } from './service.js'
 export type { MessageService } from './message.service.js'

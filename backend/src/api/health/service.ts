@@ -1,7 +1,7 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 
-export type HealthServiceDeps = { db: Db }
+type HealthServiceDeps = { db: Db }
 
 export type HealthService = {
   /** Resolves once the database answers `SELECT 1`; rejects with the driver's error otherwise. */

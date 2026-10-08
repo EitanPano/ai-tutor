@@ -82,7 +82,7 @@ async function resolveSession(db: Db, token: string): Promise<ResolvedSession | 
   )
 }
 
-export type SessionServiceDeps = { db: Db }
+type SessionServiceDeps = { db: Db }
 
 export type SessionService = {
   /** Verifies credentials, rotates the session, and returns the user with a fresh token. */

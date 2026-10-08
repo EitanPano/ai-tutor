@@ -1,6 +1,5 @@
 export { default as userRouter } from './route.js'
 export { createUserService } from './service.js'
 export { createSessionService, warmDummyHash } from './session.service.js'
-export type { UserDto } from './dto.js'
 export type { UserService } from './service.js'
 export type { SessionService } from './session.service.js'

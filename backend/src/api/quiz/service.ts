@@ -10,7 +10,7 @@ import type { TopicApi } from '../topic/index.js'
 
 const DEFAULT_DIFFICULTY: QuizDifficulty = 'medium'
 
-export type QuizServiceDeps = {
+type QuizServiceDeps = {
   db: Db
   tutor: TutorProvider
   topic: TopicApi
@@ -24,14 +24,14 @@ export type CreateQuizInput =
   | { topicId: string; difficulty: QuizDifficulty }
 
 /** The taker view of an item. Has no `answerIndex` and no `explanation`, by construction. */
-export type QuizItemDto = {
+type QuizItemDto = {
   id: string
   position: number
   prompt: string
   choices: string[]
 }
 
-export type AttemptSummaryDto = {
+type AttemptSummaryDto = {
   id: string
   score: number
   total: number
@@ -39,7 +39,7 @@ export type AttemptSummaryDto = {
 }
 
 /** The taker view of a quiz (AC07): built only from `TAKER_ITEM_COLUMNS`. */
-export type QuizDto = {
+type QuizDto = {
   id: string
   threadId: string | null
   topicId: string

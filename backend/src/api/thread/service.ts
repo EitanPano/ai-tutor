@@ -9,9 +9,9 @@ import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { AiApi } from '../../services/ai/index.js'
 import type { TopicApi } from '../topic/index.js'
 
-export const DEFAULT_TOPIC_ID = 'other'
+const DEFAULT_TOPIC_ID = 'other'
 export const DEFAULT_TITLE = 'New thread'
-export const DEFAULT_PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 20
 
 export type ThreadDto = {
   id: string
@@ -164,9 +164,9 @@ async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<Tutor
 }
 
 /** A live thread owned by the user, as other modules see it. */
-export type ThreadSummary = { id: string; topicId: string; title: string; messageCount: number }
+type ThreadSummary = { id: string; topicId: string; title: string; messageCount: number }
 
-export type ThreadServiceDeps = { db: Db; topic: TopicApi; ai: AiApi }
+type ThreadServiceDeps = { db: Db; topic: TopicApi; ai: AiApi }
 
 export type ThreadService = {
   list(

@@ -22,8 +22,8 @@ import {
   type TutorUsage
 } from './tutor.js'
 
-export const MAX_OUTPUT_TOKENS = 2048
-export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
+const MAX_OUTPUT_TOKENS = 2048
+const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
 /**
  * Bounds the wait for response headers per attempt (the SDK clears its timer once `fetch`
  * resolves, so it does not cover a streamed body), and default SDK retries. The generation lock
@@ -32,7 +32,7 @@ export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
 export const PROVIDER_TIMEOUT_MS = 60_000
 export const PROVIDER_MAX_RETRIES = 2
 /** The explain stream fails after this long without any stream event. */
-export const EXPLAIN_IDLE_TIMEOUT_MS = 45_000
+const EXPLAIN_IDLE_TIMEOUT_MS = 45_000
 /** The explain call fails after this long in total, SDK retries included. */
 export const EXPLAIN_TOTAL_TIMEOUT_MS = 180_000
 const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
