@@ -22,43 +22,43 @@ describe('generation lock', () => {
   it('is exclusive and released by its own token', async () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
-    const token = await ctx.modules.ai.acquireLock(auth)
-    await expect(ctx.modules.ai.acquireLock(auth)).rejects.toMatchObject({
+    const token = await ctx.services.ai.acquireLock(auth)
+    await expect(ctx.services.ai.acquireLock(auth)).rejects.toMatchObject({
       status: 409,
       code: 'generation_in_progress'
     })
-    await ctx.modules.ai.releaseLock(auth, token)
+    await ctx.services.ai.releaseLock(auth, token)
     expect(await lockOf(user.id)).toBeNull()
-    await expect(ctx.modules.ai.acquireLock(auth)).resolves.toEqual(expect.any(String))
+    await expect(ctx.services.ai.acquireLock(auth)).resolves.toEqual(expect.any(String))
   })
 
   it('does not let a taken-over generation release the new holder lock', async () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
-    const stale = await ctx.modules.ai.acquireLock(auth)
+    const stale = await ctx.services.ai.acquireLock(auth)
     await sql`UPDATE app_user SET generation_started_at = now() - interval '11 minutes'`.execute(
       ctx.db
     )
-    const current = await ctx.modules.ai.acquireLock(auth)
+    const current = await ctx.services.ai.acquireLock(auth)
     expect(current).not.toBe(stale)
 
     // The late release of the first (taken over) generation is a no-op.
-    await ctx.modules.ai.releaseLock(auth, stale)
+    await ctx.services.ai.releaseLock(auth, stale)
     expect(await lockOf(user.id)).not.toBeNull()
-    await expect(ctx.modules.ai.acquireLock(auth)).rejects.toMatchObject({ status: 409 })
+    await expect(ctx.services.ai.acquireLock(auth)).rejects.toMatchObject({ status: 409 })
 
-    await ctx.modules.ai.releaseLock(auth, current)
+    await ctx.services.ai.releaseLock(auth, current)
     expect(await lockOf(user.id)).toBeNull()
   })
 
   it('never touches another user lock', async () => {
     const a = await signUp(client)
     const b = await signUp(client)
-    const tokenA = await ctx.modules.ai.acquireLock({ userId: a.user.id })
-    const tokenB = await ctx.modules.ai.acquireLock({ userId: b.user.id })
-    await ctx.modules.ai.releaseLock({ userId: b.user.id }, tokenA)
+    const tokenA = await ctx.services.ai.acquireLock({ userId: a.user.id })
+    const tokenB = await ctx.services.ai.acquireLock({ userId: b.user.id })
+    await ctx.services.ai.releaseLock({ userId: b.user.id }, tokenA)
     expect(await lockOf(b.user.id)).not.toBeNull()
-    await ctx.modules.ai.releaseLock({ userId: b.user.id }, tokenB)
+    await ctx.services.ai.releaseLock({ userId: b.user.id }, tokenB)
     expect(await lockOf(b.user.id)).toBeNull()
     expect(await lockOf(a.user.id)).not.toBeNull()
   })

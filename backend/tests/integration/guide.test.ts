@@ -10,9 +10,9 @@ const client = createClient(ctx.app, ctx.config)
 const guideService = createGuideService({
   db: ctx.db,
   tutor: ctx.tutor,
-  topic: ctx.modules.topic,
-  ai: ctx.modules.ai,
-  thread: ctx.modules.thread
+  topic: ctx.services.topic,
+  ai: ctx.services.ai,
+  thread: ctx.services.thread
 })
 
 type StepBody = {

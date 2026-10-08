@@ -26,7 +26,7 @@ const flaky = new Proxy(db, {
   }
 })
 
-const { app, modules } = createApp({
+const { app, ctx, recoverAtBoot } = createApp({
   config,
   db: flaky,
   pool,
@@ -45,9 +45,9 @@ afterAll(() => db.destroy())
 describe('recoverAtBoot', () => {
   it('still releases every lock when the turn sweep fails, and rethrows the failure', async () => {
     const { user } = await signUp(client)
-    await modules.ai.acquireLock({ userId: user.id })
+    await ctx.services.ai.acquireLock({ userId: user.id })
     sweep.fail = true
-    await expect(modules.recoverAtBoot()).rejects.toThrow('sweep failed')
+    await expect(recoverAtBoot()).rejects.toThrow('sweep failed')
     const row = await db
       .selectFrom('app_user')
       .select('generation_started_at')

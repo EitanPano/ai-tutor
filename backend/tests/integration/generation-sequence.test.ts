@@ -92,9 +92,9 @@ describe('AiApi.withGenerationLock', () => {
   it('holds the lock while fn runs and releases it after', async () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
-    const result = await ctx.modules.ai.withGenerationLock(auth, async () => {
+    const result = await ctx.services.ai.withGenerationLock(auth, async () => {
       expect(await lockOf(user.id)).not.toBeNull()
-      await expect(ctx.modules.ai.acquireLock(auth)).rejects.toMatchObject({ status: 409 })
+      await expect(ctx.services.ai.acquireLock(auth)).rejects.toMatchObject({ status: 409 })
       return 'done'
     })
     expect(result).toBe('done')
@@ -105,40 +105,42 @@ describe('AiApi.withGenerationLock', () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
     await expect(
-      ctx.modules.ai.withGenerationLock(auth, () => Promise.reject(new Error('boom')))
+      ctx.services.ai.withGenerationLock(auth, () => Promise.reject(new Error('boom')))
     ).rejects.toThrow('boom')
     expect(await lockOf(user.id)).toBeNull()
-    await expect(ctx.modules.ai.withGenerationLock(auth, () => Promise.resolve(1))).resolves.toBe(1)
+    await expect(ctx.services.ai.withGenerationLock(auth, () => Promise.resolve(1))).resolves.toBe(
+      1
+    )
   })
 
   it('checks the budget before the lock and never runs fn when over budget', async () => {
     const session = await signUp(client)
     const auth = { userId: session.user.id }
     await exhaustBudget(session)
-    const held = await ctx.modules.ai.acquireLock(auth)
+    const held = await ctx.services.ai.acquireLock(auth)
     let ran = false
     await expect(
-      ctx.modules.ai.withGenerationLock(auth, () => {
+      ctx.services.ai.withGenerationLock(auth, () => {
         ran = true
         return Promise.resolve()
       })
     ).rejects.toMatchObject({ status: 429, code: 'ai_budget_exceeded' })
     expect(ran).toBe(false)
-    await ctx.modules.ai.releaseLock(auth, held)
+    await ctx.services.ai.releaseLock(auth, held)
   })
 
   it('answers 409 while another generation holds the lock', async () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
-    const held = await ctx.modules.ai.acquireLock(auth)
+    const held = await ctx.services.ai.acquireLock(auth)
     await expect(
-      ctx.modules.ai.withGenerationLock(auth, () => Promise.resolve(1))
+      ctx.services.ai.withGenerationLock(auth, () => Promise.resolve(1))
     ).rejects.toMatchObject({
       status: 409,
       code: 'generation_in_progress'
     })
     expect(await lockOf(user.id)).not.toBeNull()
-    await ctx.modules.ai.releaseLock(auth, held)
+    await ctx.services.ai.releaseLock(auth, held)
   })
 })
 
@@ -146,7 +148,7 @@ describe('AiApi.recordCall', () => {
   it('maps the domain shape to the ai_call columns, clamping the latency', async () => {
     const { user } = await signUp(client)
     const auth = { userId: user.id }
-    await ctx.modules.ai.recordCall(auth, {
+    await ctx.services.ai.recordCall(auth, {
       kind: 'guide',
       model: 'm-1',
       usage: { inputTokens: 11, outputTokens: 22, cacheReadTokens: 33, cacheCreationTokens: 44 },
@@ -154,7 +156,7 @@ describe('AiApi.recordCall', () => {
       refusalCategory: null,
       latencyMs: 12.6
     })
-    await ctx.modules.ai.recordCall(auth, {
+    await ctx.services.ai.recordCall(auth, {
       kind: 'explain',
       model: 'm-2',
       usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheCreationTokens: 4 },

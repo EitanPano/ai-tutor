@@ -863,14 +863,14 @@ describe('recovery of turns left in flight (I2)', () => {
       .where('role', '=', 'assistant')
       .executeTakeFirstOrThrow()
     expect(row.status).toBe('incomplete')
-    expect((await ctx.modules.recoverAtBoot()).turns).toBe(1)
+    expect((await ctx.recoverAtBoot()).turns).toBe(1)
   })
 
   it('recovers a seconds-old turn and a held lock at boot, and the user can ask again', async () => {
     const { session, threadId } = await setup()
     await insertOrphanTurn(session.user.id, threadId, 5 / 60)
     expect(await lockOf(session.user.id)).not.toBeNull()
-    expect(await ctx.modules.recoverAtBoot()).toMatchObject({ turns: 1 })
+    expect(await ctx.recoverAtBoot()).toMatchObject({ turns: 1 })
     expect(await lockOf(session.user.id)).toBeNull()
     const { messages } = await detail(session.cookie, threadId)
     expect(messages.map((m) => [m.role, m.status])).toEqual([

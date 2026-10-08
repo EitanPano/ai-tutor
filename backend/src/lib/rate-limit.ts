@@ -44,16 +44,6 @@ function createLimiter(
   })
 }
 
-/** The limiters the user module consumes. */
-export type UserLimiters = {
-  /** 5 per minute per ip + email. */
-  login: RateLimiterPostgres
-  /** Login attempts per IP. */
-  loginIp: RateLimiterPostgres
-  /** Sign-ups per IP. */
-  signup: RateLimiterPostgres
-}
-
 /**
  * Consumes one point. On exhaustion sets `Retry-After` and throws 429 `rate_limited`.
  * Any other failure (a database error) propagates unchanged.

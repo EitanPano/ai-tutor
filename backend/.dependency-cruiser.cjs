@@ -25,13 +25,6 @@ module.exports = {
       to: { path: '^src/', pathNot: '^src/lib/' }
     },
     {
-      name: 'http-is-leaf',
-      comment: 'http/ holds shared Express helpers: it imports only lib/ and http/.',
-      severity: 'error',
-      from: { path: '^src/http/' },
-      to: { path: '^src/', pathNot: '^src/(lib|http)/' }
-    },
-    {
       name: 'middleware-values-from-lib-or-context',
       comment:
         'Middleware imports values only from middleware/, lib/ and context.ts; anything else it reads per request through ctxOf(req).',
@@ -76,22 +69,22 @@ module.exports = {
     {
       name: 'module-values-own-or-infra',
       comment:
-        'A module may import values only from itself and the infrastructure (src/lib, src/http, src/middleware, src/context.ts); other modules are reached through injected APIs.',
+        'A module may import values only from itself and the infrastructure (src/lib, src/middleware, src/context.ts); other modules are reached through injected APIs.',
       severity: 'error',
       from: { path: MODULE },
       to: {
         path: '^src/',
-        pathNot: [OWN, '^src/(lib|http|middleware)/', '^src/context[.]ts$'],
+        pathNot: [OWN, '^src/(lib|middleware)/', '^src/context[.]ts$'],
         dependencyTypesNot: ['type-only']
       }
     },
     {
-      name: 'services-have-no-http',
+      name: 'services-have-no-middleware',
       comment:
-        'A service under src/services/ has no HTTP: it imports no values from middleware/ or http/.',
+        'A service under src/services/ has no HTTP layer: it imports no values from middleware/.',
       severity: 'error',
       from: { path: '^src/services/' },
-      to: { path: '^src/(middleware|http)/', dependencyTypesNot: ['type-only'] }
+      to: { path: '^src/middleware/', dependencyTypesNot: ['type-only'] }
     },
     {
       name: 'outside-uses-public-api',

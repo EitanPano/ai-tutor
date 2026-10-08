@@ -18,7 +18,7 @@ describe('kill-switch backstop', () => {
     const { user } = await signUp(client)
     let ran = false
     await expect(
-      off.modules.ai.withGenerationLock({ userId: user.id }, () => {
+      off.services.ai.withGenerationLock({ userId: user.id }, () => {
         ran = true
         return Promise.resolve()
       })
@@ -33,7 +33,7 @@ describe('kill-switch backstop', () => {
   })
 
   it('the explain path answers 503 ai_unavailable with AI off, before touching the database', async () => {
-    const ai: AiApi = off.modules.ai
+    const ai: AiApi = off.services.ai
     const message = createMessageService({
       db: {} as Db,
       tutor: {} as never,

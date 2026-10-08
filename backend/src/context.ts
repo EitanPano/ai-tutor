@@ -1,9 +1,9 @@
 import type { Express, Request } from 'express'
+import type { RateLimiterPostgres } from 'rate-limiter-flexible'
 import type { Config } from './lib/config.js'
 import type { Db } from './lib/db/index.js'
 import type { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
-import type { UserLimiters } from './lib/rate-limit.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import type { GuideService } from './api/guide/index.js'
 import type { HealthService } from './api/health/index.js'
@@ -15,7 +15,14 @@ import type { SessionService, UserService } from './api/user/index.js'
 import type { AiService } from './services/ai/index.js'
 
 /** The Postgres-backed rate limiters, built once per app. */
-export type Limiters = UserLimiters
+export type Limiters = {
+  /** 5 per minute per ip + email. */
+  login: RateLimiterPostgres
+  /** Login attempts per IP. */
+  loginIp: RateLimiterPostgres
+  /** Sign-ups per IP. */
+  signup: RateLimiterPostgres
+}
 
 /** The services `createApp` builds, by name; controllers read them through `servicesOf(req)`. */
 export type Services = {

@@ -15,21 +15,16 @@ import { createGuideService, guideRouter } from './api/guide/index.js'
 import { createHealthService, healthRouter } from './api/health/index.js'
 import { createProgressService, progressRouter } from './api/progress/index.js'
 import { createQuizService, quizRouter } from './api/quiz/index.js'
-import {
-  createMessageService,
-  createThreadService,
-  threadRouter,
-  type ThreadApi
-} from './api/thread/index.js'
-import { createTopicService, topicRouter, type TopicApi } from './api/topic/index.js'
+import { createMessageService, createThreadService, threadRouter } from './api/thread/index.js'
+import { createTopicService, topicRouter } from './api/topic/index.js'
 import {
   createSessionService,
   createUserService,
   userRouter,
   warmDummyHash
 } from './api/user/index.js'
-import { createAiService, type AiApi } from './services/ai/index.js'
-import { attachContext, type Limiters } from './context.js'
+import { createAiService } from './services/ai/index.js'
+import { attachContext, type AppContext } from './context.js'
 import { errorMiddleware, notFoundHandler } from './middleware/error.js'
 import { originCheck } from './middleware/origin-check.js'
 import { requestId } from './middleware/request-id.js'
@@ -48,18 +43,12 @@ export type AppDeps = {
   inFlight?: InFlightRegistry
 }
 
-/** What index.ts and tests need besides HTTP: module APIs and the boot recovery. */
-export type AppModules = {
-  topic: TopicApi
-  ai: AiApi
-  thread: ThreadApi
-  /**
-   * Boot only, before the first request: fails every unfinished turn (whatever its age) and clears
-   * every generation lock. Assumes a single backend instance, so all of it belongs to a dead
-   * process. Turns first, then locks, so a freed user never meets their own orphan turn.
-   */
-  recoverAtBoot: () => Promise<{ turns: number; locks: number }>
-}
+/**
+ * Boot only, before the first request: fails every unfinished turn (whatever its age) and clears
+ * every generation lock. Assumes a single backend instance, so all of it belongs to a dead
+ * process. Turns first, then locks, so a freed user never meets their own orphan turn.
+ */
+export type RecoverAtBoot = () => Promise<{ turns: number; locks: number }>
 
 export function createApp({
   config,
@@ -69,7 +58,7 @@ export function createApp({
   tutor,
   extraRoutes,
   inFlight = new InFlightRegistry()
-}: AppDeps): { app: Express; modules: AppModules } {
+}: AppDeps): { app: Express; ctx: AppContext; recoverAtBoot: RecoverAtBoot } {
   const app = express()
   // An explicit hop count, never `true`: req.ip (and so the per-IP rate limits) must not be spoofable
   // through X-Forwarded-For, yet behind a proxy it must not collapse to the proxy's address.
@@ -98,36 +87,37 @@ export function createApp({
   app.use(cookieParser())
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
-  // Built once per app; the modules and the context share the same provider.
-  const limiters: Limiters = {
-    login: createLoginLimiter(pool),
-    loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
-    signup: createSignupLimiter(pool, config.signupRateLimit)
-  }
   const provider = tutor ?? createTutorProvider(config)
-  // Modules are built in dependency order: a module only receives the APIs of modules built before it.
+  // Health and progress stand alone: they need only the database.
+  const health = createHealthService({ db })
+  const progress = createProgressService({ db })
+  // The rest are built in dependency order: a service only receives the APIs of services built
+  // before it.
+  const user = createUserService({ db })
   const session = createSessionService({ db })
   // Computed at startup so the first unknown-email login is not ~2x slower.
   warmDummyHash()
-  const user = createUserService({ db })
   const topic = createTopicService({ db })
   const ai = createAiService({ db, config, logger })
   const thread = createThreadService({ db, topic, ai })
   const message = createMessageService({ db, tutor: provider, topic, ai, thread, logger })
   const guide = createGuideService({ db, tutor: provider, topic, ai, thread })
   const quiz = createQuizService({ db, tutor: provider, topic, ai, thread })
-  const progress = createProgressService({ db })
-  const health = createHealthService({ db })
-  // Before any router: route handlers read their dependencies per request through ctxOf(req).
-  attachContext(app, {
+  const ctx: AppContext = {
     config,
     db,
     logger,
     tutor: provider,
     inFlight,
-    limiters,
+    limiters: {
+      login: createLoginLimiter(pool),
+      loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
+      signup: createSignupLimiter(pool, config.signupRateLimit)
+    },
     services: { ai, guide, health, message, progress, quiz, session, thread, topic, user }
-  })
+  }
+  // Before any router: route handlers read their dependencies per request through ctxOf(req).
+  attachContext(app, ctx)
   for (const router of [
     healthRouter,
     userRouter,
@@ -144,22 +134,18 @@ export function createApp({
   app.use(errorMiddleware)
   return {
     app,
-    modules: {
-      topic,
-      ai,
-      thread,
-      recoverAtBoot: async () => {
-        // A failed sweep must not leave users locked out: release the locks anyway, then let the
-        // sweep's error propagate so index.ts logs it.
-        let turns: number
-        let locks: number
-        try {
-          turns = await thread.recoverStaleAtBoot()
-        } finally {
-          locks = await ai.releaseAllLocks()
-        }
-        return { turns, locks }
+    ctx,
+    recoverAtBoot: async () => {
+      // A failed sweep must not leave users locked out: release the locks anyway, then let the
+      // sweep's error propagate so index.ts logs it.
+      let turns: number
+      let locks: number
+      try {
+        turns = await thread.recoverStaleAtBoot()
+      } finally {
+        locks = await ai.releaseAllLocks()
       }
+      return { turns, locks }
     }
   }
 }

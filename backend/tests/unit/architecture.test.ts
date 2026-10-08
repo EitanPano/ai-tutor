@@ -31,9 +31,9 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 // named by its folder (OWNED is keyed by that name).
 const MODULE_ROOTS: readonly string[] = ['api', 'services']
 
-// Code outside the module roots that must write no table: it reaches data only through a module.
-// lib/ is not listed: it holds the infra writes (INFRA_TABLES) and the seed and migration tooling.
-const OUTSIDE_MODULES: readonly string[] = ['middleware', 'app.ts', 'context.ts', 'index.ts']
+// Infrastructure: it holds the infra writes (INFRA_TABLES) and the seed and migration tooling, so it
+// is the one entry of src/ besides the module roots that the outside-modules scan skips.
+const INFRA_ROOT = 'lib'
 
 // Kysely: `.insertInto('t')`, `.updateTable('t as x')`, `.mergeInto(`t`)`; any quote style, alias dropped.
 // Raw SQL: keywords match in any case and the table may be double-quoted. `FOR [NO KEY] UPDATE` and
@@ -67,6 +67,21 @@ function tsFiles(dir: string): string[] {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) return tsFiles(full)
     return entry.name.endsWith('.ts') ? [full] : []
+  })
+}
+
+/** The entry of src/ a file sits under: a top-level folder, or the file itself. */
+function topEntry(file: string): string {
+  const [top = ''] = path.relative(SRC, file).split(path.sep)
+  return top
+}
+
+// Code outside the module roots and lib/ must write no table: it reaches data only through a module.
+// Derived from src/ rather than listed, so a new top-level folder or file cannot go unscanned.
+function filesOutsideModules(): string[] {
+  return tsFiles(SRC).filter((file) => {
+    const top = topEntry(file)
+    return top !== INFRA_ROOT && !MODULE_ROOTS.includes(top)
   })
 }
 
@@ -157,16 +172,17 @@ describe('module write ownership', () => {
     expect(loose).toEqual([])
   })
 
-  it('keeps code outside the module roots from writing any table', () => {
-    const violations = OUTSIDE_MODULES.flatMap((entry) => {
-      const full = path.join(SRC, entry)
-      const files = entry.endsWith('.ts') ? [full] : tsFiles(full)
-      return files.flatMap((file) =>
-        scanWrites(readFileSync(file, 'utf8')).map(
-          (table) => `${path.relative(SRC, file)} writes table "${table}"`
-        )
+  it('keeps code outside the module roots and lib/ from writing any table', () => {
+    const files = filesOutsideModules()
+    // Not vacuous: the derived set reaches the wiring and the middleware.
+    expect(files.map(topEntry)).toEqual(
+      expect.arrayContaining(['app.ts', 'context.ts', 'middleware'])
+    )
+    const violations = files.flatMap((file) =>
+      scanWrites(readFileSync(file, 'utf8')).map(
+        (table) => `${path.relative(SRC, file)} writes table "${table}"`
       )
-    })
+    )
     expect(violations).toEqual([])
   })
 })
