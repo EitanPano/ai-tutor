@@ -118,14 +118,14 @@ describe('AiApi.withGenerationLock', () => {
     const auth = { userId: session.user.id }
     await exhaustBudget(session)
     const held = await ctx.services.ai.acquireLock(auth)
-    let ran = false
+    let didRun = false
     await expect(
       ctx.services.ai.withGenerationLock(auth, () => {
-        ran = true
+        didRun = true
         return Promise.resolve()
       })
     ).rejects.toMatchObject({ status: 429, code: 'ai_budget_exceeded' })
-    expect(ran).toBe(false)
+    expect(didRun).toBe(false)
     await ctx.services.ai.releaseLock(auth, held)
   })
 

@@ -7,7 +7,7 @@ import { createClient, signUp } from '../helper/client.js'
 
 // The routes check the kill switch first (before body validation); these call the services
 // directly to prove the backstop holds for a caller that skips the route.
-const off = createTestApp({ config: { aiEnabled: false } })
+const off = createTestApp({ config: { isAiEnabled: false } })
 const client = createClient(off.app, off.config)
 
 beforeEach(() => truncateAll(off.db))
@@ -16,14 +16,14 @@ afterAll(() => off.close())
 describe('kill-switch backstop', () => {
   it('withGenerationLock answers 503 ai_unavailable with AI off, without running fn or locking', async () => {
     const { user } = await signUp(client)
-    let ran = false
+    let didRun = false
     await expect(
       off.services.ai.withGenerationLock({ userId: user.id }, () => {
-        ran = true
+        didRun = true
         return Promise.resolve()
       })
     ).rejects.toMatchObject({ status: 503, code: 'ai_unavailable' })
-    expect(ran).toBe(false)
+    expect(didRun).toBe(false)
     const row = await off.db
       .selectFrom('app_user')
       .select('generation_started_at')

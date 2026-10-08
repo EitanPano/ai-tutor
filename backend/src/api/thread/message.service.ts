@@ -202,8 +202,8 @@ export function createMessageService({
             })
             .returning('id')
             .executeTakeFirstOrThrow()
-          const retitle = thread.messageCount === 0 && thread.title === DEFAULT_TITLE
-          const title = retitle ? titleFrom(content) : ''
+          const shouldRetitle = thread.messageCount === 0 && thread.title === DEFAULT_TITLE
+          const title = shouldRetitle ? titleFrom(content) : ''
           await trx
             .updateTable('thread')
             .set({

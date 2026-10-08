@@ -280,7 +280,7 @@ export function computeStreak(days: string[], today: string): StreakDto {
   const numbers = [...new Set(days.map(dayNumber))].sort((a, b) => a - b)
   const active = new Set(numbers)
   const todayNumber = dayNumber(today)
-  const activeToday = active.has(todayNumber)
+  const isActiveToday = active.has(todayNumber)
 
   let longest = 0
   let run = 0
@@ -292,8 +292,8 @@ export function computeStreak(days: string[], today: string): StreakDto {
   }
 
   let current = 0
-  for (let day = activeToday ? todayNumber : todayNumber - 1; active.has(day); day -= 1) {
+  for (let day = isActiveToday ? todayNumber : todayNumber - 1; active.has(day); day -= 1) {
     current += 1
   }
-  return { current, longest, activeToday }
+  return { current, longest, activeToday: isActiveToday }
 }

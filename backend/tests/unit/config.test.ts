@@ -15,9 +15,9 @@ describe('loadConfig', () => {
       aiModel: 'claude-haiku-4-5',
       aiDailyTokenBudget: 1_000_000,
       aiGlobalDailyTokenBudget: 1_000_000_000,
-      aiEnabled: true,
+      isAiEnabled: true,
       aiFakeDelayMs: 20,
-      recoverStaleOnBoot: true,
+      shouldRecoverStaleOnBoot: true,
       signupRateLimit: 10,
       loginIpRateLimit: 30
     })
@@ -118,11 +118,11 @@ describe('loadConfig', () => {
   })
 
   it('parses RECOVER_STALE_ON_BOOT=false to false', () => {
-    expect(loadConfig({ RECOVER_STALE_ON_BOOT: 'false' }).recoverStaleOnBoot).toBe(false)
+    expect(loadConfig({ RECOVER_STALE_ON_BOOT: 'false' }).shouldRecoverStaleOnBoot).toBe(false)
   })
 
   it('parses AI_ENABLED=false to false', () => {
-    expect(loadConfig({ AI_ENABLED: 'false' }).aiEnabled).toBe(false)
+    expect(loadConfig({ AI_ENABLED: 'false' }).isAiEnabled).toBe(false)
   })
 
   it.each(['http://localhost:3000/', 'https://app.example.com/app', 'https://app.example.com?x=1'])(

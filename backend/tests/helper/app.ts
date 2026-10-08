@@ -33,7 +33,7 @@ export function createTestApp(
   } = {}
 ): TestApp {
   const config = { ...loadConfig(process.env), ...overrides.config }
-  const tutor = new FakeTutorProvider({ delayMs: 0, record: true })
+  const tutor = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
   const inFlight = new InFlightRegistry()

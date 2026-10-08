@@ -16,7 +16,7 @@ import {
 
 export type AiServiceDeps = {
   db: Db
-  config: Pick<Config, 'aiEnabled' | 'aiDailyTokenBudget' | 'aiGlobalDailyTokenBudget'>
+  config: Pick<Config, 'isAiEnabled' | 'aiDailyTokenBudget' | 'aiGlobalDailyTokenBudget'>
   logger: Pick<Logger, 'error'>
 }
 

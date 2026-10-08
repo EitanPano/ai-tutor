@@ -11,13 +11,13 @@ import { createClient, signUp } from '../helper/client.js'
 const config = loadConfig(process.env)
 const { db, pool } = createDb(config.databaseUrl)
 
-// The turn sweep starts with a `selectFrom('message')` probe; `failSweep` makes any read fail, which
+// The turn sweep starts with a `selectFrom('message')` probe; `sweep.shouldFail` makes any read fail, which
 // the boot recovery's lock release (an update) does not use.
-const sweep = { fail: false }
+const sweep = { shouldFail: false }
 const flaky = new Proxy(db, {
   get(target, prop) {
     const value: unknown = Reflect.get(target, prop, target)
-    if (prop === 'selectFrom' && sweep.fail) {
+    if (prop === 'selectFrom' && sweep.shouldFail) {
       return () => {
         throw new Error('sweep failed')
       }
@@ -31,13 +31,13 @@ const { app, ctx, recoverAtBoot } = createApp({
   db: flaky,
   pool,
   logger: createLogger(config),
-  tutor: new FakeTutorProvider({ delayMs: 0, record: true }),
+  tutor: new FakeTutorProvider({ delayMs: 0, shouldRecord: true }),
   inFlight: new InFlightRegistry()
 })
 const client = createClient(app, config)
 
 beforeEach(async () => {
-  sweep.fail = false
+  sweep.shouldFail = false
   await truncateAll(db)
 })
 afterAll(() => db.destroy())
@@ -46,7 +46,7 @@ describe('recoverAtBoot', () => {
   it('still releases every lock when the turn sweep fails, and rethrows the failure', async () => {
     const { user } = await signUp(client)
     await ctx.services.ai.acquireLock({ userId: user.id })
-    sweep.fail = true
+    sweep.shouldFail = true
     await expect(recoverAtBoot()).rejects.toThrow('sweep failed')
     const row = await db
       .selectFrom('app_user')

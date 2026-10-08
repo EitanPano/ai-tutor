@@ -32,14 +32,14 @@ async function newUser(timeZone = ZONE): Promise<Session> {
   return signUp(client, { timeZone })
 }
 
-async function addThread(userId: string, topicId: string, title: string, deleted = false) {
+async function addThread(userId: string, topicId: string, title: string, isDeleted = false) {
   return ctx.db
     .insertInto('thread')
     .values({
       user_id: userId,
       topic_id: topicId,
       title,
-      deleted_at: deleted ? new Date() : null
+      deleted_at: isDeleted ? new Date() : null
     })
     .returning(['id', 'topic_id'])
     .executeTakeFirstOrThrow()

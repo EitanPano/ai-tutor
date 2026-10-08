@@ -17,7 +17,7 @@ const { app, recoverAtBoot } = createApp({ config, db, pool, logger, inFlight })
 // A single instance runs, so every turn and lock left by a previous run (a crash, a hard kill on
 // Windows) is dead. Recover them all before listening so the sweep cannot race a new request. A
 // database hiccup here must not keep the API down, so a failure is logged and boot continues.
-if (config.recoverStaleOnBoot) {
+if (config.shouldRecoverStaleOnBoot) {
   try {
     const { turns, locks } = await recoverAtBoot()
     if (turns > 0 || locks > 0) {
@@ -32,11 +32,11 @@ const server = app.listen(config.port, config.host, () => {
   logger.info({ host: config.host, port: config.port }, 'backend listening')
 })
 
-let shuttingDown = false
+let isShuttingDown = false
 
 function shutdown(signal: string): void {
-  if (shuttingDown) return
-  shuttingDown = true
+  if (isShuttingDown) return
+  isShuttingDown = true
   logger.info({ signal }, 'shutting down')
   const force = setTimeout(() => {
     logger.error('shutdown timed out, forcing exit')

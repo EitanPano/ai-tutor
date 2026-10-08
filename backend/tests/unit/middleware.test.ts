@@ -27,9 +27,9 @@ function fakeLimiter(outcome: () => Promise<unknown> = () => Promise.resolve({})
 type TestContext = Pick<AppContext, 'config' | 'limiters'>
 
 function testContext(
-  overrides: { aiEnabled?: boolean; limiters?: Partial<AppContext['limiters']> } = {}
+  overrides: { isAiEnabled?: boolean; limiters?: Partial<AppContext['limiters']> } = {}
 ): TestContext {
-  const config = { ...loadConfig(process.env), aiEnabled: overrides.aiEnabled ?? true }
+  const config = { ...loadConfig(process.env), isAiEnabled: overrides.isAiEnabled ?? true }
   const unused = fakeLimiter().limiter
   return {
     config,
@@ -132,7 +132,7 @@ describe('clientIp', () => {
 
 describe('requireAiEnabled', () => {
   it('answers 503 ai_unavailable when AI features are off', async () => {
-    const res = await http(appWith(testContext({ aiEnabled: false }), requireAiEnabled)).post(
+    const res = await http(appWith(testContext({ isAiEnabled: false }), requireAiEnabled)).post(
       '/probe'
     )
     expect(res.status).toBe(503)
@@ -143,7 +143,7 @@ describe('requireAiEnabled', () => {
   })
 
   it('continues when AI features are on', async () => {
-    const res = await http(appWith(testContext({ aiEnabled: true }), requireAiEnabled)).post(
+    const res = await http(appWith(testContext({ isAiEnabled: true }), requireAiEnabled)).post(
       '/probe'
     )
     expect(res.status).toBe(200)

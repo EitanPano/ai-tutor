@@ -719,7 +719,7 @@ describe('validation and gates (AC11)', () => {
   })
 
   it('answers 503 ai_unavailable as JSON when AI_ENABLED=false, and leaves nothing behind', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie, user } = await signUp(offClient)
@@ -758,7 +758,7 @@ describe('validation and gates (AC11)', () => {
 
 describe('AI switch order', () => {
   it('answers 503 ai_unavailable, not 400, for an invalid body when AI_ENABLED=false', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)

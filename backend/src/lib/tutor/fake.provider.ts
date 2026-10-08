@@ -237,10 +237,10 @@ export class FakeTutorProvider implements TutorProvider {
   private readonly delayMs: number
 
   /** Recording is opt-in: a long-running dev server must not retain every question and history. */
-  private readonly record: boolean
+  private readonly shouldRecord: boolean
 
-  constructor(options: { delayMs?: number; record?: boolean } = {}) {
-    this.record = options.record ?? false
+  constructor(options: { delayMs?: number; shouldRecord?: boolean } = {}) {
+    this.shouldRecord = options.shouldRecord ?? false
     this.delayMs = options.delayMs ?? 20
   }
 
@@ -258,7 +258,7 @@ export class FakeTutorProvider implements TutorProvider {
 
   async explain(input: ExplainInput, onDelta: (text: string) => void): Promise<ExplainResult> {
     const { signal, ...recorded } = input
-    if (this.record) this.calls.push(recorded)
+    if (this.shouldRecord) this.calls.push(recorded)
     const { question } = input
     if (question.includes('[fake:error]')) throw new TutorProviderError('Fake provider error.')
 
@@ -289,7 +289,7 @@ export class FakeTutorProvider implements TutorProvider {
 
   generateGuide(input: GuideInput): Promise<StructuredResult> {
     return settle(() => {
-      if (this.record) this.guideCalls.push(input)
+      if (this.shouldRecord) this.guideCalls.push(input)
       return this.buildStructuredResult({
         topicName: input.topicName,
         history: input.history,
@@ -305,7 +305,7 @@ export class FakeTutorProvider implements TutorProvider {
 
   generateQuiz(input: QuizInput): Promise<StructuredResult> {
     return settle(() => {
-      if (this.record) this.quizCalls.push(input)
+      if (this.shouldRecord) this.quizCalls.push(input)
       return this.buildStructuredResult({
         topicName: input.topicName,
         history: input.history ?? [],
@@ -335,11 +335,15 @@ export class FakeTutorProvider implements TutorProvider {
     const attempt = userText.includes(markers.invalidOnce)
       ? bump(request.attempts, request.attemptKey)
       : 0
-    const refuse = userText.includes(markers.refuse)
-    const invalid =
+    const shouldRefuse = userText.includes(markers.refuse)
+    const isInvalid =
       userText.includes(markers.invalid) ||
       (userText.includes(markers.invalidOnce) && attempt === 1)
-    const output = refuse ? null : invalid ? request.invalidate(request.draft) : request.draft
+    const output = shouldRefuse
+      ? null
+      : isInvalid
+        ? request.invalidate(request.draft)
+        : request.draft
     const inputChars = inputCharsOf({
       topicName: request.topicName,
       history: request.history,
@@ -347,8 +351,8 @@ export class FakeTutorProvider implements TutorProvider {
     })
     return {
       output,
-      stopReason: refuse ? 'refusal' : 'end_turn',
-      refusalCategory: refuse ? 'cyber' : null,
+      stopReason: shouldRefuse ? 'refusal' : 'end_turn',
+      refusalCategory: shouldRefuse ? 'cyber' : null,
       usage: fakeUsage(inputChars, JSON.stringify(output).length),
       model: this.model
     }

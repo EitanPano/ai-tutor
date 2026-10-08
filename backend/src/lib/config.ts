@@ -59,9 +59,9 @@ export type Config = {
   anthropicApiKey: string | undefined
   aiDailyTokenBudget: number
   aiGlobalDailyTokenBudget: number
-  aiEnabled: boolean
+  isAiEnabled: boolean
   aiFakeDelayMs: number
-  recoverStaleOnBoot: boolean
+  shouldRecoverStaleOnBoot: boolean
   /** Reverse proxies in front of the backend whose X-Forwarded-For is trusted; 0 trusts none. */
   trustProxy: number
   /** Sign-ups per hour per IP. */
@@ -71,10 +71,10 @@ export type Config = {
 }
 
 /** Variables that each parse on their own but are refused in this combination. */
-type ConfigRule<V> = { when: (v: V) => boolean; problem: string }
+type ConfigRule<V> = { isBrokenBy: (v: V) => boolean; problem: string }
 
 const DATABASE_URL_RULE: ConfigRule<Pick<Env, 'NODE_ENV' | 'DATABASE_URL'>> = {
-  when: (v) => v.NODE_ENV === 'production' && !v.DATABASE_URL,
+  isBrokenBy: (v) => v.NODE_ENV === 'production' && !v.DATABASE_URL,
   problem: 'DATABASE_URL: required in production'
 }
 
@@ -82,15 +82,15 @@ const DATABASE_URL_RULE: ConfigRule<Pick<Env, 'NODE_ENV' | 'DATABASE_URL'>> = {
 const CONFIG_RULES: readonly ConfigRule<Env>[] = [
   DATABASE_URL_RULE,
   {
-    when: (v) => v.NODE_ENV === 'production' && !v.FRONTEND_URL,
+    isBrokenBy: (v) => v.NODE_ENV === 'production' && !v.FRONTEND_URL,
     problem: 'FRONTEND_URL: required in production'
   },
   {
-    when: (v) => v.NODE_ENV === 'production' && v.AI_PROVIDER === 'fake',
+    isBrokenBy: (v) => v.NODE_ENV === 'production' && v.AI_PROVIDER === 'fake',
     problem: 'AI_PROVIDER: "fake" is not allowed in production'
   },
   {
-    when: (v) => v.AI_PROVIDER === 'anthropic' && !v.ANTHROPIC_API_KEY,
+    isBrokenBy: (v) => v.AI_PROVIDER === 'anthropic' && !v.ANTHROPIC_API_KEY,
     problem: 'ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic'
   }
 ]
@@ -123,7 +123,7 @@ function parseEnv<S extends z.ZodType>(
       parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
     )
   }
-  const problems = rules.filter((rule) => rule.when(parsed.data)).map((rule) => rule.problem)
+  const problems = rules.filter((rule) => rule.isBrokenBy(parsed.data)).map((rule) => rule.problem)
   if (problems.length > 0) throw invalidConfiguration(problems)
   return parsed.data
 }
@@ -147,9 +147,9 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     anthropicApiKey: v.ANTHROPIC_API_KEY,
     aiDailyTokenBudget: v.AI_DAILY_TOKEN_BUDGET ?? defaultBudget.perUser,
     aiGlobalDailyTokenBudget: v.AI_GLOBAL_DAILY_TOKEN_BUDGET ?? defaultBudget.global,
-    aiEnabled: v.AI_ENABLED,
+    isAiEnabled: v.AI_ENABLED,
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS,
-    recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
+    shouldRecoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
     trustProxy: v.TRUST_PROXY,
     signupRateLimit: v.SIGNUP_RATE_LIMIT,
     loginIpRateLimit: v.LOGIN_IP_RATE_LIMIT

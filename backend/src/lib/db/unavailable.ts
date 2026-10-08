@@ -22,9 +22,9 @@ export function markPoolConnectError(err: unknown): void {
   if (typeof err === 'object' && err !== null) fromPoolConnect.add(err)
 }
 
-function describesConnectFailure(err: unknown): boolean {
+function isConnectFailure(err: unknown): boolean {
   if (err instanceof AggregateError) {
-    return err.errors.length > 0 && err.errors.every(describesConnectFailure)
+    return err.errors.length > 0 && err.errors.every(isConnectFailure)
   }
   if (!(err instanceof Error)) return false
   const code = (err as { code?: unknown }).code
@@ -40,9 +40,6 @@ function describesConnectFailure(err: unknown): boolean {
  */
 export function isDbUnavailableError(err: unknown): boolean {
   return (
-    typeof err === 'object' &&
-    err !== null &&
-    fromPoolConnect.has(err) &&
-    describesConnectFailure(err)
+    typeof err === 'object' && err !== null && fromPoolConnect.has(err) && isConnectFailure(err)
   )
 }

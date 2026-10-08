@@ -1,7 +1,7 @@
 import { SESSION_MAX_AGE_MS, SESSION_TTL_MS } from '../../lib/cookie.js'
 import type { Db } from '../../lib/db/index.js'
 import { unauthorized } from '../../lib/error.js'
-import { hashPassword, verifyPassword } from '../../lib/password.js'
+import { hashPassword, isPasswordCorrect } from '../../lib/password.js'
 import { createSessionToken, hashSessionToken } from '../../lib/session-token.js'
 import { DAY_MS } from '../../lib/time.js'
 import { toUserDto, type UserDto } from './dto.js'
@@ -110,8 +110,8 @@ export function createSessionService({ db }: SessionServiceDeps): SessionService
         .executeTakeFirst()
 
       const hash = row?.password_hash ?? (await getDummyHash())
-      const passwordOk = await verifyPassword(hash, input.password)
-      if (!row || !passwordOk) throw invalidCredentials()
+      const isPasswordValid = await isPasswordCorrect(hash, input.password)
+      if (!row || !isPasswordValid) throw invalidCredentials()
 
       const token = await db.transaction().execute(async (trx) => {
         if (currentToken) {

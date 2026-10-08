@@ -163,7 +163,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
       let text = ''
       let seenUsage: TutorUsage = ZERO_USAGE
       // An abort before this call never reaches the SDK, so nothing was sent and nothing is owed.
-      const requestSent = !input.signal.aborted
+      const hasSentRequest = !input.signal.aborted
       const messages = buildMessages(input)
       // The watchdog is ours (idle or total timeout); `input.signal` is the caller's abort. Which
       // signal fired decides the outcome, not the error type the SDK surfaces.
@@ -216,7 +216,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
             refusalCategory: null,
             // The request is already dispatched, so it may be billed even if no usage arrived.
             usage:
-              requestSent && usage.inputTokens === 0
+              hasSentRequest && usage.inputTokens === 0
                 ? {
                     ...usage,
                     inputTokens: estimateInputTokens(EXPLAIN_SYSTEM_PROMPT_V1, messages)

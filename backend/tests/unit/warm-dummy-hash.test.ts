@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const hashPassword = vi.hoisted(() => vi.fn(() => Promise.resolve('hash')))
-vi.mock('../../src/lib/password.js', () => ({ hashPassword, verifyPassword: vi.fn() }))
+vi.mock('../../src/lib/password.js', () => ({ hashPassword, isPasswordCorrect: vi.fn() }))
 
 describe('warmDummyHash', () => {
   it('computes the dummy hash once, up front', async () => {

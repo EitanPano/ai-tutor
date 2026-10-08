@@ -315,7 +315,7 @@ describe('guards', () => {
   })
 
   it('answers 503 ai_unavailable when AI is disabled', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
@@ -330,7 +330,7 @@ describe('guards', () => {
   })
 
   it('answers 503 ai_unavailable, not 400, for an invalid body when AI is disabled', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
