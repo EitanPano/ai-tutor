@@ -16,6 +16,7 @@ Rules:
 
 
 Current queue:
+- [ ] api layout and convention sweep | stack:full | plan:004
 
 
 ## Later — not queued
