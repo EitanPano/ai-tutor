@@ -1,7 +1,10 @@
 // Plain values only: `proxy.ts` imports this module, so it must stay free of React and client code.
 
+/** The thread list, where a new question starts; the nav and "Back to threads" link to it. */
+export const THREAD_LIST_PATH = '/thread'
+
 /** Where a signed-in user lands unless a page was asked for: from `/`, after sign-up or login. */
-export const DEFAULT_PATH = '/thread'
+export const DEFAULT_PATH = THREAD_LIST_PATH
 
 /** Where a visitor without a session is sent: from `/`, a protected page, or after logging out. */
 export const LOGIN_PATH = '/login'

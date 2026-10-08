@@ -12,6 +12,7 @@ import { describeError, isApiError, messageFor } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
 import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { usePageTitle } from '@/lib/page-title'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { Composer } from './composer'
 import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
@@ -133,7 +134,7 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <BackLink href="/thread" className="lg:hidden">
+      <BackLink href={THREAD_LIST_PATH} className="lg:hidden">
         Threads
       </BackLink>
 
@@ -172,7 +173,7 @@ export function Conversation({ threadId }: { threadId: string }) {
           <Banner
             action={
               <Link
-                href={`/thread?topic=${encodeURIComponent(thread.topicId)}`}
+                href={`${THREAD_LIST_PATH}?topic=${encodeURIComponent(thread.topicId)}`}
                 className={buttonClass({ variant: 'secondary', size: 'sm' })}
               >
                 <NewIcon aria-hidden="true" className="size-4" />

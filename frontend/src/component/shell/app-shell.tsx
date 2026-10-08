@@ -13,11 +13,11 @@ import { describeError, isApiError } from '@/lib/api/error'
 import { logOut } from '@/lib/api/session'
 import { cn } from '@/lib/cn'
 import { LogOutIcon, ProgressIcon, ThreadIcon } from '@/lib/icon'
-import { LOGIN_PATH, isPathUnder } from '@/lib/route'
+import { DEFAULT_PATH, LOGIN_PATH, THREAD_LIST_PATH, isPathUnder } from '@/lib/route'
 import { useSession } from '@/lib/session'
 
 const NAV = [
-  { href: '/thread', label: 'Threads', icon: ThreadIcon },
+  { href: THREAD_LIST_PATH, label: 'Threads', icon: ThreadIcon },
   { href: '/progress', label: 'Progress', icon: ProgressIcon }
 ] as const
 
@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <aside className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-rule bg-sheet px-4 py-3 md:sticky md:top-0 md:h-screen md:w-64 md:shrink-0 md:flex-col md:items-stretch md:justify-start md:gap-6 md:border-r md:border-b-0 md:p-5">
-        <Link href="/thread" aria-label="AI Tutor home" className="md:px-3">
+        <Link href={DEFAULT_PATH} aria-label="AI Tutor home" className="md:px-3">
           <Wordmark />
         </Link>
         <NavLinks pathname={pathname} />

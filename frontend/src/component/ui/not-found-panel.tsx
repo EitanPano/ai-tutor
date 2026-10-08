@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import type { IconComponent } from '@/lib/icon'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { buttonClass } from './button'
 import { ErrorPanel } from './error-panel'
 
@@ -20,7 +21,7 @@ export function NotFoundPanel({ icon, children }: NotFoundPanelProps) {
     <ErrorPanel
       icon={icon}
       action={
-        <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
+        <Link href={THREAD_LIST_PATH} className={buttonClass({ variant: 'secondary' })}>
           Back to threads
         </Link>
       }

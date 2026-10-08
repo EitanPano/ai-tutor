@@ -9,6 +9,7 @@ import { Select } from '@/component/ui/select'
 import { describeError } from '@/lib/api/error'
 import { deleteThread, threadKey, updateThread, type Thread } from '@/lib/api/thread'
 import { DeleteIcon, RenameIcon } from '@/lib/icon'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { useTopics } from '@/lib/topic'
 
 const MAX_TITLE = 120
@@ -108,7 +109,7 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
     mutationFn: () => deleteThread(thread.id),
     onSuccess: () => {
       // Leave first: touching the still-mounted detail query would flash "doesn't exist".
-      router.replace('/thread')
+      router.replace(THREAD_LIST_PATH)
       void queryClient.invalidateQueries({ queryKey: threadKey.list })
       toast('Thread deleted')
     },

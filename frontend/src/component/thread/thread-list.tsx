@@ -11,6 +11,7 @@ import { describeError } from '@/lib/api/error'
 import { listThreads, threadKey } from '@/lib/api/thread'
 import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { relativeTime } from '@/lib/relative-time'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { useTopics } from '@/lib/topic'
 
 export function ThreadList({ activeId }: { activeId?: string | undefined }) {
@@ -31,7 +32,7 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
         <h2 id="thread-list-heading" className="text-lead">
           Threads
         </h2>
-        <Link href="/thread" className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+        <Link href={THREAD_LIST_PATH} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
           <NewIcon aria-hidden="true" className="size-4" />
           New thread
         </Link>

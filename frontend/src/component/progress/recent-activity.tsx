@@ -5,6 +5,7 @@ import { Sheet } from '@/component/ui/sheet'
 import type { Activity } from '@/lib/api/progress'
 import { GuideIcon, QuizIcon, ThreadIcon, type IconComponent } from '@/lib/icon'
 import { relativeTime } from '@/lib/relative-time'
+import { THREAD_LIST_PATH } from '@/lib/route'
 
 type Kind = {
   icon: IconComponent
@@ -16,7 +17,7 @@ type Kind = {
 const link = (base: string, id: string | null) => (id ? `${base}/${encodeURIComponent(id)}` : null)
 
 const KIND: Record<Activity['kind'], Kind> = {
-  question: { icon: ThreadIcon, verb: 'Question', href: (a) => link('/thread', a.threadId) },
+  question: { icon: ThreadIcon, verb: 'Question', href: (a) => link(THREAD_LIST_PATH, a.threadId) },
   step: { icon: GuideIcon, verb: 'Guide step', href: (a) => link('/guide', a.guideId) },
   attempt: { icon: QuizIcon, verb: 'Quiz attempt', href: (a) => link('/quiz', a.quizId) }
 }
@@ -37,7 +38,7 @@ export function RecentActivity({ activities, topicName }: RecentActivityProps) {
           <EmptyState
             icon={ThreadIcon}
             action={
-              <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
+              <Link href={THREAD_LIST_PATH} className={buttonClass({ variant: 'secondary' })}>
                 Ask a question
               </Link>
             }
