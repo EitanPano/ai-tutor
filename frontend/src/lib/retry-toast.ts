@@ -25,8 +25,12 @@ export function useRetryToast(kind: RetryKind) {
 
   return useCallback(
     (err: unknown, retry: () => void) => {
+      // A failure can land after the page is gone: a mutation's `onError` still runs once its
+      // component unmounted. The reader should still learn of it, but with no Retry to offer, and
+      // it is not this page's to dismiss: it expires on its own.
+      const canRetry = isMounted.current && isRetryable(err, kind)
       const id = toast.error(describeError(err), {
-        ...(isRetryable(err, kind) && {
+        ...(canRetry && {
           action: {
             label: 'Retry',
             onClick: () => {
@@ -36,7 +40,7 @@ export function useRetryToast(kind: RetryKind) {
         })
       })
       // Never keep an undefined id: `toast.dismiss(undefined)` dismisses every toast on screen.
-      if (id !== undefined) toastIds.current.add(id)
+      if (isMounted.current && id !== undefined) toastIds.current.add(id)
     },
     [kind]
   )

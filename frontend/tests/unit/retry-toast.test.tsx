@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/error'
 import { useRetryToast } from '@/lib/retry-toast'
@@ -83,5 +84,31 @@ describe('useRetryToast', () => {
     rerender()
 
     expect(result.current).toBe(first)
+  })
+
+  it('still toasts a failure that lands after the page is gone, but without a Retry', () => {
+    toast.error.mockReturnValue('late')
+    const { result, unmount } = renderHook(() => useRetryToast('generate'))
+    const showError = result.current
+    unmount()
+
+    showError(failure('network_error'), vi.fn())
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Can't reach the server. Make sure the API is running and you opened http://localhost:3000.",
+      {}
+    )
+    expect(toast.dismiss).not.toHaveBeenCalled()
+  })
+
+  it('offers a working Retry under StrictMode, after the dev-only effect double run', () => {
+    const { result } = renderHook(() => useRetryToast('generate'), { wrapper: StrictMode })
+    const retry = vi.fn()
+
+    act(() => result.current(failure('network_error'), retry))
+
+    expect(optionsOf(0).action?.label).toBe('Retry')
+    optionsOf(0).action!.onClick()
+    expect(retry).toHaveBeenCalledTimes(1)
   })
 })

@@ -121,4 +121,23 @@ describe('useCreateQuiz', () => {
     unmount()
     expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
   })
+
+  it('still toasts a failure that lands after the page is gone, without a Retry', async () => {
+    let fail!: (err: unknown) => void
+    api.createQuiz.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    const { result, unmount } = setup()
+
+    act(() => result.current.create({ threadId: 't1' }))
+    await waitFor(() => expect(api.createQuiz).toHaveBeenCalledTimes(1))
+    unmount()
+    fail(new ApiError({ status: 0, code: 'network_error', message: 'x' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    expect(toast.error.mock.calls[0]![1].action).toBeUndefined()
+  })
 })
