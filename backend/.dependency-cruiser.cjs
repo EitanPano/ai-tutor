@@ -79,12 +79,21 @@ module.exports = {
       }
     },
     {
-      name: 'services-have-no-middleware',
+      name: 'services-are-http-free',
       comment:
-        'A service under src/services/ has no HTTP layer: it imports no values from middleware/.',
+        "A service has no HTTP layer: src/services/ and an HTTP module's service files (service.ts, x.service.ts and their helpers stale-turn.ts, dto.ts) import no values from middleware/ or context.ts. They get their dependencies injected by app.ts, never per request.",
       severity: 'error',
-      from: { path: '^src/services/' },
-      to: { path: '^src/middleware/', dependencyTypesNot: ['type-only'] }
+      from: {
+        path: [
+          '^src/services/',
+          '^src/api/[^/]+/(service|[^/]+[.]service)[.]ts$',
+          '^src/api/[^/]+/(stale-turn|dto)[.]ts$'
+        ]
+      },
+      to: {
+        path: ['^src/middleware/', '^src/context[.]ts$'],
+        dependencyTypesNot: ['type-only']
+      }
     },
     {
       name: 'outside-uses-public-api',
