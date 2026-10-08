@@ -16,7 +16,6 @@ Rules:
 
 
 Current queue:
-- [ ] api layout and convention sweep | stack:full | plan:004
 
 
 ## Later — not queued
@@ -55,3 +54,4 @@ Rejected for this project. They're listed so they aren't proposed again.
 - [x] p6 hardening | stack:full | plan:001 (2026-10-07)
 - [x] backend module structure | stack:full | plan:002 (2026-10-07)
 - [x] review hardening | stack:full | plan:003 (2026-10-07)
+- [x] api layout and convention sweep | stack:full | plan:004 (2026-10-08)

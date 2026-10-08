@@ -37,12 +37,23 @@ That is your spec — implement all of it and nothing beyond it.
 
 ### Step 2: Implement
 Structure:
-- A new resource is a module in `backend/src/feature/<m>/`: `<m>.module.ts`, `<m>.service.ts`,
-  `<m>.route.ts`, `<m>.schema.ts`, `index.ts`.
+- A new resource is a module in `backend/src/api/<m>/`: route, controller, service, validation, index.
+  - `validation.ts` — Zod request schemas and their `z.output` types.
+  - `service.ts` — `createXService(deps)` returning `XService`: the domain rules and the SQL. Export a
+    narrow `XApi` (`Pick` / `Omit` of `XService`) if another module will call it.
+  - `controller.ts` — one handler per route: read the service through `servicesOf(req)` (anything else
+    through `ctxOf(req)`), call it, shape the HTTP response. No SQL, no domain branching.
+  - `route.ts` — a declarative table: `validateX` and limiter constants, one `router.verb(...)` line per
+    route, `export default router`.
+  - `index.ts` — re-exports `xRouter`, `createXService` and the types.
+- A domain service with no HTTP goes in `backend/src/services/<s>/`.
+- Never capture a service, config value or limiter at import time: read them per request.
 - `auth: { userId }` is still passed explicitly.
-- Use another module only through its injected `XApi` (`import type` only).
-- Wire new modules in `backend/src/app.ts`, in dependency order.
-- A module that writes a table declares it in `OWNED` in `backend/tests/unit/architecture.test.ts`.
+- Use another module only through its injected `XApi` (`import type` from its `index.ts` only).
+- Register the service in `Services` in `backend/src/context.ts`; in `backend/src/app.ts`, build it in
+  dependency order, add it to `services` and mount its router.
+- Add the module to `OWNED` in `backend/tests/unit/architecture.test.ts` with the tables it writes
+  (an empty list when it writes none).
 
 Tests run against the real test database.
 

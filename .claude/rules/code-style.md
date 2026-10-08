@@ -10,4 +10,32 @@ const value = getValue()
 ;(() => init())()
 ```
 
+## Branching
+- Three or more `if` / `else if` branches, or a `switch`, on one discriminator
+  become a lookup: a `Record`, or a `Map` when the keys come from outside input
+  (a plain object also answers `toString` and `__proto__`).
+- When the branches guard several unrelated conditions, the table form is an
+  ordered rule list where the first match wins (`ERROR_MATCHERS` in
+  `backend/src/middleware/error.ts`).
+
+```ts
+// before
+if (reason === 'refusal') status = 'failed'
+else if (reason === 'max_tokens') status = 'incomplete'
+else if (reason === 'end_turn') status = 'complete'
+
+// after
+const STATUS_BY_STOP_REASON: Record<StopReason, Status> = {
+  refusal: 'failed', max_tokens: 'incomplete', end_turn: 'complete'
+}
+const status = STATUS_BY_STOP_REASON[reason]
+```
+
+## Backend layers
+- A `route.ts` is a declarative table only: imports, `validateX` and limiter
+  constants, one `router.verb(...)` line per route, `export default router`.
+- A controller reads its dependencies through `servicesOf(req)` / `ctxOf(req)`
+  and shapes the HTTP response. No SQL, no domain branching.
+- A service holds the rules.
+
 Match the surrounding code for everything this file does not cover.
