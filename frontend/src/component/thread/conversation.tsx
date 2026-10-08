@@ -60,7 +60,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     }
   })
   usePageTitle(detail.data?.thread.title)
-  const hasTakenParkedQuestion = useRef(false)
+  const wasParkedQuestionChecked = useRef(false)
 
   const unfinishedId = detail.data?.messages.find(isPending)?.id
   useEffect(() => {
@@ -82,8 +82,8 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   // A question parked by the new-question page is asked as soon as the thread opens.
   useEffect(() => {
-    if (hasTakenParkedQuestion.current) return
-    hasTakenParkedQuestion.current = true
+    if (wasParkedQuestionChecked.current) return
+    wasParkedQuestionChecked.current = true
     const question = takePendingQuestion(threadId)
     // Starting the stream is the sync with an external system (storage, network); the state it
     // sets is that stream's progress.

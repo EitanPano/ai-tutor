@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { isApiError } from '@/lib/api/error'
-import { isAuthPath } from '@/lib/route'
+import { LOGIN_PATH, isAuthPath } from '@/lib/route'
 
 export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter()
@@ -18,7 +18,7 @@ export function Providers({ children }: { children: ReactNode }) {
       const { pathname, search } = window.location
       if (isAuthPath(pathname)) return
       client.clear()
-      router.replace(`/login?next=${encodeURIComponent(pathname + search)}`)
+      router.replace(`${LOGIN_PATH}?next=${encodeURIComponent(pathname + search)}`)
     }
     const client: QueryClient = new QueryClient({
       queryCache: new QueryCache({ onError }),

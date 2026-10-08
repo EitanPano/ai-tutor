@@ -16,7 +16,6 @@ type ComposerProps = {
   onStop?: () => void
   /** The Ask button shows a spinner (the thread is being created). */
   isSubmitting?: boolean
-  autoFocus?: boolean
 }
 
 export function Composer({
@@ -26,8 +25,7 @@ export function Composer({
   disabled = false,
   isStreaming = false,
   onStop,
-  isSubmitting = false,
-  autoFocus = false
+  isSubmitting = false
 }: ComposerProps) {
   const id = useId()
   const counterId = `${id}-count`
@@ -54,7 +52,6 @@ export function Composer({
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={onKeyDown}
         disabled={disabled}
-        autoFocus={autoFocus}
         rows={3}
         placeholder="Paste code and ask what you want to understand"
         aria-describedby={length > COUNTER_FROM ? counterId : undefined}
