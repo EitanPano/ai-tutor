@@ -1,26 +1,20 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { API_URL, SESSION_COOKIE } from '@/lib/config'
 import { buildCsp, newNonce } from '@/lib/csp'
+import { DEFAULT_PATH, isProtectedPath } from '@/lib/route'
 
 // UX only: the backend is the authority on sessions. A stale `sid` cookie passes here and
 // is rejected by the first API call, which sends the user to /login.
-const SESSION_COOKIE = 'sid'
-const PROTECTED_PREFIXES = ['/thread', '/guide', '/quiz', '/progress']
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-
-const isProtected = (pathname: string) =>
-  PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
-
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl
   const hasSession = request.cookies.has(SESSION_COOKIE)
 
   if (pathname === '/') {
-    return NextResponse.redirect(new URL(hasSession ? '/thread' : '/login', request.url))
+    return NextResponse.redirect(new URL(hasSession ? DEFAULT_PATH : '/login', request.url))
   }
 
-  if (isProtected(pathname) && !hasSession) {
+  if (isProtectedPath(pathname) && !hasSession) {
     const login = new URL('/login', request.url)
     login.searchParams.set('next', pathname + search)
     return NextResponse.redirect(login)

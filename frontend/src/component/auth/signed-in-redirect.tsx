@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { getSession } from '@/lib/api/session'
-import { DEFAULT_PATH } from '@/lib/next-path'
+import { DEFAULT_PATH } from '@/lib/route'
 import { SESSION_KEY } from '@/lib/session'
 
 /**

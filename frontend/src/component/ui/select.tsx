@@ -1,4 +1,5 @@
 import { useId, type SelectHTMLAttributes } from 'react'
+import { cn } from '@/lib/cn'
 
 type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & {
   label: string
@@ -12,7 +13,7 @@ export function Select({
   label,
   hideLabel = false,
   id: idProp,
-  className = '',
+  className,
   children,
   ...rest
 }: SelectProps) {
@@ -25,7 +26,10 @@ export function Select({
       </label>
       <select
         id={id}
-        className={`h-10 rounded-md border border-rule bg-sheet px-3 text-base text-ink hover:border-ink-muted disabled:cursor-not-allowed disabled:opacity-60 ${className}`.trim()}
+        className={cn(
+          'h-10 rounded-md border border-rule bg-sheet px-3 text-base text-ink hover:border-ink-muted disabled:cursor-not-allowed disabled:opacity-60',
+          className
+        )}
         {...rest}
       >
         {children}

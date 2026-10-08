@@ -1,4 +1,4 @@
-import { ProgressSkeleton } from '@/component/progress/progress-view'
+import { ProgressSkeleton } from '@/component/progress/progress-skeleton'
 
 export default function Loading() {
   return (

@@ -10,7 +10,7 @@ import { Sheet } from '@/component/ui/sheet'
 import { TextField } from '@/component/ui/text-field'
 import { describeError, fieldIssues, isApiError } from '@/lib/api/error'
 import { signUp } from '@/lib/api/user'
-import { DEFAULT_PATH } from '@/lib/next-path'
+import { DEFAULT_PATH } from '@/lib/route'
 import { SESSION_KEY } from '@/lib/session'
 
 const FALLBACK_TIME_ZONE = 'UTC'

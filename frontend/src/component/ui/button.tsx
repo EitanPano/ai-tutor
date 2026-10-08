@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react'
+import { cn } from '@/lib/cn'
 import { Spinner } from './spinner'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -39,7 +40,7 @@ export function Button({
   loading = false,
   disabled,
   type = 'button',
-  className = '',
+  className,
   children,
   ...rest
 }: ButtonProps) {
@@ -48,7 +49,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`${buttonClass({ variant, size })} ${className}`.trim()}
+      className={cn(buttonClass({ variant, size }), className)}
       {...rest}
     >
       {loading && <Spinner label="" />}

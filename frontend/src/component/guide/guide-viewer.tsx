@@ -4,30 +4,22 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useCreateQuiz } from '@/component/quiz/use-create-quiz'
+import { BackLink } from '@/component/ui/back-link'
 import { Button, buttonClass } from '@/component/ui/button'
-import { EmptyState } from '@/component/ui/empty-state'
+import { ErrorPanel } from '@/component/ui/error-panel'
 import { Sheet } from '@/component/ui/sheet'
 import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getGuide, guideKey, type Guide } from '@/lib/api/guide'
-import { BackIcon, GuideIcon, QuizIcon, RetryIcon } from '@/lib/icon'
+import { GuideIcon, QuizIcon } from '@/lib/icon'
 import { usePageTitle } from '@/lib/page-title'
+import { GuideSkeleton } from './guide-skeleton'
 import { ProgressBar } from './progress-bar'
 import { StepList } from './step-list'
 import { StepPanel } from './step-panel'
 import { useStepUpdate } from './use-step-update'
 
 const COMPLETE = 'complete'
-
-export function GuideSkeleton() {
-  return (
-    <div aria-busy="true" aria-label="Loading guide" className="flex flex-col gap-5">
-      <div className="h-9 w-2/3 animate-pulse rounded-sm bg-rule" />
-      <div className="h-2 w-full animate-pulse rounded-sm bg-rule" />
-      <div className="h-96 animate-pulse rounded-md border border-rule bg-sheet" />
-    </div>
-  )
-}
 
 function Complete({
   threadId,
@@ -117,13 +109,9 @@ function Viewer({ guide }: { guide: Guide }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-4">
-        <Link
-          href={`/thread/${encodeURIComponent(guide.threadId)}`}
-          className="inline-flex items-center gap-1.5 self-start text-sm font-semibold"
-        >
-          <BackIcon aria-hidden="true" className="size-4" />
+        <BackLink href={`/thread/${encodeURIComponent(guide.threadId)}`}>
           Back to the conversation
-        </Link>
+        </BackLink>
         <h1 className="text-title break-words">{guide.title}</h1>
         <ProgressBar done={done} total={steps.length} />
       </header>
@@ -170,25 +158,19 @@ export function GuideViewer({ guideId }: { guideId: string }) {
 
   if (!query.data) {
     const missing = isApiError(query.error) && query.error.code === 'not_found'
-    return (
-      <Sheet>
-        <EmptyState
-          icon={missing ? GuideIcon : RetryIcon}
-          action={
-            missing ? (
-              <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
-                Back to threads
-              </Link>
-            ) : (
-              <Button variant="secondary" onClick={() => query.refetch()}>
-                Retry
-              </Button>
-            )
-          }
-        >
-          {missing ? "This guide doesn't exist or was deleted." : describeError(query.error)}
-        </EmptyState>
-      </Sheet>
+    return missing ? (
+      <ErrorPanel
+        icon={GuideIcon}
+        action={
+          <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
+            Back to threads
+          </Link>
+        }
+      >
+        This guide doesn&apos;t exist or was deleted.
+      </ErrorPanel>
+    ) : (
+      <ErrorPanel onRetry={() => query.refetch()}>{describeError(query.error)}</ErrorPanel>
     )
   }
 

@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { isApiError } from '@/lib/api/error'
-
-const AUTH_PATHS = ['/login', '/signup']
-
-const isAuthPath = (pathname: string) =>
-  AUTH_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+import { isAuthPath } from '@/lib/route'
 
 export function Providers({ children }: { children: ReactNode }) {
   const router = useRouter()

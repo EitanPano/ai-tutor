@@ -6,17 +6,19 @@ import { useRouter } from 'next/navigation'
 import { memo, useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { Markdown } from '@/component/markdown/markdown'
+import { BackLink } from '@/component/ui/back-link'
 import { Button } from '@/component/ui/button'
 import { Sheet } from '@/component/ui/sheet'
 import { SEEDED_STALE_MS } from '@/lib/api/client'
 import { getQuiz, quizKey, submitAttempt, type Quiz, type QuizItem } from '@/lib/api/quiz'
 import { threadKey } from '@/lib/api/thread'
-import { BackIcon, ProgressIcon } from '@/lib/icon'
+import { ProgressIcon } from '@/lib/icon'
 import { difficultyLabel, shortDate } from '@/lib/quiz'
 import { usePageTitle } from '@/lib/page-title'
 import { useTopics } from '@/lib/topic'
-import { QuizMissing, QuizSkeleton } from './quiz-state'
 import { describeQuizError } from './quiz-error'
+import { QuizSkeleton } from './quiz-skeleton'
+import { QuizMissing } from './quiz-state'
 
 type ItemFieldProps = {
   item: QuizItem
@@ -65,21 +67,13 @@ function Header({ quiz }: { quiz: Quiz }) {
   return (
     <header className="flex flex-col gap-4">
       {quiz.threadId ? (
-        <Link
-          href={`/thread/${encodeURIComponent(quiz.threadId)}`}
-          className="inline-flex items-center gap-1.5 self-start text-sm font-semibold"
-        >
-          <BackIcon aria-hidden="true" className="size-4" />
+        <BackLink href={`/thread/${encodeURIComponent(quiz.threadId)}`}>
           Back to the conversation
-        </Link>
+        </BackLink>
       ) : (
-        <Link
-          href="/progress"
-          className="inline-flex items-center gap-1.5 self-start text-sm font-semibold"
-        >
-          <ProgressIcon aria-hidden="true" className="size-4" />
+        <BackLink href="/progress" icon={ProgressIcon}>
           Back to progress
-        </Link>
+        </BackLink>
       )}
       <h1 className="text-title break-words">
         {difficultyLabel(quiz.difficulty)} quiz

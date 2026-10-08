@@ -1,10 +1,10 @@
 import { SkeletonBar, SkeletonCard, SkeletonSection } from '@/component/ui/skeleton'
 
-export function ThreadSkeleton() {
+export function QuizSkeleton() {
   return (
-    <SkeletonSection label="Loading thread" className="gap-4">
+    <SkeletonSection label="Loading quiz" className="gap-5">
       <SkeletonBar className="h-9 w-2/3" />
-      <SkeletonCard className="h-64" />
+      <SkeletonCard className="h-96" />
     </SkeletonSection>
   )
 }

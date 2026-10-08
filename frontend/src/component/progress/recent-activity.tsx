@@ -1,14 +1,13 @@
 import Link from 'next/link'
-import type { ComponentType, SVGProps } from 'react'
 import { buttonClass } from '@/component/ui/button'
 import { EmptyState } from '@/component/ui/empty-state'
 import { Sheet } from '@/component/ui/sheet'
 import type { Activity } from '@/lib/api/progress'
-import { GuideIcon, QuizIcon, ThreadIcon } from '@/lib/icon'
+import { GuideIcon, QuizIcon, ThreadIcon, type IconComponent } from '@/lib/icon'
 import { relativeTime } from '@/lib/relative-time'
 
 type Kind = {
-  icon: ComponentType<SVGProps<SVGSVGElement>>
+  icon: IconComponent
   /** Read out before the title, so a screen reader hears what happened. */
   verb: string
   href: (activity: Activity) => string | null

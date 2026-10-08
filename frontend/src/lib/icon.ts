@@ -1,3 +1,8 @@
+import type { ComponentType, SVGProps } from 'react'
+
+/** The prop type for a component that takes one of the icons below. */
+export type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
+
 // One icon per concept, everywhere. Import from here, never from lucide-react directly.
 export {
   MessagesSquare as ThreadIcon,

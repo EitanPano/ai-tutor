@@ -1,6 +1,7 @@
+import { API_URL } from '@/lib/config'
 import type { components } from '@/types/api'
 import { createSseParser } from '../sse'
-import { API_URL, isErrorResponse, toApiError } from './client'
+import { isErrorResponse, toApiError } from './client'
 import { ApiError } from './error'
 
 export type StreamMessageStart = components['schemas']['StreamMessageStart']

@@ -10,7 +10,8 @@ import { getAttempt, getQuiz, quizKey, type Attempt, type GradedItem } from '@/l
 import { BackIcon, DoneIcon, RetryIcon, WrongIcon } from '@/lib/icon'
 import { difficultyLabel } from '@/lib/quiz'
 import { useTopics } from '@/lib/topic'
-import { QuizMissing, QuizSkeleton } from './quiz-state'
+import { QuizSkeleton } from './quiz-skeleton'
+import { QuizMissing } from './quiz-state'
 
 function Choice({ text, index, item }: { text: string; index: number; item: GradedItem }) {
   const isAnswer = index === item.answerIndex

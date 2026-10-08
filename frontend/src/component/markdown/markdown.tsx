@@ -11,6 +11,7 @@ import {
 } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { cn } from '@/lib/cn'
 import { CodeBlock } from './code-block'
 import { remarkNoRawHtml } from './no-raw-html'
 
@@ -83,14 +84,12 @@ export const Markdown = memo(function Markdown({
   children,
   streaming = false,
   inline = false,
-  className = ''
+  className
 }: MarkdownProps) {
   const Wrapper = inline ? 'span' : 'div'
   return (
     <StreamingContext value={streaming}>
-      <Wrapper
-        className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}
-      >
+      <Wrapper className={cn(proseClass, streaming && 'streaming-caret', className)}>
         <ReactMarkdown remarkPlugins={plugins} components={inline ? inlineComponents : components}>
           {children}
         </ReactMarkdown>

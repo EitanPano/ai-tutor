@@ -30,7 +30,7 @@ export function NewQuestion() {
         toast.error("Couldn't start the answer. Open the thread and ask again.")
       }
       void queryClient.invalidateQueries({ queryKey: threadKey.list })
-      router.push(`/thread/${thread.id}`)
+      router.push(`/thread/${encodeURIComponent(thread.id)}`)
     },
     onError: (err) => toast.error(describeError(err))
   })

@@ -3,12 +3,13 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, buttonClass } from '@/component/ui/button'
-import { EmptyState } from '@/component/ui/empty-state'
+import { BackLink } from '@/component/ui/back-link'
+import { buttonClass } from '@/component/ui/button'
+import { ErrorPanel } from '@/component/ui/error-panel'
 import { Sheet } from '@/component/ui/sheet'
 import { describeError, isApiError } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
-import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { usePageTitle } from '@/lib/page-title'
 import { Composer } from './composer'
 import { StudyTools } from './study-tools'
@@ -108,25 +109,19 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   if (!detail.data) {
     const missing = isApiError(detail.error) && detail.error.code === 'not_found'
-    return (
-      <Sheet>
-        <EmptyState
-          icon={missing ? ThreadIcon : RetryIcon}
-          action={
-            missing ? (
-              <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
-                Back to threads
-              </Link>
-            ) : (
-              <Button variant="secondary" onClick={() => detail.refetch()}>
-                Retry
-              </Button>
-            )
-          }
-        >
-          {describeError(detail.error)}
-        </EmptyState>
-      </Sheet>
+    return missing ? (
+      <ErrorPanel
+        icon={ThreadIcon}
+        action={
+          <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
+            Back to threads
+          </Link>
+        }
+      >
+        {describeError(detail.error)}
+      </ErrorPanel>
+    ) : (
+      <ErrorPanel onRetry={() => detail.refetch()}>{describeError(detail.error)}</ErrorPanel>
     )
   }
 
@@ -146,13 +141,9 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link
-        href="/thread"
-        className="inline-flex items-center gap-1.5 self-start text-sm font-semibold lg:hidden"
-      >
-        <BackIcon aria-hidden="true" className="size-4" />
+      <BackLink href="/thread" className="lg:hidden">
         Threads
-      </Link>
+      </BackLink>
 
       <ThreadHeader thread={thread} />
 

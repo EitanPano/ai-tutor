@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { EmptyState } from '@/component/ui/empty-state'
 import { Button } from '@/component/ui/button'
+import { ErrorPanel } from '@/component/ui/error-panel'
+import { SkeletonBar, SkeletonCard, SkeletonSection } from '@/component/ui/skeleton'
 import { Wordmark } from '@/component/ui/wordmark'
 import { describeError, isApiError } from '@/lib/api/error'
 import { logOut } from '@/lib/api/session'
-import { LogOutIcon, ProgressIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { LogOutIcon, ProgressIcon, ThreadIcon } from '@/lib/icon'
+import { isPathUnder } from '@/lib/route'
 import { useSession } from '@/lib/session'
 
 const NAV = [
@@ -22,7 +24,7 @@ function NavLinks({ pathname }: { pathname: string }) {
   return (
     <nav aria-label="Main" className="flex gap-1 md:flex-col">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`)
+        const active = isPathUnder(pathname, href)
         return (
           <Link
             key={href}
@@ -81,10 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {user.displayName}
             </p>
           ) : (
-            <span
-              aria-hidden="true"
-              className="h-5 w-24 animate-pulse rounded-sm bg-rule md:mx-3"
-            />
+            <SkeletonBar className="h-5 w-24 md:mx-3" />
           )}
           <Button
             variant="ghost"
@@ -110,26 +109,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           {sessionFailed ? (
             isApiError(session.error) && session.error.code === 'unauthenticated' ? null : (
-              <div className="rounded-md border border-rule bg-sheet">
-                <EmptyState
-                  icon={RetryIcon}
-                  action={
-                    <Button variant="secondary" onClick={() => session.refetch()}>
-                      Retry
-                    </Button>
-                  }
-                >
-                  {describeError(session.error)}
-                </EmptyState>
-              </div>
+              <ErrorPanel onRetry={() => session.refetch()}>
+                {describeError(session.error)}
+              </ErrorPanel>
             )
           ) : user ? (
             children
           ) : (
-            <div aria-busy="true" aria-label="Loading" className="flex flex-col gap-4">
-              <div className="h-8 w-40 animate-pulse rounded-sm bg-rule" />
-              <div className="h-48 animate-pulse rounded-md border border-rule bg-sheet" />
-            </div>
+            <SkeletonSection label="Loading" className="gap-4">
+              <SkeletonBar className="h-8 w-40" />
+              <SkeletonCard className="h-48" />
+            </SkeletonSection>
           )}
         </div>
       </main>
