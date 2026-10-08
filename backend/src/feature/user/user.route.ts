@@ -1,10 +1,10 @@
 import { Router, type RequestHandler } from 'express'
 import type { RateLimiterPostgres } from 'rate-limiter-flexible'
 import type { Config } from '../../lib/config.js'
-import { SESSION_COOKIE, sessionCookieOptions } from '../../lib/cookie.js'
+import { setSessionCookie } from '../../lib/cookie.js'
 import { consumeOrThrow, ipLimitKey } from '../../lib/rate-limit.js'
 import type { UserService } from './user.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 import { signupSchema, updateSchema } from './user.schema.js'
 
 export function userRouter(
@@ -28,7 +28,7 @@ export function userRouter(
     )
     const input = signupSchema.parse(req.body)
     const { user, token } = await service.create(input)
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions(config))
+    setSessionCookie(res, token, config)
     res.status(201).json({ user })
   })
 

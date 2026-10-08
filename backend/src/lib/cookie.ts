@@ -1,4 +1,4 @@
-import type { CookieOptions } from 'express'
+import type { CookieOptions, Response } from 'express'
 import type { Config } from './config.js'
 
 export const SESSION_COOKIE = 'sid'
@@ -28,4 +28,18 @@ export function clearSessionCookieOptions(config: CookieConfig): CookieOptions {
   const options = sessionCookieOptions(config)
   delete options.maxAge
   return options
+}
+
+/** Sets (or renews) the session cookie to `token`. */
+export function setSessionCookie(
+  res: Pick<Response, 'cookie'>,
+  token: string,
+  config: CookieConfig
+): void {
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions(config))
+}
+
+/** Clears the session cookie with the attributes it was set with. */
+export function clearSessionCookie(res: Pick<Response, 'clearCookie'>, config: CookieConfig): void {
+  res.clearCookie(SESSION_COOKIE, clearSessionCookieOptions(config))
 }

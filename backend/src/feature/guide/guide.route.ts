@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from 'express'
 import type { AiApi } from '../ai/index.js'
 import { pathParam } from '../../lib/validation.js'
 import type { GuideService } from './guide.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 import { pathId } from '../../http/path-id.js'
 import { updateStepSchema } from './guide.schema.js'
 

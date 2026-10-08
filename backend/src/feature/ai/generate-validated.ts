@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import type { Db } from '../../lib/db/index.js'
-import { badGateway, unprocessable } from '../../lib/error.js'
+import { badGateway, ERROR_MESSAGE, unprocessable } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, ZERO_USAGE, type StructuredResult } from '../../lib/tutor/tutor.js'
 import { recordAiCall, type AiCall } from './ai-budget.js'
@@ -55,7 +55,7 @@ export async function generateValidated<S extends z.ZodType>(
         usage: err instanceof TutorProviderError ? (err.usage ?? ZERO_USAGE) : ZERO_USAGE,
         latencyMs: Date.now() - startedAt
       })
-      throw badGateway('ai_provider_error', 'The AI service failed to answer. Retry in a moment.')
+      throw badGateway('ai_provider_error', ERROR_MESSAGE.ai_provider_error)
     }
     await recordCall(db, auth, logger, kind, {
       model: result.model,
@@ -65,7 +65,7 @@ export async function generateValidated<S extends z.ZodType>(
       latencyMs: Date.now() - startedAt
     })
     if (result.stopReason === 'refusal') {
-      throw unprocessable('ai_refused', "The tutor can't help with that. Try rephrasing it.")
+      throw unprocessable('ai_refused', ERROR_MESSAGE.ai_refused)
     }
     const parsed = schema.safeParse(result.output)
     if (parsed.success) return parsed.data

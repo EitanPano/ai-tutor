@@ -14,3 +14,9 @@ export const email = () => z.email().refine(hasNoNul, NUL_ISSUE)
 export function pathParam(value: unknown): string {
   return typeof value === 'string' && hasNoNul(value) ? value : ''
 }
+
+/**
+ * A Zod path segment; a value holding U+0000 becomes `''`, so the lookup answers 404 rather than
+ * 400 (a NUL can never name a row).
+ */
+export const pathSegment = () => z.string().transform((value) => (hasNoNul(value) ? value : ''))

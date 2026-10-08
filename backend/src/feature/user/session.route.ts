@@ -1,11 +1,7 @@
 import { Router, type RequestHandler } from 'express'
 import type { Config } from '../../lib/config.js'
-import {
-  clearSessionCookieOptions,
-  SESSION_COOKIE,
-  sessionCookieOptions
-} from '../../lib/cookie.js'
-import { unauthorized } from '../../lib/error.js'
+import { clearSessionCookie, setSessionCookie } from '../../lib/cookie.js'
+import { unauthenticated } from '../../lib/error.js'
 import {
   consumeOrThrow,
   ipLimitKey,
@@ -13,7 +9,7 @@ import {
   type UserLimiters
 } from '../../lib/rate-limit.js'
 import type { SessionService } from './session.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 import { readSessionToken } from './require-session.js'
 import type { UserService } from './user.service.js'
 import { loginSchema } from './session.schema.js'
@@ -38,7 +34,7 @@ export function sessionRouter(
     await consumeOrThrow(limiters.loginIp, ipLimitKey(ip), res, message)
     await consumeOrThrow(limiters.login, loginLimitKey(ip, input.email), res, message)
     const { user, token } = await service.login(input, readSessionToken(req.cookies))
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions(config))
+    setSessionCookie(res, token, config)
     res.json({ user })
   })
 
@@ -49,9 +45,9 @@ export function sessionRouter(
 
   router.delete('/api/session', requireSession, async (req, res) => {
     const token = readSessionToken(req.cookies)
-    if (!token) throw unauthorized('Sign in to continue.', 'unauthenticated')
+    if (!token) throw unauthenticated()
     await service.logout(token)
-    res.clearCookie(SESSION_COOKIE, clearSessionCookieOptions(config))
+    clearSessionCookie(res, config)
     res.status(204).end()
   })
 

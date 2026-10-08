@@ -3,7 +3,7 @@ import type { Config } from '../../lib/config.js'
 import type { Db } from '../../lib/db/index.js'
 import type { Logger } from '../../lib/logger.js'
 import type { Auth } from '../../lib/ownership.js'
-import { assertAiEnabled } from './ai-guard.js'
+import { assertAiEnabled } from '../../lib/ai-enabled.js'
 import { assertWithinBudget, recordAiCall, type AiCall } from './ai-budget.js'
 import { generateValidated, type GenerateOptions } from './generate-validated.js'
 import {

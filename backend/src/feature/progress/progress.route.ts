@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import type { ProgressService } from './progress.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 
 export function progressRouter(
   service: ProgressService,

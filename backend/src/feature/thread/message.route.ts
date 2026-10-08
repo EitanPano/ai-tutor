@@ -1,17 +1,15 @@
 import { Router, type RequestHandler, type Response } from 'express'
+import { ERROR_MESSAGE } from '../../lib/error.js'
 import type { InFlightRegistry } from '../../lib/in-flight.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, type TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../ai/index.js'
 import type { AskOutcome, MessageService } from './message.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 import { pathId } from '../../http/path-id.js'
 import { askSchema } from './message.schema.js'
 
 const HEARTBEAT_MS = 15_000
-const REFUSED_MESSAGE = "The tutor can't help with that question. Try rephrasing it."
-const PROVIDER_ERROR_MESSAGE = 'The AI service failed to answer. Retry in a moment.'
-const INTERNAL_MESSAGE = 'Something went wrong on our side. Try again.'
 
 /** Writes SSE frames, silently dropping them once the response is finished or gone. */
 function eventWriter(res: Response) {
@@ -105,9 +103,9 @@ export function messageRouter(
     try {
       await service.finish(auth, ctx, outcome)
       if (outcome.kind === 'error') {
-        errorEvent('ai_provider_error', PROVIDER_ERROR_MESSAGE)
+        errorEvent('ai_provider_error', ERROR_MESSAGE.ai_provider_error)
       } else if (outcome.result.stopReason === 'refusal') {
-        errorEvent('ai_refused', REFUSED_MESSAGE)
+        errorEvent('ai_refused', ERROR_MESSAGE.ai_refused)
       } else if (outcome.result.stopReason !== 'aborted') {
         const { stopReason, usage } = outcome.result
         out.event('message.complete', {
@@ -124,7 +122,7 @@ export function messageRouter(
       }
     } catch (err) {
       logger.error({ err, requestId, threadId: ctx.threadId }, 'persisting the answer failed')
-      errorEvent('internal_error', INTERNAL_MESSAGE)
+      errorEvent('internal_error', ERROR_MESSAGE.internal_error)
     } finally {
       untrack()
       clearInterval(heartbeat)

@@ -6,7 +6,6 @@ import { pinoHttp } from 'pino-http'
 import type pg from 'pg'
 import type { Config } from './lib/config.js'
 import type { Db } from './lib/db/index.js'
-import { errorMiddleware, notFoundHandler } from './lib/error.js'
 import { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
 import { createLoginIpLimiter, createLoginLimiter, createSignupLimiter } from './lib/rate-limit.js'
@@ -20,8 +19,10 @@ import { createThreadModule, type ThreadApi } from './feature/thread/index.js'
 import { createAiModule, type AiApi } from './feature/ai/index.js'
 import { createTopicModule, type TopicApi } from './feature/topic/index.js'
 import { createUserModule } from './feature/user/index.js'
-import { originCheck } from './http/origin-check.js'
-import { requestId } from './http/request-id.js'
+import { attachContext, type Limiters } from './context.js'
+import { errorMiddleware, notFoundHandler } from './middleware/error.js'
+import { originCheck } from './middleware/origin-check.js'
+import { requestId } from './middleware/request-id.js'
 
 export type AppDeps = {
   config: Config
@@ -87,19 +88,17 @@ export function createApp({
   app.use(cookieParser())
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
+  // Built once per app: the module and the context share the same limiters and provider.
+  const limiters: Limiters = {
+    login: createLoginLimiter(pool),
+    loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
+    signup: createSignupLimiter(pool, config.signupRateLimit)
+  }
+  const provider = tutor ?? createTutorProvider(config)
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
-  const user = createUserModule({
-    db,
-    config,
-    limiters: {
-      login: createLoginLimiter(pool),
-      loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
-      signup: createSignupLimiter(pool, config.signupRateLimit)
-    }
-  })
+  const user = createUserModule({ db, config, limiters })
   const topic = createTopicModule({ db })
   const ai = createAiModule({ db, config, logger })
-  const provider = tutor ?? createTutorProvider(config)
   const thread = createThreadModule({
     db,
     tutor: provider,
@@ -127,6 +126,8 @@ export function createApp({
   })
   const progress = createProgressModule({ db, requireSession: user.requireSession })
   const health = createHealthModule({ db })
+  // Before any router: route handlers read their dependencies per request through ctxOf(req).
+  attachContext(app, { config, db, logger, tutor: provider, inFlight, limiters, services: {} })
   for (const router of [
     health.router,
     user.router,

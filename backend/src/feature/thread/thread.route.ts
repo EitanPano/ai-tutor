@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import type { ThreadService } from './thread.service.js'
-import { getAuth } from '../../http/get-auth.js'
+import { getAuth } from '../../middleware/auth.js'
 import { pathId } from '../../http/path-id.js'
 import { listQuerySchema, createSchema, updateSchema } from './thread.schema.js'
 
