@@ -4,8 +4,8 @@ import { createSseParser } from '../sse'
 import { apiErrorFrom, isAbortError, isErrorResponse, networkError, toApiError } from './client'
 import { ApiError } from './error'
 
-export type StreamMessageStart = components['schemas']['StreamMessageStart']
-export type StreamMessageComplete = components['schemas']['StreamMessageComplete']
+type StreamMessageStart = components['schemas']['StreamMessageStart']
+type StreamMessageComplete = components['schemas']['StreamMessageComplete']
 
 export type AskHandlers = {
   signal?: AbortSignal | undefined

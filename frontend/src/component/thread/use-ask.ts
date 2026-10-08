@@ -17,7 +17,7 @@ export type Asking = {
   assistantMessageId?: string
 }
 
-export type AskResult = {
+type AskOutcome = {
   /** The server accepted the question (a `message.start` arrived), so it is saved in the thread. */
   hasStarted: boolean
   outcome: 'completed' | 'stopped' | 'failed'
@@ -46,7 +46,7 @@ export function useAsk(
   const buffered = useRef('')
   const frame = useRef<number | undefined>(undefined)
   const askRef =
-    useRef<(question: string, onAccepted?: () => void) => Promise<AskResult>>(undefined)
+    useRef<(question: string, onAccepted?: () => void) => Promise<AskOutcome>>(undefined)
   const retryAccepted = useRef(onRetryAccepted)
   const showError = useRetryToast('ask')
 
@@ -70,14 +70,14 @@ export function useAsk(
   }, [])
 
   const ask = useCallback(
-    async (question: string, onAccepted?: () => void): Promise<AskResult> => {
+    async (question: string, onAccepted?: () => void): Promise<AskOutcome> => {
       if (controller.current) return { hasStarted: false, outcome: 'failed' }
       const abort = new AbortController()
       controller.current = abort
       askedAt.current = Date.now()
       let hasStarted = false
       let answerId: string | undefined
-      let outcome: AskResult['outcome'] = 'failed'
+      let outcome: AskOutcome['outcome'] = 'failed'
       buffered.current = ''
       setAnnouncement('')
       setAsking({ phase: 'thinking', question, text: '' })

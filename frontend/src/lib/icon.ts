@@ -9,7 +9,6 @@ export {
   ListChecks as GuideIcon,
   CircleQuestionMark as QuizIcon,
   ChartLine as ProgressIcon,
-  Tag as TopicIcon,
   Lightbulb as HintIcon,
   Flame as StreakIcon,
   LogOut as LogOutIcon,

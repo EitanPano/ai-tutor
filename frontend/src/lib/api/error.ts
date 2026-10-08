@@ -1,4 +1,4 @@
-export type ApiErrorInit = {
+type ApiErrorInit = {
   status: number
   code: string
   message: string

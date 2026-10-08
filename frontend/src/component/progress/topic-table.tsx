@@ -12,7 +12,7 @@ import { DEFAULT_DIFFICULTY, DIFFICULTIES } from '@/lib/quiz'
 import { relativeTime } from '@/lib/relative-time'
 
 /** Topics with activity first, newest first; the rest keep taxonomy order. */
-export function splitTopics(topics: TopicProgress[]) {
+function splitTopics(topics: TopicProgress[]) {
   const started = topics
     .filter((t) => t.lastActivityAt !== null)
     .sort((a, b) => Date.parse(b.lastActivityAt!) - Date.parse(a.lastActivityAt!))

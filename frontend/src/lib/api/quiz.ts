@@ -5,13 +5,12 @@ export type Difficulty = components['schemas']['Difficulty']
 export type Quiz = components['schemas']['Quiz']
 export type QuizItem = components['schemas']['QuizItem']
 export type QuizSummary = components['schemas']['QuizSummary']
-export type AttemptSummary = components['schemas']['AttemptSummary']
 export type Attempt = components['schemas']['Attempt']
 export type GradedItem = components['schemas']['GradedItem']
 export type CreateQuizRequest = components['schemas']['CreateQuizRequest']
-export type SubmitAttemptRequest = components['schemas']['SubmitAttemptRequest']
 type QuizResponse = components['schemas']['QuizResponse']
 type AttemptResponse = components['schemas']['AttemptResponse']
+type SubmitAttemptRequest = components['schemas']['SubmitAttemptRequest']
 
 export const quizKey = {
   all: ['quiz'] as const,

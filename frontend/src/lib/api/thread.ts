@@ -3,8 +3,8 @@ import { apiFetch } from './client'
 
 export type Thread = components['schemas']['Thread']
 export type Message = components['schemas']['Message']
-export type ThreadListResponse = components['schemas']['ThreadListResponse']
 export type ThreadDetailResponse = components['schemas']['ThreadDetailResponse']
+type ThreadListResponse = components['schemas']['ThreadListResponse']
 type ThreadResponse = components['schemas']['ThreadResponse']
 type CreateThreadRequest = components['schemas']['CreateThreadRequest']
 type UpdateThreadRequest = components['schemas']['UpdateThreadRequest']

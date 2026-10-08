@@ -2,7 +2,7 @@ import { useId, type KeyboardEvent } from 'react'
 import { Button } from '@/component/ui/button'
 import { SendIcon, StopIcon } from '@/lib/icon'
 
-export const COUNTER_FROM = 18_000
+const COUNTER_FROM = 18_000
 export const MAX_QUESTION = 20_000
 
 type ComposerProps = {

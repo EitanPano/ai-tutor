@@ -17,7 +17,7 @@ type Previous = Pick<Step, 'doneAt' | 'hintRevealedAt'>
 const STEP_MUTATION = ['guide', 'step'] as const
 
 /** The sentence for a failed step update. A missing guide is named as one, not as a thread. */
-export function describeStepError(err: unknown): string {
+function describeStepError(err: unknown): string {
   return isApiError(err) && err.code === 'not_found'
     ? "This guide doesn't exist or was deleted."
     : describeError(err)

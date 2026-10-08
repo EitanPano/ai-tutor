@@ -2,7 +2,7 @@ import { API_URL } from '@/lib/config'
 import type { components } from '@/types/api'
 import { ApiError } from './error'
 
-export type ErrorResponse = components['schemas']['ErrorResponse']
+type ErrorResponse = components['schemas']['ErrorResponse']
 
 /** A cache seeded with `setQueryData` just before navigating is fresh for this long, so the next page uses it as is. */
 export const SEEDED_STALE_MS = 30_000
