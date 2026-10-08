@@ -1,10 +1,10 @@
 import type { z } from 'zod'
 import type { Db } from '../../lib/db/index.js'
 import type { Auth } from '../../lib/ownership.js'
-import type { AiCall } from './ai-budget.js'
+import type { AiCall } from './budget.js'
 import type { GenerateOptions } from './generate-validated.js'
 import type { GenerationLockToken } from './generation-lock.js'
-import { createAiService, type AiServiceDeps } from './ai.service.js'
+import { createAiService, type AiServiceDeps } from './service.js'
 
 /** What other modules may call: every ai method (the module has no router). */
 export type AiApi = {

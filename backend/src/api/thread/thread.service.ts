@@ -5,7 +5,7 @@ import { badRequest, conflict } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
-import type { AiApi } from '../ai/index.js'
+import type { AiApi } from '../../services/ai/index.js'
 import type { TopicApi } from '../topic/index.js'
 
 export const DEFAULT_TOPIC_ID = 'other'

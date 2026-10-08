@@ -4,10 +4,7 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract } from '../helper/contract.js'
 import { parseSse } from '../helper/sse.js'
-import {
-  computeStreak,
-  createProgressService
-} from '../../src/feature/progress/progress.service.js'
+import { computeStreak, createProgressService } from '../../src/api/progress/progress.service.js'
 
 // QA adversarial pass for plan 001. Everything here goes through the HTTP API (or the progress
 // service with an explicit clock), against the real test database and the fake provider.

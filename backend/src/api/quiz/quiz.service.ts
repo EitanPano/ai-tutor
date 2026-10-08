@@ -4,7 +4,7 @@ import type { QuizAttemptRow, QuizDifficulty, QuizRow } from '../../lib/db/schem
 import { unprocessable } from '../../lib/error.js'
 import { QuizDraftSchema, type QuizDraft } from '../../lib/tutor/quiz.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
-import type { AiApi } from '../ai/index.js'
+import type { AiApi } from '../../services/ai/index.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'

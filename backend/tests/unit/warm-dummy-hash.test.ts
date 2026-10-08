@@ -5,7 +5,7 @@ vi.mock('../../src/lib/password.js', () => ({ hashPassword, verifyPassword: vi.f
 
 describe('warmDummyHash', () => {
   it('computes the dummy hash once, up front', async () => {
-    const { warmDummyHash } = await import('../../src/feature/user/session.service.js')
+    const { warmDummyHash } = await import('../../src/api/user/session.service.js')
     warmDummyHash()
     warmDummyHash()
     await Promise.resolve()

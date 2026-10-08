@@ -1,6 +1,6 @@
 import { Router, type RequestHandler } from 'express'
 import { pathParam } from '../../lib/validation.js'
-import type { AiApi } from '../ai/index.js'
+import type { AiApi } from '../../services/ai/index.js'
 import type { CreateQuizInput, QuizService } from './quiz.service.js'
 import { getAuth } from '../../middleware/auth.js'
 import { pathId } from '../../http/path-id.js'

@@ -25,7 +25,15 @@ const INFRA_TABLES: readonly string[] = ['rate_limit']
 
 const SCHEMA_SQL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../db/schema.sql')
 
-const FEATURE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src/feature')
+const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src')
+
+// Module roots: a module is one folder under src/api/ (HTTP modules) or src/services/ (no HTTP),
+// named by its folder (OWNED is keyed by that name).
+const MODULE_ROOTS: readonly string[] = ['api', 'services']
+
+// Code outside the module roots that must write no table: it reaches data only through a module.
+// lib/ is not listed: it holds the infra writes (INFRA_TABLES) and the seed and migration tooling.
+const OUTSIDE_MODULES: readonly string[] = ['middleware', 'app.ts', 'context.ts', 'index.ts']
 
 // Kysely: `.insertInto('t')`, `.updateTable('t as x')`, `.mergeInto(`t`)`; any quote style, alias dropped.
 // Raw SQL: keywords match in any case and the table may be double-quoted. `FOR [NO KEY] UPDATE` and
@@ -52,6 +60,8 @@ function scanWrites(source: string): string[] {
 
 type Write = { module: string; table: string; file: string }
 
+type Module = { name: string; dir: string }
+
 function tsFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name)
@@ -60,19 +70,21 @@ function tsFiles(dir: string): string[] {
   })
 }
 
-function featureModules(): string[] {
-  return readdirSync(FEATURE_ROOT, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
+function modules(): Module[] {
+  return MODULE_ROOTS.flatMap((root) =>
+    readdirSync(path.join(SRC, root), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({ name: entry.name, dir: path.join(SRC, root, entry.name) }))
+  )
 }
 
 function detectWrites(): Write[] {
   const writes: Write[] = []
-  for (const module of featureModules()) {
-    for (const file of tsFiles(path.join(FEATURE_ROOT, module))) {
+  for (const { name, dir } of modules()) {
+    for (const file of tsFiles(dir)) {
       const source = readFileSync(file, 'utf8')
       for (const table of scanWrites(source)) {
-        writes.push({ module, table, file: path.relative(FEATURE_ROOT, file) })
+        writes.push({ module: name, table, file: path.relative(SRC, file) })
       }
     }
   }
@@ -87,9 +99,17 @@ function schemaTables(): string[] {
 }
 
 describe('module write ownership', () => {
-  it('declares an owned-table entry for every feature module', () => {
-    const undeclared = featureModules().filter((module) => !(module in OWNED))
-    expect(undeclared, `feature modules missing from OWNED: ${undeclared.join(', ')}`).toEqual([])
+  it('declares an owned-table entry for every module', () => {
+    const undeclared = modules()
+      .map(({ name }) => name)
+      .filter((name) => !(name in OWNED))
+    expect(undeclared, `modules missing from OWNED: ${undeclared.join(', ')}`).toEqual([])
+  })
+
+  it('keeps module folder names unique across the roots, since OWNED is keyed by name', () => {
+    const names = modules().map(({ name }) => name)
+    const duplicates = names.filter((name, index) => names.indexOf(name) !== index)
+    expect(duplicates).toEqual([])
   })
 
   it('only lets a module write the tables it owns', () => {
@@ -130,11 +150,24 @@ describe('module write ownership', () => {
     expect(problems).toEqual([])
   })
 
-  it('keeps src/feature free of loose files, which the scan would skip', () => {
-    const loose = readdirSync(FEATURE_ROOT, { withFileTypes: true })
+  it.each(MODULE_ROOTS)('keeps src/%s free of loose files, which the scan would skip', (root) => {
+    const loose = readdirSync(path.join(SRC, root), { withFileTypes: true })
       .filter((entry) => !entry.isDirectory())
       .map((entry) => entry.name)
     expect(loose).toEqual([])
+  })
+
+  it('keeps code outside the module roots from writing any table', () => {
+    const violations = OUTSIDE_MODULES.flatMap((entry) => {
+      const full = path.join(SRC, entry)
+      const files = entry.endsWith('.ts') ? [full] : tsFiles(full)
+      return files.flatMap((file) =>
+        scanWrites(readFileSync(file, 'utf8')).map(
+          (table) => `${path.relative(SRC, file)} writes table "${table}"`
+        )
+      )
+    })
+    expect(violations).toEqual([])
   })
 })
 

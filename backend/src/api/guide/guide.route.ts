@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from 'express'
-import type { AiApi } from '../ai/index.js'
+import type { AiApi } from '../../services/ai/index.js'
 import { pathParam } from '../../lib/validation.js'
 import type { GuideService } from './guide.service.js'
 import { getAuth } from '../../middleware/auth.js'

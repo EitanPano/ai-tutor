@@ -3,7 +3,7 @@ import type { Db } from '../../lib/db/index.js'
 import { badGateway, ERROR_MESSAGE, unprocessable } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
 import { TutorProviderError, ZERO_USAGE, type StructuredResult } from '../../lib/tutor/tutor.js'
-import { recordAiCall, type AiCall } from './ai-budget.js'
+import { recordAiCall, type AiCall } from './budget.js'
 import type { Auth } from '../../lib/ownership.js'
 
 /** One attempt plus one retry when the output is unusable. */

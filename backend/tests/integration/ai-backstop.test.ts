@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '../../src/lib/db/index.js'
-import type { AiApi } from '../../src/feature/ai/index.js'
-import { createMessageService } from '../../src/feature/thread/message.service.js'
+import type { AiApi } from '../../src/services/ai/index.js'
+import { createMessageService } from '../../src/api/thread/message.service.js'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 
