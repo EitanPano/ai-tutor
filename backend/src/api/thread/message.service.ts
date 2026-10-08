@@ -45,8 +45,8 @@ export type ExplainOptions = {
   signal: AbortSignal
   /** Receives each chunk of the answer as it streams. */
   onDelta: (text: string) => void
-  /** Extra log fields (ids only, never content). */
-  logContext?: Record<string, string>
+  /** Ids for the failure log line, never content. */
+  logContext: { requestId: string }
 }
 
 /**
@@ -118,6 +118,12 @@ export type MessageService = {
     options: ExplainOptions
   ): Promise<AskOutcome>
   /**
+   * The `error` outcome of a turn whose provider call failed, or never ran (`latencyMs` 0): it is
+   * recorded against the tutor's model, with the usage a `TutorProviderError` observed before
+   * failing.
+   */
+  failedOutcome(err: unknown, latencyMs?: number): AskOutcome
+  /**
    * Persists the outcome of the provider call and ALWAYS releases the generation lock. Call it once
    * the provider finished or failed, whatever happened before.
    *
@@ -148,6 +154,13 @@ export function createMessageService({
   thread: threadService,
   logger
 }: MessageServiceDeps): MessageService {
+  const failedOutcome = (err: unknown, latencyMs = 0): AskOutcome => ({
+    kind: 'error',
+    model: tutor.model,
+    latencyMs,
+    ...(err instanceof TutorProviderError && err.usage ? { usage: err.usage } : {})
+  })
+
   return {
     async start(auth, threadId, content) {
       // Backstop; the route checks first so the error order stays kill switch → body.
@@ -217,15 +230,11 @@ export function createMessageService({
         return { kind: 'result', result, latencyMs: Date.now() - startedAt }
       } catch (err) {
         // Log the failure, never the question or answer text.
-        logger.error({ err, ...logContext, threadId: ctx.threadId }, 'tutor provider failed')
-        return {
-          kind: 'error',
-          model: tutor.model,
-          latencyMs: Date.now() - startedAt,
-          ...(err instanceof TutorProviderError && err.usage ? { usage: err.usage } : {})
-        }
+        logger.error({ ...logContext, err, threadId: ctx.threadId }, 'tutor provider failed')
+        return failedOutcome(err, Date.now() - startedAt)
       }
     },
+    failedOutcome,
     async finish(auth, ctx, outcome) {
       const result = outcome.kind === 'result' ? outcome.result : undefined
       const stopReason = result ? result.stopReason : 'error'

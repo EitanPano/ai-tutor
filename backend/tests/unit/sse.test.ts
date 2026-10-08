@@ -144,6 +144,14 @@ describe('openEventStream', () => {
     expect(onClientGone).toHaveBeenCalledOnce()
   })
 
+  it('reports the client gone once when it was already gone and the close follows', () => {
+    const res = new FakeResponse()
+    res.socket = { destroyed: true }
+    const { onClientGone } = open(res)
+    res.destroy()
+    expect(onClientGone).toHaveBeenCalledOnce()
+  })
+
   it('does not report the client gone on the close that follows a normal finish', () => {
     const res = new FakeResponse()
     const { stream, onClientGone } = open(res)

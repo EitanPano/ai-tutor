@@ -12,7 +12,10 @@ export type EventStream = {
 export type EventStreamOptions = {
   /** Interval of the `: ping` comment that keeps proxies from closing an idle stream. */
   heartbeatMs: number
-  /** The client went away before the response finished, or was already gone when it opened. */
+  /**
+   * The client went away before the response finished, or was already gone when it opened.
+   * Called at most once.
+   */
   onClientGone: () => void
 }
 
@@ -31,6 +34,12 @@ export function openEventStream(
     if (isAlive()) res.write(frame)
   }
   const comment = (text: string) => write(`: ${text}\n\n`)
+  let hasReportedGone = false
+  const reportGone = () => {
+    if (hasReportedGone) return
+    hasReportedGone = true
+    onClientGone()
+  }
 
   try {
     res.status(200)
@@ -43,10 +52,10 @@ export function openEventStream(
     res.flushHeaders()
     // A close before the response finished means the client went away.
     res.on('close', () => {
-      if (!res.writableFinished) onClientGone()
+      if (!res.writableFinished) reportGone()
     })
     // The client may already be gone (say, during the caller's database work).
-    if (res.destroyed || res.socket?.destroyed) onClientGone()
+    if (res.destroyed || res.socket?.destroyed) reportGone()
   } catch (err) {
     // Never leave a half-opened response hanging; the caller still owns the error.
     if (!res.writableEnded) res.end()

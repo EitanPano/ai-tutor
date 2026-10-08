@@ -87,7 +87,7 @@ function endEvent(messageId: string, outcome: AskOutcome, requestId: string): Ss
  * `message.complete` or an `error` event.
  */
 export const ask: Handler<IdParams, AskBody> = async (req, res) => {
-  const { inFlight, logger, tutor } = ctxOf(req)
+  const { inFlight, logger } = ctxOf(req)
   const { message } = servicesOf(req)
   const auth = getAuth(req)
   const { content } = req.body
@@ -122,10 +122,11 @@ export const ask: Handler<IdParams, AskBody> = async (req, res) => {
       logContext: { requestId }
     })
   } catch (err) {
-    // Only opening the stream throws here, before the provider is called. The turn still goes
-    // through `finish` as a failed call, which fails it and releases the lock.
-    logger.error({ err, requestId, threadId: ctx.threadId }, 'opening the event stream failed')
-    outcome = { kind: 'error', model: tutor.model, latencyMs: 0 }
+    // `explain` returns provider failures as an outcome, so whatever lands here failed outside
+    // the provider call (in practice, opening the stream). The turn still goes through `finish`
+    // as a failed call, which fails it and releases the lock.
+    logger.error({ err, requestId, threadId: ctx.threadId }, 'streaming the answer failed')
+    outcome = message.failedOutcome(err)
   }
 
   try {
