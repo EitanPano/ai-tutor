@@ -86,6 +86,14 @@ module.exports = {
       }
     },
     {
+      name: 'services-have-no-http',
+      comment:
+        'A service under src/services/ has no HTTP: it imports no values from middleware/ or http/.',
+      severity: 'error',
+      from: { path: '^src/services/' },
+      to: { path: '^src/(middleware|http)/', dependencyTypesNot: ['type-only'] }
+    },
+    {
       name: 'outside-uses-public-api',
       comment:
         'Code outside the module roots (app.ts, context.ts, middleware/) reaches a module, values or types, only through its index.ts.',
@@ -94,11 +102,13 @@ module.exports = {
       to: { path: ANY_MODULE, pathNot: MODULE_INDEX }
     },
     {
-      name: 'index-exports-module-only',
-      comment: 'An index.ts re-exports values only from its <m>.module.ts.',
+      name: 'index-imports-own-folder-only',
+      comment:
+        "A module's index.ts imports only from its own folder: never from lib/, another module or a package.",
       severity: 'error',
-      from: { path: MODULE_INDEX },
-      to: { path: '^src/', pathNot: '[.]module[.]ts$', dependencyTypesNot: ['type-only'] }
+      // MODULE's two groups fill OWN with the index's own folder.
+      from: { path: `${MODULE}index[.]ts$` },
+      to: { pathNot: OWN }
     }
   ],
   options: {

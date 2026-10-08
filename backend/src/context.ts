@@ -5,12 +5,15 @@ import type { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
 import type { UserLimiters } from './lib/rate-limit.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
+import type { AiService } from './services/ai/index.js'
 
 /** The Postgres-backed rate limiters, built once per app. */
 export type Limiters = UserLimiters
 
 /** One service per converted module, keyed by module name. */
-export type Services = Record<never, never>
+export type Services = {
+  ai: AiService
+}
 
 /** Everything a request handler depends on, built once per app by `createApp`. */
 export type AppContext = {

@@ -16,9 +16,9 @@ import { createHealthModule } from './api/health/index.js'
 import { createProgressModule } from './api/progress/index.js'
 import { createQuizModule } from './api/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './api/thread/index.js'
-import { createAiModule, type AiApi } from './services/ai/index.js'
 import { createTopicModule, type TopicApi } from './api/topic/index.js'
 import { createUserModule } from './api/user/index.js'
+import { createAiService, type AiApi } from './services/ai/index.js'
 import { attachContext, type Limiters } from './context.js'
 import { errorMiddleware, notFoundHandler } from './middleware/error.js'
 import { originCheck } from './middleware/origin-check.js'
@@ -98,7 +98,7 @@ export function createApp({
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
   const user = createUserModule({ db, config, limiters })
   const topic = createTopicModule({ db })
-  const ai = createAiModule({ db, config, logger })
+  const ai = createAiService({ db, config, logger })
   const thread = createThreadModule({
     db,
     tutor: provider,
@@ -106,14 +106,14 @@ export function createApp({
     inFlight,
     requireSession: user.requireSession,
     topic: topic.api,
-    ai: ai.api
+    ai
   })
   const guide = createGuideModule({
     db,
     tutor: provider,
     requireSession: user.requireSession,
     topic: topic.api,
-    ai: ai.api,
+    ai,
     thread: thread.api
   })
   const quiz = createQuizModule({
@@ -121,13 +121,13 @@ export function createApp({
     tutor: provider,
     requireSession: user.requireSession,
     topic: topic.api,
-    ai: ai.api,
+    ai,
     thread: thread.api
   })
   const progress = createProgressModule({ db, requireSession: user.requireSession })
   const health = createHealthModule({ db })
   // Before any router: route handlers read their dependencies per request through ctxOf(req).
-  attachContext(app, { config, db, logger, tutor: provider, inFlight, limiters, services: {} })
+  attachContext(app, { config, db, logger, tutor: provider, inFlight, limiters, services: { ai } })
   for (const router of [
     health.router,
     user.router,
@@ -146,7 +146,7 @@ export function createApp({
     app,
     modules: {
       topic: topic.api,
-      ai: ai.api,
+      ai,
       thread: thread.api,
       recoverAtBoot: async () => {
         // A failed sweep must not leave users locked out: release the locks anyway, then let the
