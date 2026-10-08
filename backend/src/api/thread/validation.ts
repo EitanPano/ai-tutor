@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { text } from '../../lib/validation.js'
+import { atLeastOneField, id, text, title } from '../../lib/validation.js'
 
 // These schemas mirror ListThreads / CreateThreadRequest / UpdateThreadRequest / AskRequest in
 // .orchestrate/api-contract.yaml.
@@ -10,17 +10,17 @@ export const listQuery = z.object({
 export type ListQuery = z.output<typeof listQuery>
 
 export const createBody = z.strictObject({
-  topicId: text().min(1).optional(),
-  title: text().trim().min(1).max(120).optional()
+  topicId: id().optional(),
+  title: title().optional()
 })
 export type CreateBody = z.output<typeof createBody>
 
-export const updateBody = z
-  .strictObject({
-    title: text().trim().min(1).max(120).optional(),
-    topicId: text().min(1).optional()
+export const updateBody = atLeastOneField(
+  z.strictObject({
+    title: title().optional(),
+    topicId: id().optional()
   })
-  .refine((body) => Object.keys(body).length > 0, { message: 'Provide at least one field.' })
+)
 export type UpdateBody = z.output<typeof updateBody>
 
 // Whitespace-only counts as empty.
