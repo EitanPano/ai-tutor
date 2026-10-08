@@ -12,11 +12,11 @@ import { createLoginIpLimiter, createLoginLimiter, createSignupLimiter } from '.
 import { createTutorProvider } from './lib/tutor/factory.js'
 import type { TutorProvider } from './lib/tutor/tutor.js'
 import { createGuideModule } from './api/guide/index.js'
-import { createHealthModule } from './api/health/index.js'
+import { createHealthService, healthRouter } from './api/health/index.js'
 import { createProgressModule } from './api/progress/index.js'
 import { createQuizModule } from './api/quiz/index.js'
 import { createThreadModule, type ThreadApi } from './api/thread/index.js'
-import { createTopicModule, type TopicApi } from './api/topic/index.js'
+import { createTopicService, topicRouter, type TopicApi } from './api/topic/index.js'
 import { createUserModule } from './api/user/index.js'
 import { createAiService, type AiApi } from './services/ai/index.js'
 import { attachContext, type Limiters } from './context.js'
@@ -97,7 +97,7 @@ export function createApp({
   const provider = tutor ?? createTutorProvider(config)
   // Modules are built in dependency order: a module only receives the APIs of modules built before it.
   const user = createUserModule({ db, config, limiters })
-  const topic = createTopicModule({ db })
+  const topic = createTopicService({ db })
   const ai = createAiService({ db, config, logger })
   const thread = createThreadModule({
     db,
@@ -105,14 +105,14 @@ export function createApp({
     logger,
     inFlight,
     requireSession: user.requireSession,
-    topic: topic.api,
+    topic,
     ai
   })
   const guide = createGuideModule({
     db,
     tutor: provider,
     requireSession: user.requireSession,
-    topic: topic.api,
+    topic,
     ai,
     thread: thread.api
   })
@@ -120,18 +120,26 @@ export function createApp({
     db,
     tutor: provider,
     requireSession: user.requireSession,
-    topic: topic.api,
+    topic,
     ai,
     thread: thread.api
   })
   const progress = createProgressModule({ db, requireSession: user.requireSession })
-  const health = createHealthModule({ db })
+  const health = createHealthService({ db })
   // Before any router: route handlers read their dependencies per request through ctxOf(req).
-  attachContext(app, { config, db, logger, tutor: provider, inFlight, limiters, services: { ai } })
+  attachContext(app, {
+    config,
+    db,
+    logger,
+    tutor: provider,
+    inFlight,
+    limiters,
+    services: { ai, health, topic }
+  })
   for (const router of [
-    health.router,
+    healthRouter,
     user.router,
-    topic.router,
+    topicRouter,
     thread.router,
     guide.router,
     quiz.router,
@@ -145,7 +153,7 @@ export function createApp({
   return {
     app,
     modules: {
-      topic: topic.api,
+      topic,
       ai,
       thread: thread.api,
       recoverAtBoot: async () => {

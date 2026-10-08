@@ -12,6 +12,9 @@ export type TopicService = {
   require(id: string): Promise<TopicDto>
 }
 
+/** What other modules may call. */
+export type TopicApi = Pick<TopicService, 'require'>
+
 export function createTopicService({ db }: TopicServiceDeps): TopicService {
   return {
     async list() {

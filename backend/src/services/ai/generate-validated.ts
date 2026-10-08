@@ -13,7 +13,7 @@ export type GenerationKind = 'guide' | 'quiz'
 
 type RecordedCall = Omit<AiCall, 'kind'>
 
-/** What a caller passes; the ai module supplies the logger. */
+/** What a caller passes; the ai service supplies the logger. */
 export type GenerateOptions<S extends z.ZodType> = {
   kind: GenerationKind
   schema: S
