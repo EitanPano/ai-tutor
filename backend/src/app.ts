@@ -105,15 +105,14 @@ export function createApp({
   const quiz = createQuizService({ db, tutor: provider, topic, ai, thread })
   const ctx: AppContext = {
     config,
-    db,
     logger,
-    tutor: provider,
     inFlight,
     limiters: {
       login: createLoginLimiter(pool),
       loginIp: createLoginIpLimiter(pool, config.loginIpRateLimit),
       signup: createSignupLimiter(pool, config.signupRateLimit)
     },
+    // `Services` narrows `ai` and `thread`: their boot-only sweeps stay with `recoverAtBoot` below.
     services: { ai, guide, health, message, progress, quiz, session, thread, topic, user }
   }
   // Before any router: route handlers read their dependencies per request through ctxOf(req).

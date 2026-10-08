@@ -1,10 +1,8 @@
 import type { Express, Request } from 'express'
 import type { RateLimiterPostgres } from 'rate-limiter-flexible'
 import type { Config } from './lib/config.js'
-import type { Db } from './lib/db/index.js'
 import type { InFlightRegistry } from './lib/in-flight.js'
 import type { Logger } from './lib/logger.js'
-import type { TutorProvider } from './lib/tutor/tutor.js'
 import type { GuideService } from './api/guide/index.js'
 import type { HealthService } from './api/health/index.js'
 import type { ProgressService } from './api/progress/index.js'
@@ -12,7 +10,7 @@ import type { QuizService } from './api/quiz/index.js'
 import type { MessageService, ThreadService } from './api/thread/index.js'
 import type { TopicService } from './api/topic/index.js'
 import type { SessionService, UserService } from './api/user/index.js'
-import type { AiService } from './services/ai/index.js'
+import type { AiApi } from './services/ai/index.js'
 
 /** The Postgres-backed rate limiters, built once per app. */
 export type Limiters = {
@@ -24,26 +22,32 @@ export type Limiters = {
   signup: RateLimiterPostgres
 }
 
-/** The services `createApp` builds, by name; controllers read them through `servicesOf(req)`. */
+/**
+ * The services `createApp` builds, by name; controllers and middleware read them through
+ * `servicesOf(req)`. The boot-only sweeps (`AiService.releaseAllLocks`,
+ * `ThreadService.recoverStaleAtBoot`) are left out: they act on every user's turns and locks, so
+ * only the `recoverAtBoot` that `createApp` returns may call them.
+ */
 export type Services = {
-  ai: AiService
+  ai: AiApi
   guide: GuideService
   health: HealthService
   message: MessageService
   progress: ProgressService
   quiz: QuizService
   session: SessionService
-  thread: ThreadService
+  thread: Omit<ThreadService, 'recoverStaleAtBoot'>
   topic: TopicService
   user: UserService
 }
 
-/** Everything a request handler depends on, built once per app by `createApp`. */
+/**
+ * Everything a request handler depends on, built once per app by `createApp`. No `db` and no tutor
+ * provider: a handler reaches data and the model only through a service.
+ */
 export type AppContext = {
   config: Config
-  db: Db
   logger: Logger
-  tutor: TutorProvider
   /** Running explain generations; the server aborts them all on shutdown. */
   inFlight: InFlightRegistry
   limiters: Limiters
