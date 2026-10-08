@@ -9,6 +9,7 @@ import { TextField } from '@/component/ui/text-field'
 import { describeError } from '@/lib/api/error'
 import { logIn } from '@/lib/api/session'
 import { safeNextPath } from '@/lib/next-path'
+import { SIGNUP_PATH } from '@/lib/route'
 import { useAuthForm, type FieldIssues } from './use-auth-form'
 
 export function LoginForm({ next }: { next?: string | undefined }) {
@@ -55,13 +56,13 @@ export function LoginForm({ next }: { next?: string | undefined }) {
           onChange={(event) => setPassword(event.target.value)}
           error={issues.password}
         />
-        <Button type="submit" size="lg" loading={isPending} className="mt-2">
+        <Button type="submit" size="lg" isLoading={isPending} className="mt-2">
           Log in
         </Button>
       </form>
       <p className="text-sm text-ink-muted">
         New here?{' '}
-        <Link href="/signup" className="font-semibold underline underline-offset-2">
+        <Link href={SIGNUP_PATH} className="font-semibold underline underline-offset-2">
           Create an account
         </Link>
       </p>

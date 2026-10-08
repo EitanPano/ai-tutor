@@ -56,7 +56,7 @@ export function NewQuestion() {
           value={question}
           onChange={setQuestion}
           onSubmit={() => create.mutate()}
-          submitting={create.isPending || create.isSuccess}
+          isSubmitting={create.isPending || create.isSuccess}
         />
       </Sheet>
     </div>

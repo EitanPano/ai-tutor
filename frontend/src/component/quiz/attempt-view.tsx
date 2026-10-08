@@ -24,7 +24,7 @@ function Choice({ text, index, item }: { text: string; index: number; item: Grad
     <li className={`flex items-start gap-3 rounded-md border px-4 py-3 ${style.frame}`}>
       <span className="mt-1 grid size-4 shrink-0 place-items-center">{style.mark}</span>
       <div className="flex min-w-0 flex-col gap-1">
-        <Markdown inline className={cn('break-words', style.text)}>
+        <Markdown isInline className={cn('break-words', style.text)}>
           {text}
         </Markdown>
         {(isAnswer || isPick) && (
@@ -63,7 +63,7 @@ function ReviewItem({ item, number }: { item: GradedItem; number: number }) {
           {item.isCorrect ? 'Correct' : 'Incorrect'}
         </p>
         <p className="text-lead font-semibold">
-          <Markdown inline>{item.prompt}</Markdown>
+          <Markdown isInline>{item.prompt}</Markdown>
         </p>
         <ul aria-label="Choices" className="flex flex-col gap-2">
           {item.choices.map((choice, index) => (

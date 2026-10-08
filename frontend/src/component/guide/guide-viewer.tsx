@@ -24,18 +24,18 @@ const COMPLETE = 'complete'
 
 function Complete({
   threadId,
-  focusTitle,
+  shouldFocusTitle,
   onReview
 }: {
   threadId: string
-  focusTitle: boolean
+  shouldFocusTitle: boolean
   onReview: () => void
 }) {
   const title = useRef<HTMLHeadingElement>(null)
   const quiz = useCreateQuiz()
   useEffect(() => {
-    if (focusTitle) title.current?.focus()
-  }, [focusTitle])
+    if (shouldFocusTitle) title.current?.focus()
+  }, [shouldFocusTitle])
 
   return (
     <Sheet as="section" aria-labelledby="guide-complete" className="p-5 md:p-8">
@@ -46,7 +46,7 @@ function Complete({
         </h2>
         <p className="text-lead text-ink-muted">Test yourself to see what stuck.</p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button loading={quiz.isPending} onClick={() => quiz.create({ threadId })}>
+          <Button isLoading={quiz.isPending} onClick={() => quiz.create({ threadId })}>
             {!quiz.isPending && <QuizIcon aria-hidden="true" className="size-4" />}
             {quiz.isPending ? 'Writing your quiz…' : 'Quiz me on this'}
           </Button>
@@ -71,9 +71,9 @@ function Viewer({ guide }: { guide: Guide }) {
   // The step the reader picked, or `complete`. Undefined means "the first step not done".
   const [selected, setSelected] = useState<string>()
   // False until the reader moves: the first render must not steal focus from the page.
-  const [moved, setMoved] = useState(false)
+  const [hasMoved, setHasMoved] = useState(false)
 
-  const done = steps.filter((s) => s.doneAt).length
+  const doneCount = steps.filter((s) => s.doneAt).length
   const firstUndone = steps.find((s) => !s.doneAt)
   const picked =
     selected && selected !== COMPLETE ? steps.find((s) => s.id === selected) : undefined
@@ -83,17 +83,17 @@ function Viewer({ guide }: { guide: Guide }) {
   const index = step ? steps.indexOf(step) : -1
 
   const go = useCallback((id: string) => {
-    setMoved(true)
+    setHasMoved(true)
     setSelected(id)
   }, [])
 
-  function toggleDone(stepId: string, makeDone: boolean) {
+  function toggleDone(stepId: string, isDone: boolean) {
     update.mutate(
-      { stepId, body: { isDone: makeDone } },
+      { stepId, body: { isDone } },
       // Put the reader back on the step whose mark did not take.
-      { onError: () => makeDone && setSelected(stepId) }
+      { onError: () => isDone && setSelected(stepId) }
     )
-    if (!makeDone) return
+    if (!isDone) return
     const at = steps.findIndex((s) => s.id === stepId)
     const next =
       steps.slice(at + 1).find((s) => !s.doneAt) ?? steps.find((s) => s.id !== stepId && !s.doneAt)
@@ -114,7 +114,7 @@ function Viewer({ guide }: { guide: Guide }) {
           Back to the conversation
         </BackLink>
         <h1 className="text-title break-words">{guide.title}</h1>
-        <ProgressBar done={done} total={steps.length} />
+        <ProgressBar doneCount={doneCount} total={steps.length} />
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start">
@@ -126,7 +126,7 @@ function Viewer({ guide }: { guide: Guide }) {
               step={step}
               index={index}
               total={steps.length}
-              focusTitle={moved}
+              shouldFocusTitle={hasMoved}
               onRevealHint={revealHint}
               onToggleDone={toggleDone}
               onPrevious={() => go(steps[index - 1]!.id)}
@@ -135,7 +135,7 @@ function Viewer({ guide }: { guide: Guide }) {
           ) : (
             <Complete
               threadId={guide.threadId}
-              focusTitle={moved}
+              shouldFocusTitle={hasMoved}
               onReview={() => go(steps[0]!.id)}
             />
           )}
@@ -158,8 +158,8 @@ export function GuideViewer({ guideId }: { guideId: string }) {
   if (query.isPending) return <GuideSkeleton />
 
   if (!query.data) {
-    const missing = isApiError(query.error) && query.error.code === 'not_found'
-    return missing ? (
+    const isMissing = isApiError(query.error) && query.error.code === 'not_found'
+    return isMissing ? (
       <NotFoundPanel icon={GuideIcon}>This guide doesn&apos;t exist or was deleted.</NotFoundPanel>
     ) : (
       <ErrorPanel onRetry={() => query.refetch()}>{describeError(query.error)}</ErrorPanel>

@@ -27,7 +27,7 @@ describe('Markdown', () => {
 
   it('renders a fenced block with its language and a Copy button', async () => {
     const typist = userEvent.setup()
-    const { container } = render(<Markdown streaming>{'```ts\nconst a = 1\n```'}</Markdown>)
+    const { container } = render(<Markdown isStreaming>{'```ts\nconst a = 1\n```'}</Markdown>)
 
     expect(container.querySelector('pre > code')).toHaveTextContent('const a = 1')
     expect(screen.getByText('ts')).toBeInTheDocument()
@@ -78,12 +78,12 @@ describe('Markdown', () => {
 
   it('keeps code blocks and links mounted when the text around them changes', () => {
     const text = '[docs](https://react.dev)\n\n```ts\nconst a = 1\n```'
-    const { container, rerender } = render(<Markdown streaming>{text}</Markdown>)
+    const { container, rerender } = render(<Markdown isStreaming>{text}</Markdown>)
     const figure = container.querySelector('figure')
     const link = container.querySelector('a')
     const copy = screen.getByRole('button', { name: 'Copy' })
 
-    rerender(<Markdown streaming>{`${text}\n\nA later paragraph.`}</Markdown>)
+    rerender(<Markdown isStreaming>{`${text}\n\nA later paragraph.`}</Markdown>)
 
     expect(container.querySelector('figure')).toBe(figure)
     expect(container.querySelector('a')).toBe(link)

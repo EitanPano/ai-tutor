@@ -19,16 +19,16 @@ export function SignupForm() {
   const [password, setPassword] = useState('')
   // The browser's zone on the client, a fixed fallback during server render and hydration.
   const timeZone = useSyncExternalStore(noSubscription, detectTimeZone, () => FALLBACK_TIME_ZONE)
-  const [emailTaken, setEmailTaken] = useState(false)
+  const [isEmailTaken, setIsEmailTaken] = useState(false)
   const { issues, isPending, submit } = useAuthForm({
     send: signUp,
     nextPath: DEFAULT_PATH,
-    onErrorCode: { email_taken: () => setEmailTaken(true) }
+    onErrorCode: { email_taken: () => setIsEmailTaken(true) }
   })
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setEmailTaken(false)
+    setIsEmailTaken(false)
     const checks: FieldIssues = {}
     if (!displayName.trim()) checks.displayName = 'Enter your name.'
     if (!email.trim()) checks.email = 'Enter your email.'
@@ -58,7 +58,7 @@ export function SignupForm() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           error={
-            emailTaken ? (
+            isEmailTaken ? (
               <>
                 An account with this email already exists.{' '}
                 <Link href={LOGIN_PATH} className="font-semibold underline underline-offset-2">
@@ -88,7 +88,7 @@ export function SignupForm() {
             The server did not accept the time zone {timeZone}: {issues.timeZone}
           </p>
         )}
-        <Button type="submit" size="lg" loading={isPending} className="mt-2">
+        <Button type="submit" size="lg" isLoading={isPending} className="mt-2">
           Create account
         </Button>
       </form>

@@ -31,7 +31,7 @@ const ItemField = memo(function ItemField({ item, value, onSelect }: ItemFieldPr
   return (
     <fieldset className="flex min-w-0 flex-col gap-3">
       <legend className="mb-3 max-w-full p-0 text-lead font-semibold">
-        <Markdown inline>{item.prompt}</Markdown>
+        <Markdown isInline>{item.prompt}</Markdown>
       </legend>
       <div className="flex flex-col gap-2">
         {item.choices.map((choice, index) => (
@@ -50,7 +50,7 @@ const ItemField = memo(function ItemField({ item, value, onSelect }: ItemFieldPr
               aria-hidden="true"
               className="mt-1.5 grid size-4 shrink-0 place-items-center rounded-full border-2 border-ink-muted after:size-2 after:scale-0 after:rounded-full after:bg-ink after:transition-transform peer-checked:border-ink peer-checked:after:scale-100"
             />
-            <Markdown inline className="min-w-0 break-words">
+            <Markdown isInline className="min-w-0 break-words">
               {choice}
             </Markdown>
           </label>
@@ -114,8 +114,8 @@ function Taker({ quiz }: { quiz: Quiz }) {
   const submitButton = useRef<HTMLButtonElement>(null)
 
   const total = quiz.items.length
-  const answered = quiz.items.filter((item) => answers[item.id] !== undefined).length
-  const ready = answered === total
+  const answeredCount = quiz.items.filter((item) => answers[item.id] !== undefined).length
+  const isReady = answeredCount === total
 
   const select = useCallback(
     (itemId: string, choiceIndex: number) => setAnswers((a) => ({ ...a, [itemId]: choiceIndex })),
@@ -148,11 +148,11 @@ function Taker({ quiz }: { quiz: Quiz }) {
   }, [submit.isError])
 
   // A success stays busy too: router.push only starts the navigation, the old page lingers.
-  const submitting = submit.isPending || submit.isSuccess
+  const isSubmitting = submit.isPending || submit.isSuccess
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (ready && !submitting) submit.mutate()
+    if (isReady && !isSubmitting) submit.mutate()
   }
 
   return (
@@ -179,16 +179,16 @@ function Taker({ quiz }: { quiz: Quiz }) {
       <div className="sticky bottom-0 z-10 -mx-2 bg-canvas px-2 pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-canvas before:to-transparent">
         <Sheet className="flex flex-wrap items-center justify-between gap-3 p-4 shadow-lg shadow-ink/10">
           <p id="quiz-progress" role="status" className="font-semibold">
-            {answered} of {total} answered
+            {answeredCount} of {total} answered
           </p>
           <Button
             ref={submitButton}
             type="submit"
-            loading={submitting}
-            disabled={!ready}
+            isLoading={isSubmitting}
+            disabled={!isReady}
             aria-describedby="quiz-progress"
           >
-            {submitting ? 'Grading…' : 'Submit answers'}
+            {isSubmitting ? 'Grading…' : 'Submit answers'}
           </Button>
         </Sheet>
       </div>

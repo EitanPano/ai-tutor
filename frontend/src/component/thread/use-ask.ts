@@ -19,7 +19,7 @@ export type Asking = {
 
 export type AskResult = {
   /** The server accepted the question (a `message.start` arrived), so it is saved in the thread. */
-  started: boolean
+  hasStarted: boolean
   outcome: 'completed' | 'stopped' | 'failed'
 }
 
@@ -36,11 +36,11 @@ export function useAsk(
   const queryClient = useQueryClient()
   const [asking, setAsking] = useState<Asking>()
   const [announcement, setAnnouncement] = useState('')
-  const [budgetSpent, setBudgetSpent] = useState(false)
-  const [threadFull, setThreadFull] = useState(false)
+  const [isBudgetSpent, setIsBudgetSpent] = useState(false)
+  const [isThreadFull, setIsThreadFull] = useState(false)
   const controller = useRef<AbortController | undefined>(undefined)
   const askedAt = useRef(0)
-  const mounted = useRef(true)
+  const isMounted = useRef(true)
   // Streamed text waits here and reaches state at most once per animation frame: every state
   // change re-parses the whole growing answer as Markdown.
   const buffered = useRef('')
@@ -55,15 +55,15 @@ export function useAsk(
   }, [onRetryAccepted])
 
   useEffect(() => {
-    mounted.current = true
+    isMounted.current = true
     return () => {
-      mounted.current = false
+      isMounted.current = false
       if (frame.current !== undefined) cancelAnimationFrame(frame.current)
       frame.current = undefined
       buffered.current = ''
       // Deferred so React's dev-only unmount/remount does not cancel a stream that just started.
       setTimeout(() => {
-        if (mounted.current) return
+        if (isMounted.current) return
         controller.current?.abort()
       })
     }
@@ -71,11 +71,11 @@ export function useAsk(
 
   const ask = useCallback(
     async (question: string, onAccepted?: () => void): Promise<AskResult> => {
-      if (controller.current) return { started: false, outcome: 'failed' }
+      if (controller.current) return { hasStarted: false, outcome: 'failed' }
       const abort = new AbortController()
       controller.current = abort
       askedAt.current = Date.now()
-      let started = false
+      let hasStarted = false
       let answerId: string | undefined
       let outcome: AskResult['outcome'] = 'failed'
       buffered.current = ''
@@ -85,14 +85,14 @@ export function useAsk(
       // Missing counts as not saved yet: while the thread's first load is in flight, an
       // invalidation joins that load instead of starting a new one, and it may have read the
       // thread before this question was saved.
-      const stillSaving = (id: string | undefined) =>
+      const isStillSaving = (id: string | undefined) =>
         !!id &&
         !queryClient
           .getQueryData<ThreadDetailResponse>(threadKey.detail(threadId))
           ?.messages.some((m) => m.id === id && !isPending(m))
 
       // Only the first question changes the title, so only then does the list need to know now.
-      const firstQuestion = !queryClient.getQueryData<ThreadDetailResponse>(
+      const isFirstQuestion = !queryClient.getQueryData<ThreadDetailResponse>(
         threadKey.detail(threadId)
       )?.messages.length
       const refreshDetail = () =>
@@ -110,7 +110,7 @@ export function useAsk(
         frame.current = undefined
         const text = buffered.current
         buffered.current = ''
-        if (text && mounted.current)
+        if (text && isMounted.current)
           update((a) => ({ ...a, phase: 'streaming', text: a.text + text }))
       }
 
@@ -118,12 +118,12 @@ export function useAsk(
         const result = await askQuestion(threadId, question, {
           signal: abort.signal,
           onStart: ({ userMessageId, assistantMessageId }) => {
-            started = true
+            hasStarted = true
             onAccepted?.()
             answerId = assistantMessageId
             update((a) => ({ ...a, userMessageId, assistantMessageId }))
             void refreshDetail()
-            if (firstQuestion) void refreshList()
+            if (isFirstQuestion) void refreshList()
           },
           onDelta: (text) => {
             buffered.current += text
@@ -135,34 +135,34 @@ export function useAsk(
           }
         })
         outcome = result
-        if (result === 'completed' && mounted.current) setAnnouncement('Answer ready')
+        if (result === 'completed' && isMounted.current) setAnnouncement('Answer ready')
       } catch (err) {
-        if (mounted.current) {
+        if (isMounted.current) {
           const code = isApiError(err) ? err.code : ''
-          if (code === 'ai_budget_exceeded') setBudgetSpent(true)
-          if (code === 'thread_full') setThreadFull(true)
+          if (code === 'ai_budget_exceeded') setIsBudgetSpent(true)
+          if (code === 'thread_full') setIsThreadFull(true)
           showError(err, () => {
             void askRef.current?.(question, () => retryAccepted.current?.(question))
           })
         }
       } finally {
         flush()
-        if (mounted.current) setAsking((a) => (a ? { ...a, phase: 'finalizing' } : a))
+        if (isMounted.current) setAsking((a) => (a ? { ...a, phase: 'finalizing' } : a))
         // The saved thread is the truth: keep the streamed text on screen until it has loaded.
         // The controller stays set until then, so a second ask cannot start mid-handover.
         await refreshDetail().catch(() => undefined)
         // After a Stop the server finishes saving the partial answer a moment later, and the
         // first look may come from a load that started before this turn existed.
-        for (let i = 0; i < 10 && mounted.current && stillSaving(answerId); i++) {
+        for (let i = 0; i < 10 && isMounted.current && isStillSaving(answerId); i++) {
           await new Promise((resolve) => setTimeout(resolve, 300))
           await refreshDetail().catch(() => undefined)
         }
         // Every turn moves the thread to the top of the list: one refresh, once it has settled.
         void refreshList().catch(() => undefined)
         controller.current = undefined
-        if (mounted.current) setAsking(undefined)
+        if (isMounted.current) setAsking(undefined)
       }
-      return { started, outcome }
+      return { hasStarted, outcome }
     },
     [threadId, queryClient, showError]
   )
@@ -176,5 +176,5 @@ export function useAsk(
     controller.current?.abort()
   }, [])
 
-  return { asking, ask, stop, announcement, budgetSpent, threadFull }
+  return { asking, ask, stop, announcement, isBudgetSpent, isThreadFull }
 }

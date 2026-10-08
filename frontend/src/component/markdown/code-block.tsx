@@ -66,10 +66,10 @@ type CodeBlockProps = {
   /** The fence's info string; `text` when absent. */
   language?: string
   /** Highlighting waits until the message stops streaming. */
-  streaming?: boolean
+  isStreaming?: boolean
 }
 
-export function CodeBlock({ code, language, streaming = false }: CodeBlockProps) {
+export function CodeBlock({ code, language, isStreaming = false }: CodeBlockProps) {
   const lang = (language || 'text').toLowerCase()
   const text = code.replace(/\n$/, '')
   const key = `${lang}\u0000${text}`
@@ -77,18 +77,18 @@ export function CodeBlock({ code, language, streaming = false }: CodeBlockProps)
   const html = highlighted.get(key) ?? (loaded?.key === key ? loaded.html : undefined)
 
   useEffect(() => {
-    if (streaming || highlighted.has(key)) return
-    let cancelled = false
+    if (isStreaming || highlighted.has(key)) return
+    let isCancelled = false
     highlight(text, lang)
       .then((result) => {
         highlighted.set(key, result)
-        if (!cancelled) setLoaded({ key, html: result })
+        if (!isCancelled) setLoaded({ key, html: result })
       })
       .catch(() => undefined) // The plain block stays: highlighting is only a nicety.
     return () => {
-      cancelled = true
+      isCancelled = true
     }
-  }, [streaming, key, text, lang])
+  }, [isStreaming, key, text, lang])
 
   async function copy() {
     try {

@@ -53,18 +53,18 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
         <>
           <ul className="flex flex-col gap-2">
             {rows.map((thread) => {
-              const active = thread.id === activeId
+              const isActive = thread.id === activeId
               return (
                 <li key={thread.id}>
                   <Link
                     href={`/thread/${encodeURIComponent(thread.id)}`}
-                    aria-current={active ? 'page' : undefined}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`flex flex-col gap-0.5 rounded-md border bg-sheet px-3 py-2.5 hover:border-ink-muted ${
-                      active ? 'border-ink' : 'border-rule'
+                      isActive ? 'border-ink' : 'border-rule'
                     }`}
                   >
                     <span className="min-w-0 truncate font-semibold text-ink">
-                      <span className={active ? 'marker rounded-sm px-1' : 'px-1'}>
+                      <span className={isActive ? 'marker rounded-sm px-1' : 'px-1'}>
                         {thread.title}
                       </span>
                     </span>
@@ -83,7 +83,7 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
             <Button
               variant="secondary"
               onClick={() => threads.fetchNextPage()}
-              loading={threads.isFetchingNextPage}
+              isLoading={threads.isFetchingNextPage}
             >
               Load more
             </Button>

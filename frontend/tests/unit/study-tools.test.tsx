@@ -48,7 +48,7 @@ const quizSummary = (
 
 function setup(props: Partial<Parameters<typeof StudyTools>[0]> = {}) {
   renderWithQuery(
-    <StudyTools threadId="t1" hasAnswer busy={false} guides={[]} quizzes={[]} {...props} />
+    <StudyTools threadId="t1" hasAnswer isBusy={false} guides={[]} quizzes={[]} {...props} />
   )
   return userEvent.setup()
 }
@@ -64,7 +64,7 @@ describe('StudyTools guide action', () => {
   })
 
   it('waits while an answer is being written', () => {
-    setup({ busy: true })
+    setup({ isBusy: true })
 
     expect(screen.getByRole('button', { name: 'Guide me step by step' })).toBeDisabled()
     expect(screen.getByText('Wait for the answer to finish')).toBeVisible()

@@ -43,7 +43,7 @@ const scrollToEnd = () =>
 
 export function Conversation({ threadId }: { threadId: string }) {
   const [draft, setDraft] = useState('')
-  const { asking, ask, stop, announcement, budgetSpent, threadFull } = useAsk(threadId, {
+  const { asking, ask, stop, announcement, isBudgetSpent, isThreadFull } = useAsk(threadId, {
     // A Retry from the toast re-asked the text the composer got back: do not leave it to be sent twice.
     onRetryAccepted: (question) => setDraft((d) => (d.trim() === question.trim() ? '' : d))
   })
@@ -60,7 +60,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     }
   })
   usePageTitle(detail.data?.thread.title)
-  const parked = useRef(false)
+  const hasTakenParkedQuestion = useRef(false)
 
   const unfinishedId = detail.data?.messages.find(isPending)?.id
   useEffect(() => {
@@ -68,13 +68,13 @@ export function Conversation({ threadId }: { threadId: string }) {
     const timer = setTimeout(() => setStalledId(unfinishedId), STALL_MS)
     return () => clearTimeout(timer)
   }, [unfinishedId, asking])
-  const stalled = !!unfinishedId && unfinishedId === stalledId
+  const isStalled = !!unfinishedId && unfinishedId === stalledId
 
   /** Asks, and hands the text back to the composer when the server never took the question. */
   const submit = useCallback(
     async (question: string) => {
-      const { started, outcome } = await ask(question)
-      if (!started && outcome !== 'completed') setDraft((current) => current || question)
+      const { hasStarted, outcome } = await ask(question)
+      if (!hasStarted && outcome !== 'completed') setDraft((current) => current || question)
     },
     [ask]
   )
@@ -82,8 +82,8 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   // A question parked by the new-question page is asked as soon as the thread opens.
   useEffect(() => {
-    if (parked.current) return
-    parked.current = true
+    if (hasTakenParkedQuestion.current) return
+    hasTakenParkedQuestion.current = true
     const question = takePendingQuestion(threadId)
     // Starting the stream is the sync with an external system (storage, network); the state it
     // sets is that stream's progress.
@@ -96,21 +96,21 @@ export function Conversation({ threadId }: { threadId: string }) {
   const textLength = asking?.text.length ?? 0
   useEffect(() => {
     if (!textLength) return
-    const nearEnd =
+    const isNearEnd =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240
-    if (nearEnd) scrollToEnd()
+    if (isNearEnd) scrollToEnd()
   }, [textLength])
 
-  const loaded = !!detail.data
+  const isLoaded = !!detail.data
   useEffect(() => {
-    if (loaded) scrollToEnd()
-  }, [loaded])
+    if (isLoaded) scrollToEnd()
+  }, [isLoaded])
 
   if (detail.isPending) return <ThreadSkeleton />
 
   if (!detail.data) {
-    const missing = isApiError(detail.error) && detail.error.code === 'not_found'
-    return missing ? (
+    const isMissing = isApiError(detail.error) && detail.error.code === 'not_found'
+    return isMissing ? (
       <NotFoundPanel icon={ThreadIcon}>{describeError(detail.error)}</NotFoundPanel>
     ) : (
       <ErrorPanel onRetry={() => detail.refetch()}>{describeError(detail.error)}</ErrorPanel>
@@ -119,10 +119,10 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   const { thread, messages, guides, quizzes } = detail.data
   const hasAnswer = messages.some((m) => m.role === 'assistant' && m.status === 'complete')
-  const full = threadFull || thread.messageCount + 2 > MAX_MESSAGES
-  const busy = !!asking || (!!unfinishedId && !stalled)
-  const locked = budgetSpent || full
-  const streaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
+  const isFull = isThreadFull || thread.messageCount + 2 > MAX_MESSAGES
+  const isBusy = !!asking || (!!unfinishedId && !isStalled)
+  const isLocked = isBudgetSpent || isFull
+  const isStreaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
 
   function send() {
     const question = draft.trim()
@@ -143,20 +143,20 @@ export function Conversation({ threadId }: { threadId: string }) {
       <StudyTools
         threadId={threadId}
         hasAnswer={hasAnswer}
-        busy={busy}
+        isBusy={isBusy}
         guides={guides}
         quizzes={quizzes}
       />
 
       <Sheet className="p-5 md:p-8">
-        {messages.length === 0 && !busy ? (
+        {messages.length === 0 && !isBusy ? (
           <p className="text-ink-muted">Ask your first question below.</p>
         ) : (
           <Transcript
             messages={messages}
             asking={asking}
-            stalled={stalled}
-            onRetry={locked || busy ? undefined : retry}
+            isStalled={isStalled}
+            onRetry={isLocked || isBusy ? undefined : retry}
           />
         )}
       </Sheet>
@@ -167,8 +167,8 @@ export function Conversation({ threadId }: { threadId: string }) {
 
       {/* Solid canvas behind the composer so transcript text never shows around it. */}
       <div className="sticky bottom-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-canvas before:to-transparent">
-        {budgetSpent && <Banner>{messageFor('ai_budget_exceeded')}</Banner>}
-        {full && (
+        {isBudgetSpent && <Banner>{messageFor('ai_budget_exceeded')}</Banner>}
+        {isFull && (
           <Banner
             action={
               <Link
@@ -188,9 +188,9 @@ export function Conversation({ threadId }: { threadId: string }) {
             value={draft}
             onChange={setDraft}
             onSubmit={send}
-            disabled={locked}
-            streaming={busy && streaming}
-            submitting={busy && !streaming}
+            disabled={isLocked}
+            isStreaming={isBusy && isStreaming}
+            isSubmitting={isBusy && !isStreaming}
             onStop={stop}
           />
         </Sheet>

@@ -29,16 +29,21 @@ const percent = (value: number | null) =>
     `${Math.round(value)}%`
   )
 
-type Cell = { label: string; children: ReactNode; numeric?: boolean; hideStacked?: boolean }
+type Cell = {
+  label: string
+  children: ReactNode
+  isNumeric?: boolean
+  shouldHideWhenStacked?: boolean
+}
 
 /** A cell that names itself above `xl`, where the table collapses into one card per topic. */
-function Td({ label, children, numeric = false, hideStacked = false }: Cell) {
+function Td({ label, children, isNumeric = false, shouldHideWhenStacked = false }: Cell) {
   return (
     <td
       role="cell"
       className={`flex items-baseline justify-between gap-4 py-1 xl:table-cell xl:px-3 xl:py-3 xl:align-middle ${
-        numeric ? 'tabular-nums xl:text-right' : 'xl:whitespace-nowrap'
-      } ${hideStacked ? 'max-xl:hidden' : ''}`}
+        isNumeric ? 'tabular-nums xl:text-right' : 'xl:whitespace-nowrap'
+      } ${shouldHideWhenStacked ? 'max-xl:hidden' : ''}`}
     >
       {/* Real text, so the label is announced when the header row is hidden by the stacked layout. */}
       <span className="text-sm font-normal text-ink-muted xl:hidden">{label}</span>
@@ -50,21 +55,21 @@ function Td({ label, children, numeric = false, hideStacked = false }: Cell) {
 type QuizMeProps = {
   topic: TopicProgress
   /** Another quiz is being written, so every button waits. */
-  busy: boolean
+  isBusy: boolean
   /** This topic's quiz is the one being written. */
-  loading: boolean
+  isLoading: boolean
   onCreate: (topicId: string, difficulty: Difficulty) => void
 }
 
-function QuizMe({ topic, busy, loading, onCreate }: QuizMeProps) {
+function QuizMe({ topic, isBusy, isLoading, onCreate }: QuizMeProps) {
   const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY)
   return (
     <div role="group" aria-label={`Quiz on ${topic.topicName}`} className="flex items-center gap-2">
       <Select
         label={`Difficulty for the ${topic.topicName} quiz`}
-        hideLabel
+        isLabelHidden
         value={difficulty}
-        disabled={busy}
+        disabled={isBusy}
         className="h-8! px-2 text-sm"
         onChange={(e) => setDifficulty(e.target.value as Difficulty)}
       >
@@ -77,15 +82,15 @@ function QuizMe({ topic, busy, loading, onCreate }: QuizMeProps) {
       <Button
         variant="secondary"
         size="sm"
-        loading={loading}
-        disabled={busy}
+        isLoading={isLoading}
+        disabled={isBusy}
         aria-label={
-          loading ? `Writing your ${topic.topicName} quiz` : `Quiz me on ${topic.topicName}`
+          isLoading ? `Writing your ${topic.topicName} quiz` : `Quiz me on ${topic.topicName}`
         }
         onClick={() => onCreate(topic.topicId, difficulty)}
       >
-        {!loading && <QuizIcon aria-hidden="true" className="size-4" />}
-        {loading ? 'Writing…' : 'Quiz me'}
+        {!isLoading && <QuizIcon aria-hidden="true" className="size-4" />}
+        {isLoading ? 'Writing…' : 'Quiz me'}
       </Button>
     </div>
   )
@@ -94,11 +99,11 @@ function QuizMe({ topic, busy, loading, onCreate }: QuizMeProps) {
 const rowClass =
   'flex flex-col gap-1 border-t border-rule px-4 py-4 first:border-t-0 xl:table-row xl:px-0 xl:py-0'
 
-type RowProps = { topic: TopicProgress; muted?: boolean } & Omit<QuizMeProps, 'topic'>
+type RowProps = { topic: TopicProgress; isMuted?: boolean } & Omit<QuizMeProps, 'topic'>
 
-function TopicRow({ topic, muted = false, ...quiz }: RowProps) {
+function TopicRow({ topic, isMuted = false, ...quiz }: RowProps) {
   return (
-    <tr role="row" className={`${rowClass} ${muted ? 'text-ink-muted' : ''}`.trim()}>
+    <tr role="row" className={`${rowClass} ${isMuted ? 'text-ink-muted' : ''}`.trim()}>
       <th
         scope="row"
         role="rowheader"
@@ -106,25 +111,25 @@ function TopicRow({ topic, muted = false, ...quiz }: RowProps) {
       >
         {topic.topicName}
       </th>
-      <Td label="Questions" numeric hideStacked={muted}>
+      <Td label="Questions" isNumeric shouldHideWhenStacked={isMuted}>
         {topic.questions}
       </Td>
-      <Td label="Steps done" numeric hideStacked={muted}>
+      <Td label="Steps done" isNumeric shouldHideWhenStacked={isMuted}>
         {topic.stepsDone}
       </Td>
-      <Td label="Guides completed" numeric hideStacked={muted}>
+      <Td label="Guides completed" isNumeric shouldHideWhenStacked={isMuted}>
         {topic.guidesCompleted}
       </Td>
-      <Td label="Quiz attempts" numeric hideStacked={muted}>
+      <Td label="Quiz attempts" isNumeric shouldHideWhenStacked={isMuted}>
         {topic.attempts}
       </Td>
-      <Td label="Best score" numeric hideStacked={muted}>
+      <Td label="Best score" isNumeric shouldHideWhenStacked={isMuted}>
         {percent(topic.bestScorePercent)}
       </Td>
-      <Td label="Topic score" numeric hideStacked={muted}>
+      <Td label="Topic score" isNumeric shouldHideWhenStacked={isMuted}>
         {percent(topic.averageScorePercent)}
       </Td>
-      <Td label="Last activity" hideStacked={muted}>
+      <Td label="Last activity" shouldHideWhenStacked={isMuted}>
         {topic.lastActivityAt ? (
           <time dateTime={topic.lastActivityAt}>{relativeTime(topic.lastActivityAt)}</time>
         ) : (
@@ -150,8 +155,8 @@ export function TopicTable({ topics }: { topics: TopicProgress[] }) {
   const { started, notStarted } = splitTopics([...topics])
 
   const rowProps = (topic: TopicProgress) => ({
-    busy: quiz.isPending,
-    loading: quiz.isPending && target === topic.topicId,
+    isBusy: quiz.isPending,
+    isLoading: quiz.isPending && target === topic.topicId,
     onCreate: (topicId: string, difficulty: Difficulty) => {
       setTarget(topicId)
       quiz.create({ topicId, difficulty })
@@ -229,7 +234,7 @@ export function TopicTable({ topics }: { topics: TopicProgress[] }) {
                 </td>
               </tr>
               {notStarted.map((topic) => (
-                <TopicRow key={topic.topicId} topic={topic} muted {...rowProps(topic)} />
+                <TopicRow key={topic.topicId} topic={topic} isMuted {...rowProps(topic)} />
               ))}
             </tbody>
           )}

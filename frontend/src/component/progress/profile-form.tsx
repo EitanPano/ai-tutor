@@ -44,7 +44,7 @@ export function ProfileForm({ user }: { user: User }) {
   const queryClient = useQueryClient()
   const [displayName, setDisplayName] = useState(user.displayName)
   const [timeZone, setTimeZone] = useState(user.timeZone)
-  const [saved, setSaved] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
   const zones = useMemo(() => timeZones(user.timeZone), [user.timeZone])
 
   const trimmed = displayName.trim()
@@ -52,7 +52,7 @@ export function ProfileForm({ user }: { user: User }) {
     ...(trimmed !== user.displayName && { displayName: trimmed }),
     ...(timeZone !== user.timeZone && { timeZone })
   }
-  const changed = Object.keys(changes).length > 0
+  const hasChanges = Object.keys(changes).length > 0
 
   const save = useMutation({
     mutationFn: (input: UpdateUserRequest) => updateUser(input),
@@ -60,7 +60,7 @@ export function ProfileForm({ user }: { user: User }) {
       queryClient.setQueryData(SESSION_KEY, { user: next })
       setDisplayName(next.displayName)
       setTimeZone(next.timeZone)
-      setSaved(true)
+      setIsSaved(true)
       toast.success('Profile saved')
       // The day boundary, and so the streak, follows the time zone.
       await Promise.all([
@@ -83,8 +83,8 @@ export function ProfileForm({ user }: { user: User }) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!changed || save.isPending) return
-    setSaved(false)
+    if (!hasChanges || save.isPending) return
+    setIsSaved(false)
     save.mutate(changes)
   }
 
@@ -102,7 +102,7 @@ export function ProfileForm({ user }: { user: User }) {
             error={issues.displayName}
             onChange={(e) => {
               setDisplayName(e.target.value)
-              setSaved(false)
+              setIsSaved(false)
             }}
           />
           <div className="flex flex-col gap-1.5">
@@ -115,7 +115,7 @@ export function ProfileForm({ user }: { user: User }) {
               aria-invalid={issues.timeZone ? true : undefined}
               onChange={(e) => {
                 setTimeZone(e.target.value)
-                setSaved(false)
+                setIsSaved(false)
               }}
             >
               {zones.map((zone) => (
@@ -139,14 +139,14 @@ export function ProfileForm({ user }: { user: User }) {
             {/* aria-disabled, not disabled: a disabled button would drop keyboard focus to the page. */}
             <Button
               type="submit"
-              aria-disabled={!changed || save.isPending}
+              aria-disabled={!hasChanges || save.isPending}
               aria-busy={save.isPending || undefined}
               className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
             >
               {save.isPending ? 'Saving…' : 'Save profile'}
             </Button>
             <p role="status" className="text-sm text-correct">
-              {saved && !changed ? 'Saved.' : ''}
+              {isSaved && !hasChanges ? 'Saved.' : ''}
             </p>
           </div>
         </form>

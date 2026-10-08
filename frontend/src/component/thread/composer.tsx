@@ -12,10 +12,10 @@ type ComposerProps = {
   /** The composer cannot be used at all (budget spent, thread full). */
   disabled?: boolean
   /** An answer is arriving: Ask gives way to Stop. */
-  streaming?: boolean
+  isStreaming?: boolean
   onStop?: () => void
   /** The Ask button shows a spinner (the thread is being created). */
-  submitting?: boolean
+  isSubmitting?: boolean
   autoFocus?: boolean
 }
 
@@ -24,16 +24,17 @@ export function Composer({
   onChange,
   onSubmit,
   disabled = false,
-  streaming = false,
+  isStreaming = false,
   onStop,
-  submitting = false,
+  isSubmitting = false,
   autoFocus = false
 }: ComposerProps) {
   const id = useId()
   const counterId = `${id}-count`
   const length = value.length
-  const tooLong = length > MAX_QUESTION
-  const canSend = !disabled && !streaming && !submitting && !tooLong && value.trim().length > 0
+  const isTooLong = length > MAX_QUESTION
+  const canSend =
+    !disabled && !isStreaming && !isSubmitting && !isTooLong && value.trim().length > 0
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -57,9 +58,9 @@ export function Composer({
         rows={3}
         placeholder="Paste code and ask what you want to understand"
         aria-describedby={length > COUNTER_FROM ? counterId : undefined}
-        aria-invalid={tooLong || undefined}
+        aria-invalid={isTooLong || undefined}
         className={`field-sizing-content max-h-72 min-h-24 w-full resize-none rounded-md border bg-sheet px-3 py-2 font-sans text-base text-ink placeholder:text-ink-muted disabled:opacity-60 ${
-          tooLong ? 'border-wrong' : 'border-rule hover:border-ink-muted'
+          isTooLong ? 'border-wrong' : 'border-rule hover:border-ink-muted'
         }`}
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -69,20 +70,20 @@ export function Composer({
         {length > COUNTER_FROM && (
           <p
             id={counterId}
-            className={`text-sm tabular-nums ${tooLong ? 'font-semibold text-wrong' : 'text-ink-muted'}`}
+            className={`text-sm tabular-nums ${isTooLong ? 'font-semibold text-wrong' : 'text-ink-muted'}`}
           >
             {length.toLocaleString('en-US')} / {MAX_QUESTION.toLocaleString('en-US')}
-            {tooLong && ' - too long to send'}
+            {isTooLong && ' - too long to send'}
           </p>
         )}
-        {streaming ? (
+        {isStreaming ? (
           <Button variant="secondary" onClick={onStop}>
             <StopIcon aria-hidden="true" className="size-4 fill-current" />
             Stop
           </Button>
         ) : (
-          <Button onClick={onSubmit} disabled={!canSend} loading={submitting}>
-            {!submitting && <SendIcon aria-hidden="true" className="size-4" />}
+          <Button onClick={onSubmit} disabled={!canSend} isLoading={isSubmitting}>
+            {!isSubmitting && <SendIcon aria-hidden="true" className="size-4" />}
             Ask
           </Button>
         )}

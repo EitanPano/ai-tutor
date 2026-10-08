@@ -19,7 +19,7 @@ type StudyToolsProps = {
   /** The thread has at least one complete tutor answer to build a guide or quiz from. */
   hasAnswer: boolean
   /** An answer is being written right now; a guide or quiz must wait for it. */
-  busy: boolean
+  isBusy: boolean
   /** Newest first. */
   guides: GuideSummary[]
   /** Newest first. */
@@ -39,7 +39,7 @@ const quizLabel = ({ difficulty, bestScore, itemCount }: QuizSummary) =>
 export const StudyTools = memo(function StudyTools({
   threadId,
   hasAnswer,
-  busy,
+  isBusy,
   guides,
   quizzes
 }: StudyToolsProps) {
@@ -59,31 +59,31 @@ export const StudyTools = memo(function StudyTools({
     onError: (err) => showError(err, () => create.mutate())
   })
 
-  const reason = !hasAnswer ? 'Ask a question first' : busy ? 'Wait for the answer to finish' : ''
-  const disabled = !!reason
+  const reason = !hasAnswer ? 'Ask a question first' : isBusy ? 'Wait for the answer to finish' : ''
+  const isDisabled = !!reason
   // One thing is written at a time: two generations would only race each other.
   // A success stays busy too: router.push only starts the navigation, the old page lingers.
-  const guiding = create.isPending || create.isSuccess
-  const working = guiding || quiz.isPending
-  const describedBy = disabled ? 'study-reason' : undefined
+  const isGuiding = create.isPending || create.isSuccess
+  const isWorking = isGuiding || quiz.isPending
+  const describedBy = isDisabled ? 'study-reason' : undefined
 
   return (
     <div className="flex flex-col gap-3">
       <div role="toolbar" aria-label="Study tools" className="flex flex-wrap items-center gap-3">
         <Button
-          loading={guiding}
-          disabled={disabled || quiz.isPending}
+          isLoading={isGuiding}
+          disabled={isDisabled || quiz.isPending}
           aria-describedby={describedBy}
           onClick={() => create.mutate()}
         >
-          {!guiding && <GuideIcon aria-hidden="true" className="size-4" />}
-          {guiding ? 'Writing your guide…' : 'Guide me step by step'}
+          {!isGuiding && <GuideIcon aria-hidden="true" className="size-4" />}
+          {isGuiding ? 'Writing your guide…' : 'Guide me step by step'}
         </Button>
         <div role="group" aria-label="Quiz" className="flex items-center gap-2">
           <Button
             variant="secondary"
-            loading={quiz.isPending}
-            disabled={disabled || guiding}
+            isLoading={quiz.isPending}
+            disabled={isDisabled || isGuiding}
             aria-describedby={describedBy}
             onClick={() => quiz.create({ threadId, difficulty })}
           >
@@ -92,9 +92,9 @@ export const StudyTools = memo(function StudyTools({
           </Button>
           <Select
             label="Quiz difficulty"
-            hideLabel
+            isLabelHidden
             value={difficulty}
-            disabled={working}
+            disabled={isWorking}
             onChange={(e) => setDifficulty(e.target.value as Difficulty)}
           >
             {DIFFICULTIES.map(({ value, label }) => (
@@ -104,7 +104,7 @@ export const StudyTools = memo(function StudyTools({
             ))}
           </Select>
         </div>
-        {disabled && (
+        {isDisabled && (
           <p id="study-reason" className="text-sm text-ink-muted">
             {reason}
           </p>

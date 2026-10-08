@@ -21,11 +21,11 @@ export function ProgressView() {
     queryFn: ({ signal }) => getProgress(signal)
   })
   const user = session.data?.user
-  const failed = progress.isError && !progress.data
+  const hasFailed = progress.isError && !progress.data
 
   useEffect(() => {
-    if (failed) toast.error(describeError(progress.error), { id: 'progress-error' })
-  }, [failed, progress.error])
+    if (hasFailed) toast.error(describeError(progress.error), { id: 'progress-error' })
+  }, [hasFailed, progress.error])
 
   const data = progress.data
   const topicName = (topicId: string) =>

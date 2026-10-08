@@ -17,7 +17,7 @@ export function SignedInRedirect() {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    let cancelled = false
+    let isCancelled = false
     queryClient
       .fetchQuery({
         queryKey: SESSION_KEY,
@@ -26,11 +26,11 @@ export function SignedInRedirect() {
         retry: false
       })
       .then(() => {
-        if (!cancelled) router.replace(DEFAULT_PATH)
+        if (!isCancelled) router.replace(DEFAULT_PATH)
       })
       .catch(() => {})
     return () => {
-      cancelled = true
+      isCancelled = true
     }
   }, [queryClient, router])
 

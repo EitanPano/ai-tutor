@@ -31,13 +31,13 @@ export const buttonClass = ({
 type ButtonProps = ComponentProps<'button'> & {
   variant?: ButtonVariant
   size?: ButtonSize
-  loading?: boolean
+  isLoading?: boolean
 }
 
 export function Button({
   variant,
   size,
-  loading = false,
+  isLoading = false,
   disabled,
   type = 'button',
   className,
@@ -47,12 +47,12 @@ export function Button({
   return (
     <button
       type={type}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
+      disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       className={cn(buttonClass({ variant, size }), className)}
       {...rest}
     >
-      {loading && <Spinner label="" />}
+      {isLoading && <Spinner label="" />}
       {children}
     </button>
   )

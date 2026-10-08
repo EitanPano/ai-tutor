@@ -12,9 +12,9 @@ type StepPanelProps = {
   index: number
   total: number
   /** Move focus to the title on mount: the step changed because the reader asked it to. */
-  focusTitle: boolean
+  shouldFocusTitle: boolean
   onRevealHint: (stepId: string) => void
-  onToggleDone: (stepId: string, done: boolean) => void
+  onToggleDone: (stepId: string, isDone: boolean) => void
   onPrevious: () => void
   onNext: () => void
 }
@@ -27,7 +27,7 @@ export function StepPanel({
   step,
   index,
   total,
-  focusTitle,
+  shouldFocusTitle,
   onRevealHint,
   onToggleDone,
   onPrevious,
@@ -37,20 +37,20 @@ export function StepPanel({
   const title = useRef<HTMLHeadingElement>(null)
   const hint = useRef<HTMLElement>(null)
   // Set by the Show hint click: the button is replaced by the hint, so focus follows it.
-  const hintAsked = useRef(false)
-  const done = !!step.doneAt
-  const revealed = !!step.hintRevealedAt
+  const wasHintAsked = useRef(false)
+  const isDone = !!step.doneAt
+  const isHintRevealed = !!step.hintRevealedAt
 
   useEffect(() => {
-    if (focusTitle) title.current?.focus()
-  }, [focusTitle])
+    if (shouldFocusTitle) title.current?.focus()
+  }, [shouldFocusTitle])
 
   useEffect(() => {
-    if (revealed && hintAsked.current) {
-      hintAsked.current = false
+    if (isHintRevealed && wasHintAsked.current) {
+      wasHintAsked.current = false
       hint.current?.focus()
     }
-  }, [revealed])
+  }, [isHintRevealed])
 
   return (
     <Sheet as="article" aria-labelledby={titleId} className="flex flex-col gap-6 p-5 md:p-8">
@@ -59,7 +59,7 @@ export function StepPanel({
           <span>
             Step {index + 1} of {total}
           </span>
-          {done && (
+          {isDone && (
             <span className="inline-flex items-center gap-1 text-correct">
               <DoneIcon aria-hidden="true" className="size-4" strokeWidth={3} />
               Done
@@ -78,7 +78,7 @@ export function StepPanel({
         </div>
       )}
 
-      {revealed && (
+      {isHintRevealed && (
         <aside
           ref={hint}
           tabIndex={-1}
@@ -93,11 +93,11 @@ export function StepPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        {!revealed && (
+        {!isHintRevealed && (
           <Button
             variant="secondary"
             onClick={() => {
-              hintAsked.current = true
+              wasHintAsked.current = true
               onRevealHint(step.id)
             }}
           >
@@ -106,10 +106,10 @@ export function StepPanel({
           </Button>
         )}
         <Button
-          variant={done ? 'secondary' : 'primary'}
-          onClick={() => onToggleDone(step.id, !done)}
+          variant={isDone ? 'secondary' : 'primary'}
+          onClick={() => onToggleDone(step.id, !isDone)}
         >
-          {done ? 'Mark not done' : 'Mark done'}
+          {isDone ? 'Mark not done' : 'Mark done'}
         </Button>
       </div>
 

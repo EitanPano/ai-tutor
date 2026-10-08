@@ -31,16 +31,16 @@ function NavLinks({ pathname }: { pathname: string }) {
   return (
     <nav aria-label="Main" className="flex gap-1 md:flex-col">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active = isPathUnder(pathname, href)
+        const isActive = isPathUnder(pathname, href)
         return (
           <Link
             key={href}
             href={href}
-            aria-current={active ? 'page' : undefined}
+            aria-current={isActive ? 'page' : undefined}
             className="flex items-center gap-2.5 rounded-md px-3 py-2 text-ink hover:bg-ink/10"
           >
             <Icon aria-hidden="true" className="size-5 shrink-0" />
-            <span className={active ? 'marker rounded-sm px-1 font-semibold' : 'px-1'}>
+            <span className={isActive ? 'marker rounded-sm px-1 font-semibold' : 'px-1'}>
               {label}
             </span>
           </Link>
@@ -54,20 +54,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [leaving, setLeaving] = useState(false)
-  const session = useSession({ enabled: !leaving })
+  const [isLeaving, setIsLeaving] = useState(false)
+  const session = useSession({ enabled: !isLeaving })
   const user = session.data?.user
   // A failed refetch keeps its cached data; only a first-load failure should replace the page.
-  const sessionFailed = session.isError && !session.data
+  const hasSessionFailed = session.isError && !session.data
 
   async function handleLogOut() {
-    setLeaving(true)
+    setIsLeaving(true)
     try {
       await logOut()
     } catch (err) {
       // An already-ended session is the outcome we wanted; anything else keeps the user here.
       if (!(isApiError(err) && err.code === 'unauthenticated')) {
-        setLeaving(false)
+        setIsLeaving(false)
         toast.error(describeError(err))
         return
       }
@@ -96,7 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             onClick={handleLogOut}
-            disabled={leaving || !user}
+            disabled={isLeaving || !user}
             className="md:justify-start"
           >
             <LogOutIcon aria-hidden="true" className="size-4" />
@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className={cn('mx-auto w-full', isWidePath(pathname) ? 'max-w-[76rem]' : 'max-w-[72ch]')}
         >
-          {sessionFailed ? (
+          {hasSessionFailed ? (
             isApiError(session.error) && session.error.code === 'unauthenticated' ? null : (
               <ErrorPanel onRetry={() => session.refetch()}>
                 {describeError(session.error)}

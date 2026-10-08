@@ -4,14 +4,14 @@ import { cn } from '@/lib/cn'
 type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & {
   label: string
   /** Hide the label visually when the surrounding layout already names the control. */
-  hideLabel?: boolean
+  isLabelHidden?: boolean
   id?: string
 }
 
 /** A native `<select>` in the notebook tokens: keyboard and mobile pickers come for free. */
 export function Select({
   label,
-  hideLabel = false,
+  isLabelHidden = false,
   id: idProp,
   className,
   children,
@@ -21,7 +21,7 @@ export function Select({
   const id = idProp ?? generated
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-semibold'}>
+      <label htmlFor={id} className={isLabelHidden ? 'sr-only' : 'text-sm font-semibold'}>
         {label}
       </label>
       <select

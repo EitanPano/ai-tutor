@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GuideViewer } from '@/component/guide/guide-viewer'
 import { ApiError } from '@/lib/api/error'
-import { guideKey, type Guide, type Step } from '@/lib/api/guide'
+import { guideKey, type Guide, type Step, type UpdateStepRequest } from '@/lib/api/guide'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({ getGuide: vi.fn(), updateStep: vi.fn(), createQuiz: vi.fn() }))
@@ -57,7 +57,7 @@ function serve(steps: Step[]) {
   }
   api.getGuide.mockImplementation(async () => ({ guide: structuredClone(server) }))
   api.updateStep.mockImplementation(
-    async (_guide: string, stepId: string, body: { isDone?: boolean; isHintRevealed?: true }) => {
+    async (_guide: string, stepId: string, body: UpdateStepRequest) => {
       const target = server.steps.find((s) => s.id === stepId)!
       if (body.isDone !== undefined) target.doneAt = body.isDone ? NOW : null
       if (body.isHintRevealed) target.hintRevealedAt = NOW

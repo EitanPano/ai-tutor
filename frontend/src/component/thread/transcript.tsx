@@ -9,11 +9,11 @@ import type { Asking } from './use-ask'
 /** A line that opens a code fence (three backticks or tildes): the author wrote Markdown. */
 const hasCodeFence = (text: string) => /^ {0,3}(```|~~~)/m.test(text)
 
-function Question({ content, dimmed = false }: { content: string; dimmed?: boolean }) {
+function Question({ content, isDimmed = false }: { content: string; isDimmed?: boolean }) {
   return (
     <article
       aria-label="Your question"
-      className={`border-l-2 border-ink bg-ink/5 px-4 py-2 ${dimmed ? 'opacity-60' : ''}`}
+      className={`border-l-2 border-ink bg-ink/5 px-4 py-2 ${isDimmed ? 'opacity-60' : ''}`}
     >
       {/* Pasted code is not Markdown: `__init__`, `#include` and line breaks must survive. */}
       {hasCodeFence(content) ? (
@@ -36,19 +36,19 @@ function Note({ children, action }: { children: string; action?: ReactNode }) {
 
 function Answer({
   message,
-  stalled,
+  isStalled,
   onRetry
 }: {
   message: Message
   /** The server never finished this answer: show it as failed instead of waiting on it. */
-  stalled: boolean
+  isStalled: boolean
   /** Present only for a failed answer that can be asked again. */
   onRetry?: (() => void) | undefined
 }) {
-  const pending = isPending(message)
-  const note = pending && stalled ? FAILED_NOTE : noteFor(message)
-  const failed = message.status === 'failed' || (pending && stalled)
-  if (pending && !stalled) {
+  const isUnfinished = isPending(message)
+  const note = isUnfinished && isStalled ? FAILED_NOTE : noteFor(message)
+  const isFailed = message.status === 'failed' || (isUnfinished && isStalled)
+  if (isUnfinished && !isStalled) {
     return (
       <article aria-label="Tutor answer" aria-busy="true">
         <Thinking />
@@ -58,14 +58,14 @@ function Answer({
   return (
     <article aria-label="Tutor answer" className="flex flex-col gap-3">
       {message.content && (
-        <div className={failed ? 'opacity-60' : ''}>
+        <div className={isFailed ? 'opacity-60' : ''}>
           <Markdown>{message.content}</Markdown>
         </div>
       )}
       {note && (
         <Note
           action={
-            failed &&
+            isFailed &&
             onRetry && (
               <Button variant="secondary" size="sm" onClick={onRetry}>
                 <RetryIcon aria-hidden="true" className="size-4" />
@@ -97,7 +97,7 @@ type TranscriptProps = {
   messages: Message[]
   asking: Asking | undefined
   /** An unfinished answer has stopped changing for too long: treat it as failed. */
-  stalled?: boolean
+  isStalled?: boolean
   /** Ask the same question again. Undefined while asking is not possible. */
   onRetry?: ((question: string) => void) | undefined
 }
@@ -106,16 +106,16 @@ type TranscriptProps = {
 export const Transcript = memo(function Transcript({
   messages,
   asking,
-  stalled = false,
+  isStalled = false,
   onRetry
 }: TranscriptProps) {
-  const saved = (id: string | undefined) => !!id && messages.some((m) => m.id === id)
+  const isSaved = (id: string | undefined) => !!id && messages.some((m) => m.id === id)
   // The saved copy of the answer being streamed is an empty placeholder until the server
   // finishes: keep showing the streamed text until the real one replaces it.
   const placeholder = messages.find((m) => m.id === asking?.assistantMessageId && isPending(m))
-  const showAskedQuestion = !!asking && !saved(asking.userMessageId)
-  const showAskedAnswer = !!asking && (!saved(asking.assistantMessageId) || !!placeholder)
-  const streaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
+  const shouldShowAskedQuestion = !!asking && !isSaved(asking.userMessageId)
+  const shouldShowAskedAnswer = !!asking && (!isSaved(asking.assistantMessageId) || !!placeholder)
+  const isStreaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,7 +126,7 @@ export const Transcript = memo(function Transcript({
             <Question
               key={message.id}
               content={message.content}
-              dimmed={message.status === 'failed'}
+              isDimmed={message.status === 'failed'}
             />
           )
         }
@@ -136,16 +136,16 @@ export const Transcript = memo(function Transcript({
           <Answer
             key={message.id}
             message={message}
-            stalled={stalled}
+            isStalled={isStalled}
             onRetry={onRetry && question ? () => onRetry(question) : undefined}
           />
         )
       })}
-      {asking && showAskedQuestion && <Question content={asking.question} />}
-      {asking && showAskedAnswer && (
-        <article aria-label="Tutor answer" aria-busy={streaming} className="flex flex-col gap-3">
+      {asking && shouldShowAskedQuestion && <Question content={asking.question} />}
+      {asking && shouldShowAskedAnswer && (
+        <article aria-label="Tutor answer" aria-busy={isStreaming} className="flex flex-col gap-3">
           {asking.text ? (
-            <Markdown streaming={asking.phase === 'streaming'}>{asking.text}</Markdown>
+            <Markdown isStreaming={asking.phase === 'streaming'}>{asking.text}</Markdown>
           ) : asking.phase === 'thinking' ? (
             <Thinking />
           ) : null}
