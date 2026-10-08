@@ -55,14 +55,15 @@ const BODY_PARSER_ERROR_BY_TYPE = new Map<string, ErrorMatcher>([
 
 const CLIENT_ERROR_LOG = { level: 'warn', message: 'client error' } as const
 
-/**
- * An exposed body-parser 4xx with no `type` entry above: 415 has a code of its own, any other 4xx
- * is a bad request.
- */
+// The replies to an exposed body-parser 4xx with no `type` entry above: 415 has a code of its own,
+// any other 4xx is a bad request.
+
+/** An exposed body-parser 415 (unsupported charset or content encoding). */
 const UNSUPPORTED_MEDIA_TYPE = {
   code: 'unsupported_media_type',
   message: 'The request content type or encoding is not supported.'
 }
+/** Any other exposed body-parser 4xx (e.g. 400 aborted or size mismatch). */
 const BAD_REQUEST = { code: 'bad_request', message: 'The request could not be processed.' }
 
 function bodyParserReply(err: unknown): ErrorReply | undefined {
