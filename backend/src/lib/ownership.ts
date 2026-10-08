@@ -22,6 +22,19 @@ export function ownedBy(table: TenantTable, auth: Auth): RawBuilder<SqlBool> {
   return sql<SqlBool>`${sql.ref(`${table}.user_id`)} = ${auth.userId}`
 }
 
+// A soft-deleted thread hides everything derived from it: its messages, guides and steps, and the
+// quizzes generated from it. These two predicates are the one definition of "live"; both expect
+// the thread under the name `thread`.
+
+/** Where-expression: `thread` is not soft-deleted. Usage: `.where(isThreadLive)`. */
+export const isThreadLive = sql<SqlBool>`thread.deleted_at IS NULL`
+
+/**
+ * Where-expression: `quiz` is live. A topic-only quiz always is; one generated from a thread is
+ * live while that thread is. Needs `thread` LEFT JOINed on `quiz.thread_id`.
+ */
+export const isQuizLive = sql<SqlBool>`(quiz.thread_id IS NULL OR ${isThreadLive})`
+
 /** Returns the row, or throws 404 `not_found` when it is missing or not owned. */
 export function requireFound<T>(row: T | undefined | null): T {
   if (row === undefined || row === null) throw notFound()

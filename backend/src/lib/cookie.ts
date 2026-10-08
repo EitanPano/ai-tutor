@@ -1,10 +1,11 @@
 import type { CookieOptions, Response } from 'express'
 import type { Config } from './config.js'
+import { DAY_MS } from './time.js'
 
 export const SESSION_COOKIE = 'sid'
-export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+export const SESSION_TTL_MS = 30 * DAY_MS
 /** Absolute cap: a session never outlives its creation by more than this, however active. */
-export const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000
+export const SESSION_MAX_AGE_MS = 90 * DAY_MS
 
 type CookieConfig = Pick<Config, 'nodeEnv' | 'frontendUrl'>
 

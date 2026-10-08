@@ -1,6 +1,7 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
-import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { isQuizLive, isThreadLive, ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { DAY_MS } from '../../lib/time.js'
 
 export type TopicProgressDto = {
   topicId: string
@@ -34,7 +35,6 @@ export type ProgressDto = {
 }
 
 const RECENT_LIMIT = 10
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export type ProgressServiceDeps = { db: Db }
 
@@ -127,7 +127,7 @@ async function topicRowsQuery(db: Db, auth: Auth): Promise<TopicRow[]> {
       FROM message
       JOIN thread ON thread.id = message.thread_id
       WHERE ${ownedBy('message', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND message.role = 'user'
         AND message.status <> 'failed'
       GROUP BY thread.topic_id
@@ -137,7 +137,7 @@ async function topicRowsQuery(db: Db, auth: Auth): Promise<TopicRow[]> {
       JOIN guide ON guide.id = guide_step.guide_id
       JOIN thread ON thread.id = guide.thread_id
       WHERE ${ownedBy('guide_step', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND guide_step.done_at IS NOT NULL
       GROUP BY guide.topic_id
     ), g AS (
@@ -145,7 +145,7 @@ async function topicRowsQuery(db: Db, auth: Auth): Promise<TopicRow[]> {
       FROM guide
       JOIN thread ON thread.id = guide.thread_id
       WHERE ${ownedBy('guide', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND EXISTS (SELECT 1 FROM guide_step WHERE guide_step.guide_id = guide.id)
         AND NOT EXISTS (
           SELECT 1 FROM guide_step WHERE guide_step.guide_id = guide.id AND guide_step.done_at IS NULL
@@ -160,7 +160,7 @@ async function topicRowsQuery(db: Db, auth: Auth): Promise<TopicRow[]> {
       JOIN quiz ON quiz.id = quiz_attempt.quiz_id
       LEFT JOIN thread ON thread.id = quiz.thread_id
       WHERE ${ownedBy('quiz_attempt', auth)}
-        AND (quiz.thread_id IS NULL OR thread.deleted_at IS NULL)
+        AND ${isQuizLive}
       GROUP BY quiz.topic_id, quiz.id
     ), a AS (
       SELECT topic_id, sum(n) AS n, max(best) AS best, avg(best) AS average, max(last_at) AS last_at
@@ -192,7 +192,7 @@ async function activeDayRowsQuery(db: Db, auth: Auth, timeZone: string) {
       FROM message
       JOIN thread ON thread.id = message.thread_id
       WHERE ${ownedBy('message', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND message.role = 'user'
         AND message.status <> 'failed'
       UNION ALL
@@ -201,7 +201,7 @@ async function activeDayRowsQuery(db: Db, auth: Auth, timeZone: string) {
       JOIN guide ON guide.id = guide_step.guide_id
       JOIN thread ON thread.id = guide.thread_id
       WHERE ${ownedBy('guide_step', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND guide_step.done_at IS NOT NULL
       UNION ALL
       SELECT (quiz_attempt.submitted_at AT TIME ZONE ${timeZone})::date
@@ -209,7 +209,7 @@ async function activeDayRowsQuery(db: Db, auth: Auth, timeZone: string) {
       JOIN quiz ON quiz.id = quiz_attempt.quiz_id
       LEFT JOIN thread ON thread.id = quiz.thread_id
       WHERE ${ownedBy('quiz_attempt', auth)}
-        AND (quiz.thread_id IS NULL OR thread.deleted_at IS NULL)
+        AND ${isQuizLive}
     ) AS activity
     ORDER BY day`.execute(db)
   return result.rows
@@ -234,7 +234,7 @@ async function recentRowsQuery(db: Db, auth: Auth): Promise<RecentRow[]> {
       FROM message
       JOIN thread ON thread.id = message.thread_id
       WHERE ${ownedBy('message', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND message.role = 'user'
         AND message.status <> 'failed'
       ORDER BY message.created_at DESC, message.id DESC
@@ -246,7 +246,7 @@ async function recentRowsQuery(db: Db, auth: Auth): Promise<RecentRow[]> {
       JOIN guide ON guide.id = guide_step.guide_id
       JOIN thread ON thread.id = guide.thread_id
       WHERE ${ownedBy('guide_step', auth)}
-        AND thread.deleted_at IS NULL
+        AND ${isThreadLive}
         AND guide_step.done_at IS NOT NULL
       ORDER BY guide_step.done_at DESC, guide_step.id DESC
       LIMIT ${RECENT_LIMIT})
@@ -261,7 +261,7 @@ async function recentRowsQuery(db: Db, auth: Auth): Promise<RecentRow[]> {
       JOIN topic ON topic.id = quiz.topic_id
       LEFT JOIN thread ON thread.id = quiz.thread_id
       WHERE ${ownedBy('quiz_attempt', auth)}
-        AND (quiz.thread_id IS NULL OR thread.deleted_at IS NULL)
+        AND ${isQuizLive}
       ORDER BY quiz_attempt.submitted_at DESC, quiz_attempt.id DESC
       LIMIT ${RECENT_LIMIT})
     ) AS event

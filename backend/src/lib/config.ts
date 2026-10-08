@@ -2,16 +2,17 @@ import { z } from 'zod'
 
 const DEV_DATABASE_URL = 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor'
 const DEV_FRONTEND_URL = 'http://localhost:3000'
+
+/** Daily token budgets, per user and across all users. */
+type DailyTokenBudget = { perUser: number; global: number }
+
 /**
  * Daily token budgets when AI_DAILY_TOKEN_BUDGET / AI_GLOBAL_DAILY_TOKEN_BUDGET are unset.
  * `perUser`: the real provider spends money, 50k tokens a day; the free fake one is effectively
  * unlimited. `global`: across all users, per UTC day, 500k tokens with the real provider,
  * effectively unlimited with the fake one.
  */
-const DEFAULT_BUDGET_BY_PROVIDER: Record<
-  Config['aiProvider'],
-  { perUser: number; global: number }
-> = {
+const DEFAULT_BUDGET_BY_PROVIDER: Record<Config['aiProvider'], DailyTokenBudget> = {
   anthropic: { perUser: 50_000, global: 500_000 },
   fake: { perUser: 1_000_000, global: 1_000_000_000 }
 }

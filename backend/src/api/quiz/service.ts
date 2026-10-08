@@ -1,11 +1,10 @@
-import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
 import type { QuizAttemptRow, QuizDifficulty, QuizRow } from '../../lib/db/schema.js'
 import { unprocessable } from '../../lib/error.js'
 import { QuizDraftSchema, type QuizDraft } from '../../lib/tutor/quiz.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../../services/ai/index.js'
-import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { isQuizLive, ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
@@ -181,7 +180,7 @@ async function requireQuiz(db: Db, auth: Auth, id: string): Promise<QuizRow> {
     .selectAll('quiz')
     .where('quiz.id', '=', id)
     .where(ownedBy('quiz', auth))
-    .where(sql<boolean>`(quiz.thread_id IS NULL OR thread.deleted_at IS NULL)`)
+    .where(isQuizLive)
     .executeTakeFirst()
   return requireFound(row)
 }

@@ -3,9 +3,8 @@ import type { Db } from '../../lib/db/index.js'
 import { unauthorized } from '../../lib/error.js'
 import { hashPassword, verifyPassword } from '../../lib/password.js'
 import { createSessionToken, hashSessionToken } from '../../lib/session-token.js'
+import { DAY_MS } from '../../lib/time.js'
 import { toUserDto, type UserDto } from './dto.js'
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 type ResolvedSession = {
   sessionId: string

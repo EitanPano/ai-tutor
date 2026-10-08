@@ -59,7 +59,7 @@ export type AnthropicProviderOptions = {
 }
 
 /** SDK stop reasons with a counterpart of ours. Any other, or none, ends the turn normally. */
-const STOP_REASON_BY_SDK = new Map<string | null, TutorStopReason>([
+const STOP_REASON_BY_SDK = new Map<string, TutorStopReason>([
   ['max_tokens', 'max_tokens'],
   ['model_context_window_exceeded', 'max_tokens'],
   ['stop_sequence', 'stop_sequence'],
@@ -67,6 +67,7 @@ const STOP_REASON_BY_SDK = new Map<string | null, TutorStopReason>([
 ])
 
 function mapStopReason(reason: string | null): TutorStopReason {
+  if (reason === null) return 'end_turn'
   return STOP_REASON_BY_SDK.get(reason) ?? 'end_turn'
 }
 

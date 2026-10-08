@@ -3,6 +3,7 @@ import type { Db } from '../../lib/db/index.js'
 import type { MessageStatus, MessageStopReason } from '../../lib/db/schema.js'
 import { conflict } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
+import { startTimer } from '../../lib/time.js'
 import type { ExplainResult, TutorProvider, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
 import { TutorProviderError, ZERO_USAGE } from '../../lib/tutor/tutor.js'
 import type { AiApi, GenerationLockToken } from '../../services/ai/index.js'
@@ -221,17 +222,17 @@ export function createMessageService({
       }
     },
     async explain(ctx, content, { signal, onDelta, logContext }) {
-      const startedAt = Date.now()
+      const elapsedMs = startTimer()
       try {
         const result = await tutor.explain(
           { topicName: ctx.topicName, history: ctx.history, question: content, signal },
           onDelta
         )
-        return { kind: 'result', result, latencyMs: Date.now() - startedAt }
+        return { kind: 'result', result, latencyMs: elapsedMs() }
       } catch (err) {
         // Log the failure, never the question or answer text.
         logger.error({ ...logContext, err, threadId: ctx.threadId }, 'tutor provider failed')
-        return failedOutcome(err, Date.now() - startedAt)
+        return failedOutcome(err, elapsedMs())
       }
     },
     failedOutcome,

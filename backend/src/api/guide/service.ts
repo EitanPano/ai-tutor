@@ -4,7 +4,7 @@ import type { GuideRow, GuideStepRow } from '../../lib/db/schema.js'
 import { GuideDraftSchema, type GuideDraft } from '../../lib/tutor/guide.schema.js'
 import type { TutorProvider } from '../../lib/tutor/tutor.js'
 import type { AiApi } from '../../services/ai/index.js'
-import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { isThreadLive, ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import type { ThreadApi } from '../thread/index.js'
 import type { TopicApi } from '../topic/index.js'
 
@@ -117,10 +117,10 @@ async function saveGuide(
 }
 
 /** A step whose guide's thread is not soft-deleted (derived content is hidden with the thread). */
-const inLiveThread = sql<boolean>`EXISTS (
+const isStepInLiveThread = sql<boolean>`EXISTS (
   SELECT 1 FROM guide
   JOIN thread ON thread.id = guide.thread_id
-  WHERE guide.id = guide_step.guide_id AND thread.deleted_at IS NULL
+  WHERE guide.id = guide_step.guide_id AND ${isThreadLive}
 )`
 
 export function createGuideService(deps: GuideServiceDeps): GuideService {
@@ -151,7 +151,7 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
           .where('guide.id', '=', id)
           .where(ownedBy('guide', auth))
           // Content derived from a soft-deleted thread is hidden like the thread.
-          .where('thread.deleted_at', 'is', null)
+          .where(isThreadLive)
           .executeTakeFirst()
       )
       const steps = await db
@@ -179,7 +179,7 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
               .where('id', '=', stepId)
               .where('guide_id', '=', guideId)
               .where(ownedBy('guide_step', auth))
-              .where(inLiveThread)
+              .where(isStepInLiveThread)
               .returningAll()
               .executeTakeFirst()
           : await db
@@ -188,7 +188,7 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
               .where('id', '=', stepId)
               .where('guide_id', '=', guideId)
               .where(ownedBy('guide_step', auth))
-              .where(inLiveThread)
+              .where(isStepInLiveThread)
               .executeTakeFirst()
       return toStepDto(requireFound(row))
     }

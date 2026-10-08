@@ -2,6 +2,7 @@ import type { z } from 'zod'
 import type { Db } from '../../lib/db/index.js'
 import { badGateway, ERROR_MESSAGE, unprocessable } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
+import { startTimer } from '../../lib/time.js'
 import { TutorProviderError, ZERO_USAGE, type StructuredResult } from '../../lib/tutor/tutor.js'
 import { recordAiCall, type AiCall } from './budget.js'
 import type { Auth } from '../../lib/ownership.js'
@@ -41,7 +42,7 @@ export async function generateValidated<S extends z.ZodType>(
 ): Promise<z.output<S>> {
   const { kind, schema, call, model, logger } = options
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const startedAt = Date.now()
+    const elapsedMs = startTimer()
     let result: StructuredResult
     try {
       result = await call()
@@ -53,7 +54,7 @@ export async function generateValidated<S extends z.ZodType>(
         stopReason: 'error',
         refusalCategory: null,
         usage: err instanceof TutorProviderError ? (err.usage ?? ZERO_USAGE) : ZERO_USAGE,
-        latencyMs: Date.now() - startedAt
+        latencyMs: elapsedMs()
       })
       throw badGateway('ai_provider_error', ERROR_MESSAGE.ai_provider_error)
     }
@@ -62,7 +63,7 @@ export async function generateValidated<S extends z.ZodType>(
       stopReason: result.stopReason,
       refusalCategory: result.refusalCategory,
       usage: result.usage,
-      latencyMs: Date.now() - startedAt
+      latencyMs: elapsedMs()
     })
     if (result.stopReason === 'refusal') {
       throw unprocessable('ai_refused', ERROR_MESSAGE.ai_refused)

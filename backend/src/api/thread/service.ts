@@ -3,7 +3,7 @@ import type { Db } from '../../lib/db/index.js'
 import type { MessageRow } from '../../lib/db/schema.js'
 import { conflict, fieldInvalid } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
-import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { isThreadLive, ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { capHistory, type TutorTurn } from '../../lib/tutor/tutor.js'
 import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { AiApi } from '../../services/ai/index.js'
@@ -105,7 +105,7 @@ async function loadThread(db: Db, auth: Auth, id: string): Promise<ThreadRecord>
     ])
     .where('thread.id', '=', id)
     .where(ownedBy('thread', auth))
-    .where('thread.deleted_at', 'is', null)
+    .where(isThreadLive)
     .executeTakeFirst()
   return requireFound(row)
 }
@@ -226,7 +226,7 @@ export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDe
           messageCountExpr.as('message_count')
         ])
         .where(ownedBy('thread', auth))
-        .where('thread.deleted_at', 'is', null)
+        .where(isThreadLive)
       if (cursor) {
         query = query.where(
           sql<boolean>`(thread.updated_at, thread.id) < (${cursor.u}::timestamptz, ${cursor.i})`
@@ -348,7 +348,7 @@ export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDe
           .set(changes)
           .where('id', '=', id)
           .where(ownedBy('thread', auth))
-          .where('deleted_at', 'is', null)
+          .where(isThreadLive)
           .returning('id')
           .executeTakeFirst()
         requireFound(updated)
@@ -361,7 +361,7 @@ export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDe
         .set({ deleted_at: sql<Date>`now()` })
         .where('id', '=', id)
         .where(ownedBy('thread', auth))
-        .where('deleted_at', 'is', null)
+        .where(isThreadLive)
         .returning('id')
         .executeTakeFirst()
       requireFound(deleted)

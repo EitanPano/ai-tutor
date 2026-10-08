@@ -4,6 +4,7 @@ import {
   type ExplainInput,
   type ExplainResult,
   type GuideInput,
+  type MessagesInput,
   type QuizInput,
   type StructuredResult,
   type TutorProvider,
@@ -88,7 +89,7 @@ function bump(counter: Map<string, number>, key: string): number {
 }
 
 /** Characters of the request as the model would get it: every turn `buildMessages` lays out. */
-function inputCharsOf(request: Parameters<typeof buildMessages>[0]): number {
+function inputCharsOf(request: MessagesInput): number {
   return buildMessages(request).reduce((sum, turn) => sum + turn.content.length, 0)
 }
 
