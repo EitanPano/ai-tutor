@@ -16,7 +16,7 @@ import type { TopicApi } from '../topic/index.js'
 const MAX_THREAD_MESSAGES = 25
 const MAX_TITLE_CHARS = 80
 
-export type AskContext = {
+type AskContext = {
   threadId: string
   userMessageId: string
   assistantMessageId: string
@@ -42,7 +42,7 @@ export const STATUS_BY_STOP_REASON: Record<MessageStopReason, MessageStatus> = {
   error: 'failed'
 }
 
-export type ExplainOptions = {
+type ExplainOptions = {
   signal: AbortSignal
   /** Receives each chunk of the answer as it streams. */
   onDelta: (text: string) => void

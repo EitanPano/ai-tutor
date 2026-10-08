@@ -45,7 +45,7 @@ function quizRequest(input: QuizInput): string {
     : `Write ${article} ${input.difficulty} quiz on this conversation.`
 }
 
-export type AnthropicProviderOptions = {
+type AnthropicProviderOptions = {
   apiKey: string
   model: string
   /** SDK retries on transient errors (default 2). */

@@ -13,7 +13,7 @@ const STATEMENT_TIMEOUT_MS = 15_000
 // A transaction left open by a stuck request is ended by the server and frees its locks.
 const IDLE_IN_TRANSACTION_TIMEOUT_MS = 30_000
 
-export type CreateDbOptions = {
+type CreateDbOptions = {
   /** `null` disables the statement timeout (operator CLI: a migration may run long). */
   statementTimeoutMs?: number | null
 }

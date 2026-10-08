@@ -171,7 +171,7 @@ export function configWarning(
 
 const dbEnvSchema = envSchema.pick({ NODE_ENV: true, DATABASE_URL: true, LOG_LEVEL: true })
 
-export type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>
+type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>
 
 /**
  * The narrow config the db CLI (migrate, seed, reset-password, ...) needs: it must run in an

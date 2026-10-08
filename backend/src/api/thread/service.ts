@@ -13,7 +13,7 @@ const DEFAULT_TOPIC_ID = 'other'
 export const DEFAULT_TITLE = 'New thread'
 const DEFAULT_PAGE_SIZE = 20
 
-export type ThreadDto = {
+type ThreadDto = {
   id: string
   topicId: string
   title: string
@@ -22,7 +22,7 @@ export type ThreadDto = {
   updatedAt: string
 }
 
-export type MessageDto = {
+type MessageDto = {
   id: string
   threadId: string
   role: MessageRow['role']
@@ -32,7 +32,7 @@ export type MessageDto = {
   createdAt: string
 }
 
-export type ThreadDetailDto = {
+type ThreadDetailDto = {
   thread: ThreadDto
   messages: MessageDto[]
   /** The contract's GuideSummary, newest first. */

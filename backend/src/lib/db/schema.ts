@@ -3,7 +3,7 @@ import type { ColumnType, Generated, Selectable } from 'kysely'
 /** Kysely types mirror the database (snake_case). Later tasks add tables here. */
 type CreatedAt = ColumnType<Date, Date | string | undefined, never>
 
-export interface AppUserTable {
+interface AppUserTable {
   id: Generated<string>
   email: string
   password_hash: string
@@ -17,7 +17,7 @@ export interface AppUserTable {
   generation_started_at: Date | null
 }
 
-export interface SessionTable {
+interface SessionTable {
   id: Generated<string>
   user_id: string
   token_hash: string
@@ -26,7 +26,7 @@ export interface SessionTable {
 }
 
 /** Owned by rate-limiter-flexible; never queried directly by app code. */
-export interface RateLimitTable {
+interface RateLimitTable {
   key: string
   points: Generated<number>
   /** Epoch milliseconds. */
@@ -34,14 +34,14 @@ export interface RateLimitTable {
   created_at: CreatedAt
 }
 
-export interface TopicTable {
+interface TopicTable {
   id: string
   name: string
   position: number
   created_at: CreatedAt
 }
 
-export interface ThreadTable {
+interface ThreadTable {
   id: Generated<string>
   user_id: string
   topic_id: string
@@ -51,12 +51,12 @@ export interface ThreadTable {
   deleted_at: Date | null
 }
 
-export type MessageRole = 'user' | 'assistant'
+type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'complete' | 'incomplete' | 'failed'
 export type MessageStopReason =
   'end_turn' | 'max_tokens' | 'stop_sequence' | 'refusal' | 'aborted' | 'error'
 
-export interface MessageTable {
+interface MessageTable {
   id: Generated<string>
   thread_id: string
   user_id: string
@@ -82,7 +82,7 @@ export interface AiCallTable {
   created_at: CreatedAt
 }
 
-export interface GuideTable {
+interface GuideTable {
   id: Generated<string>
   user_id: string
   thread_id: string
@@ -91,7 +91,7 @@ export interface GuideTable {
   created_at: CreatedAt
 }
 
-export interface GuideStepTable {
+interface GuideStepTable {
   id: Generated<string>
   guide_id: string
   user_id: string
@@ -108,7 +108,7 @@ export interface GuideStepTable {
 
 export type QuizDifficulty = 'easy' | 'medium' | 'hard'
 
-export interface QuizTable {
+interface QuizTable {
   id: Generated<string>
   user_id: string
   /** Null for a quiz generated from a topic. */
@@ -118,7 +118,7 @@ export interface QuizTable {
   created_at: CreatedAt
 }
 
-export interface QuizItemTable {
+interface QuizItemTable {
   id: Generated<string>
   quiz_id: string
   user_id: string
@@ -131,7 +131,7 @@ export interface QuizItemTable {
   created_at: CreatedAt
 }
 
-export interface QuizAttemptTable {
+interface QuizAttemptTable {
   id: Generated<string>
   quiz_id: string
   user_id: string

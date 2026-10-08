@@ -16,7 +16,7 @@ type GuideServiceDeps = {
   thread: ThreadApi
 }
 
-export type StepDto = {
+type StepDto = {
   id: string
   position: number
   title: string

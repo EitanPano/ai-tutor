@@ -9,7 +9,7 @@ export type EventStream = {
   close(): void
 }
 
-export type EventStreamOptions = {
+type EventStreamOptions = {
   /** Interval of the `: ping` comment that keeps proxies from closing an idle stream. */
   heartbeatMs: number
   /**

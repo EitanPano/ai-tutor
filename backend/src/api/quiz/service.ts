@@ -19,7 +19,7 @@ type QuizServiceDeps = {
 }
 
 /** `{ threadId, difficulty? }` or `{ topicId, difficulty }`; the route validates the shape. */
-export type CreateQuizInput =
+type CreateQuizInput =
   | { threadId: string; difficulty?: QuizDifficulty | undefined }
   | { topicId: string; difficulty: QuizDifficulty }
 
@@ -49,7 +49,7 @@ type QuizDto = {
   attempts: AttemptSummaryDto[]
 }
 
-export type GradedItemDto = {
+type GradedItemDto = {
   itemId: string
   position: number
   prompt: string
@@ -60,7 +60,7 @@ export type GradedItemDto = {
   explanation: string
 }
 
-export type AttemptDto = {
+type AttemptDto = {
   id: string
   quizId: string
   score: number

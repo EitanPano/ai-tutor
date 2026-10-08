@@ -16,7 +16,7 @@ import type { Database } from './db/schema.js'
 export type Auth = { userId: string }
 
 /** Tables that carry a `user_id` column. */
-export type TenantTable = {
+type TenantTable = {
   [T in keyof Database]: Database[T] extends { user_id: string } ? T : never
 }[keyof Database]
 
@@ -30,8 +30,9 @@ export function ownedBy(table: TenantTable, auth: Auth): RawBuilder<SqlBool> {
 // the thread under the name `thread`.
 
 /**
- * Where-expression: `thread` is not soft-deleted. Usage: `.where(isThreadLive)` in a builder
- * (the column is type-checked there) or `${isThreadLive}` inside a `sql` template.
+ * Where-expression: `thread` is not soft-deleted. Usage: `.where(isThreadLive)` in a builder or
+ * `${isThreadLive}` inside a `sql` template. The column is type-checked once, here at the
+ * definition; `.where` accepts it as any `Expression<SqlBool>`.
  */
 export const isThreadLive = expressionBuilder<Database, 'thread'>()('thread.deleted_at', 'is', null)
 

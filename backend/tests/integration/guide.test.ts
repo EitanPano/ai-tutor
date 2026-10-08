@@ -357,7 +357,7 @@ describe('guards', () => {
       {},
       { isHintRevealed: false },
       { isDone: 'yes' },
-      // The pre-rename field name is rejected, not silently ignored.
+      // A removed field name answers 400, not a silent no-op.
       { done: true },
       { extra: 1 }
     ]) {

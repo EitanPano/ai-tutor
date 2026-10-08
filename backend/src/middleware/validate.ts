@@ -3,7 +3,7 @@ import type { z } from 'zod'
 
 // From `express`: the `express-serve-static-core` types do not resolve from backend/.
 export type ParamsDictionary = Request['params']
-export type Query = Request['query']
+type Query = Request['query']
 
 /**
  * The type of every generic middleware. Its query is `unknown`, so it fits a route whose query
@@ -14,15 +14,15 @@ export type Middleware = RequestHandler<ParamsDictionary, unknown, unknown, unkn
 /** The type of every controller handler: a `RequestHandler` whose response body is `unknown`. */
 export type Handler<P = ParamsDictionary, B = unknown, Q = Query> = RequestHandler<P, unknown, B, Q>
 
-export type ValidateSpec = { params?: z.ZodType; query?: z.ZodType; body?: z.ZodType }
+type ValidateSpec = { params?: z.ZodType; query?: z.ZodType; body?: z.ZodType }
 
-export type InferParams<S extends ValidateSpec> = S extends { params: infer P extends z.ZodType }
+type InferParams<S extends ValidateSpec> = S extends { params: infer P extends z.ZodType }
   ? z.output<P>
   : ParamsDictionary
-export type InferBody<S extends ValidateSpec> = S extends { body: infer B extends z.ZodType }
+type InferBody<S extends ValidateSpec> = S extends { body: infer B extends z.ZodType }
   ? z.output<B>
   : unknown
-export type InferQuery<S extends ValidateSpec> = S extends { query: infer Q extends z.ZodType }
+type InferQuery<S extends ValidateSpec> = S extends { query: infer Q extends z.ZodType }
   ? z.output<Q>
   : Query
 

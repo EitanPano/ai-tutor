@@ -10,7 +10,7 @@ import { toUserDto, type UserDto } from './dto.js'
 /** A time-zone change moves the daily AI budget window, so it is limited to one per this window. */
 const TIME_ZONE_CHANGE_WINDOW_HOURS = 24
 
-export type CreateUserInput = {
+type CreateUserInput = {
   email: string
   password: string
   displayName: string

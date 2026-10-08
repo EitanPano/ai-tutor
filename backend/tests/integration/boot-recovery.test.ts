@@ -11,8 +11,8 @@ import { createClient, signUp } from '../helper/client.js'
 const config = loadConfig(process.env)
 const { db, pool } = createDb(config.databaseUrl)
 
-// The turn sweep starts with a `selectFrom('message')` probe; `sweep.shouldFail` makes any read fail, which
-// the boot recovery's lock release (an update) does not use.
+// The turn sweep starts with a `selectFrom('message')` probe; `sweep.shouldFail` makes any read
+// fail, which the boot recovery's lock release (an update) does not use.
 const sweep = { shouldFail: false }
 const flaky = new Proxy(db, {
   get(target, prop) {

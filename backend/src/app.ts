@@ -29,7 +29,7 @@ import { errorMiddleware, notFoundHandler } from './middleware/error.js'
 import { originCheck } from './middleware/origin-check.js'
 import { requestId } from './middleware/request-id.js'
 
-export type AppDeps = {
+type AppDeps = {
   config: Config
   db: Db
   /** The pool behind `db`; the rate limiters store their counters through it. */

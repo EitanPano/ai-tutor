@@ -3,7 +3,7 @@ import type { Db } from '../../lib/db/index.js'
 import { isQuizLive, isThreadLive, ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
 import { DAY_MS } from '../../lib/time.js'
 
-export type TopicProgressDto = {
+type TopicProgressDto = {
   topicId: string
   topicName: string
   questions: number
@@ -15,9 +15,9 @@ export type TopicProgressDto = {
   lastActivityAt: string | null
 }
 
-export type StreakDto = { current: number; longest: number; isActiveToday: boolean }
+type StreakDto = { current: number; longest: number; isActiveToday: boolean }
 
-export type ActivityDto = {
+type ActivityDto = {
   kind: 'question' | 'step' | 'attempt'
   at: string
   topicId: string

@@ -10,7 +10,7 @@ import type { Auth } from '../../lib/ownership.js'
 /** One attempt plus one retry when the output is unusable. */
 export const MAX_ATTEMPTS = 2
 
-export type GenerationKind = 'guide' | 'quiz'
+type GenerationKind = 'guide' | 'quiz'
 
 type RecordedCall = Omit<AiCall, 'kind'>
 

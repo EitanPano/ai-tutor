@@ -21,7 +21,7 @@ export type ExplainResult = {
 }
 
 export type GuideInput = { topicName: string; history: TutorTurn[] }
-export type QuizDifficultyName = 'easy' | 'medium' | 'hard'
+type QuizDifficultyName = 'easy' | 'medium' | 'hard'
 /** `history` is `null` for a quiz generated from a topic alone. */
 export type QuizInput = {
   topicName: string
