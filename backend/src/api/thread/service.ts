@@ -4,6 +4,7 @@ import type { MessageRow } from '../../lib/db/schema.js'
 import { badRequest, conflict } from '../../lib/error.js'
 import { hasNoNul } from '../../lib/validation.js'
 import { ownedBy, requireFound, type Auth } from '../../lib/ownership.js'
+import { capHistory, type TutorTurn } from '../../lib/tutor/tutor.js'
 import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { AiApi } from '../../services/ai/index.js'
 import type { TopicApi } from '../topic/index.js'
@@ -155,6 +156,19 @@ function decodeCursor(raw: string): Cursor {
   throw invalidCursor()
 }
 
+async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<TutorTurn[]> {
+  const rows = await db
+    .selectFrom('message')
+    .select(['role', 'content'])
+    .where('thread_id', '=', threadId)
+    .where(ownedBy('message', auth))
+    .where('status', '<>', 'failed')
+    .orderBy('created_at')
+    .orderBy('id')
+    .execute()
+  return capHistory(rows.filter((row) => row.role === 'user' || row.content !== ''))
+}
+
 /** A live thread owned by the user, as other modules see it. */
 export type ThreadSummary = { id: string; topicId: string; title: string; messageCount: number }
 
@@ -184,7 +198,18 @@ export type ThreadService = {
   require(auth: Auth, id: string): Promise<ThreadSummary>
   /** The thread needs at least one answer to build a guide or quiz from (409 `thread_empty`). */
   assertHasAnswer(auth: Auth, id: string): Promise<void>
+  /**
+   * Earlier turns, oldest first, as the model should see them. Failed turns are left out (on
+   * failure both messages of the turn are `failed`), and so are assistant messages with no text.
+   * `incomplete` answers are sent as they are.
+   */
+  history(auth: Auth, threadId: string): Promise<TutorTurn[]>
+  /** System-wide sweep of turns left in flight by a crash. Boot only. */
+  recoverStaleAtBoot(): Promise<number>
 }
+
+/** What other modules may call. */
+export type ThreadApi = Pick<ThreadService, 'require' | 'assertHasAnswer' | 'history'>
 
 export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDeps): ThreadService {
   return {
@@ -372,6 +397,8 @@ export function createThreadService({ db, topic: topicApi, ai }: ThreadServiceDe
           'Ask a question first, then build a guide or quiz from the answer.'
         )
       }
-    }
+    },
+    history: (auth, threadId) => buildHistory(db, auth, threadId),
+    recoverStaleAtBoot: () => recoverStaleTurn(db, sql<Date>`now()`)
   }
 }

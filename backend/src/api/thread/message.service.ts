@@ -1,12 +1,13 @@
 import { sql } from 'kysely'
 import type { Db } from '../../lib/db/index.js'
+import type { MessageStatus, MessageStopReason } from '../../lib/db/schema.js'
 import { conflict } from '../../lib/error.js'
 import type { Logger } from '../../lib/logger.js'
-import type { ExplainResult, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
-import { capHistory, ZERO_USAGE } from '../../lib/tutor/tutor.js'
+import type { ExplainResult, TutorProvider, TutorTurn, TutorUsage } from '../../lib/tutor/tutor.js'
+import { TutorProviderError, ZERO_USAGE } from '../../lib/tutor/tutor.js'
 import type { AiApi, GenerationLockToken } from '../../services/ai/index.js'
 import { ownedBy, type Auth } from '../../lib/ownership.js'
-import { DEFAULT_TITLE, type ThreadService } from './thread.service.js'
+import { DEFAULT_TITLE, type ThreadService } from './service.js'
 import { olderThanTtl, recoverStaleTurn } from './stale-turn.js'
 import type { TopicApi } from '../topic/index.js'
 
@@ -28,6 +29,27 @@ export type AskOutcome =
   | { kind: 'error'; model: string; latencyMs: number; usage?: TutorUsage }
 
 /**
+ * The status of a turn's assistant message, by its stop reason (`error` = the provider call
+ * failed). Keyed by every stop reason, so a new one does not compile until it is placed here.
+ */
+export const STATUS_BY_STOP_REASON: Record<MessageStopReason, MessageStatus> = {
+  end_turn: 'complete',
+  stop_sequence: 'complete',
+  max_tokens: 'incomplete',
+  aborted: 'incomplete',
+  refusal: 'failed',
+  error: 'failed'
+}
+
+export type ExplainOptions = {
+  signal: AbortSignal
+  /** Receives each chunk of the answer as it streams. */
+  onDelta: (text: string) => void
+  /** Extra log fields (ids only, never content). */
+  logContext?: Record<string, string>
+}
+
+/**
  * The thread title: the first non-empty line that is not a code fence, whitespace collapsed.
  * Over 80 characters it is cut at the last word boundary within 79 characters and gets an
  * ellipsis (a single long word is cut hard). The default title when no such line exists.
@@ -42,19 +64,6 @@ export function titleFrom(content: string): string {
   const head = line.slice(0, MAX_TITLE_CHARS - 1)
   const boundary = head.lastIndexOf(' ')
   return `${(boundary > 0 ? head.slice(0, boundary) : head).trimEnd()}…`
-}
-
-async function buildHistory(db: Db, auth: Auth, threadId: string): Promise<TutorTurn[]> {
-  const rows = await db
-    .selectFrom('message')
-    .select(['role', 'content'])
-    .where('thread_id', '=', threadId)
-    .where(ownedBy('message', auth))
-    .where('status', '<>', 'failed')
-    .orderBy('created_at')
-    .orderBy('id')
-    .execute()
-  return capHistory(rows.filter((row) => row.role === 'user' || row.content !== ''))
 }
 
 /** Fallback after a persistence failure: never leave the turn looking in flight. */
@@ -84,6 +93,7 @@ async function markTurnFailed(
 
 export type MessageServiceDeps = {
   db: Db
+  tutor: TutorProvider
   topic: TopicApi
   ai: AiApi
   thread: ThreadService
@@ -97,6 +107,16 @@ export type MessageService = {
    * (the lock is only held when this returns). The caller MUST call `finish` afterwards.
    */
   start(auth: Auth, threadId: string, content: string): Promise<AskContext>
+  /**
+   * Calls the provider and streams the answer through `onDelta`. Never throws for a provider
+   * failure: it logs it (never the question or answer text) and returns an `error` outcome that
+   * keeps the usage the provider observed before failing. Pass the outcome to `finish`.
+   */
+  explain(
+    ctx: Pick<AskContext, 'threadId' | 'topicName' | 'history'>,
+    content: string,
+    options: ExplainOptions
+  ): Promise<AskOutcome>
   /**
    * Persists the outcome of the provider call and ALWAYS releases the generation lock. Call it once
    * the provider finished or failed, whatever happened before.
@@ -118,16 +138,11 @@ export type MessageService = {
     ctx: Pick<AskContext, 'userMessageId' | 'assistantMessageId' | 'lockToken'>,
     outcome: AskOutcome
   ): Promise<void>
-  /**
-   * Earlier turns, oldest first, as the model should see them. Failed turns are left out (on
-   * failure both messages of the turn are `failed`), and so are assistant messages with no text.
-   * `incomplete` answers are sent as they are.
-   */
-  history(auth: Auth, threadId: string): Promise<TutorTurn[]>
 }
 
 export function createMessageService({
   db,
+  tutor,
   topic: topicApi,
   ai,
   thread: threadService,
@@ -147,7 +162,7 @@ export function createMessageService({
       const topic = await topicApi.require(thread.topicId)
       const lockToken = await ai.acquireLock(auth)
       try {
-        const history = await buildHistory(db, auth, thread.id)
+        const history = await threadService.history(auth, thread.id)
         const ids = await db.transaction().execute(async (trx) => {
           const user = await trx
             .insertInto('message')
@@ -192,12 +207,30 @@ export function createMessageService({
         throw err
       }
     },
+    async explain(ctx, content, { signal, onDelta, logContext }) {
+      const startedAt = Date.now()
+      try {
+        const result = await tutor.explain(
+          { topicName: ctx.topicName, history: ctx.history, question: content, signal },
+          onDelta
+        )
+        return { kind: 'result', result, latencyMs: Date.now() - startedAt }
+      } catch (err) {
+        // Log the failure, never the question or answer text.
+        logger.error({ err, ...logContext, threadId: ctx.threadId }, 'tutor provider failed')
+        return {
+          kind: 'error',
+          model: tutor.model,
+          latencyMs: Date.now() - startedAt,
+          ...(err instanceof TutorProviderError && err.usage ? { usage: err.usage } : {})
+        }
+      }
+    },
     async finish(auth, ctx, outcome) {
       const result = outcome.kind === 'result' ? outcome.result : undefined
       const stopReason = result ? result.stopReason : 'error'
-      const failed = stopReason === 'refusal' || stopReason === 'error'
-      const incomplete = stopReason === 'max_tokens' || stopReason === 'aborted'
-      const status = failed ? 'failed' : incomplete ? 'incomplete' : 'complete'
+      const status = STATUS_BY_STOP_REASON[stopReason]
+      const isFailed = status === 'failed'
       const usage =
         result?.usage ?? (outcome.kind === 'error' ? outcome.usage : undefined) ?? ZERO_USAGE
       try {
@@ -219,7 +252,11 @@ export function createMessageService({
             // already failed (this stream outlived the lock TTL) must not be overwritten.
             const updated = await trx
               .updateTable('message')
-              .set({ content: failed ? '' : (result?.text ?? ''), status, stop_reason: stopReason })
+              .set({
+                content: isFailed ? '' : (result?.text ?? ''),
+                status,
+                stop_reason: stopReason
+              })
               .where('id', '=', ctx.assistantMessageId)
               .where('stop_reason', 'is', null)
               .where(ownedBy('message', auth))
@@ -229,7 +266,7 @@ export function createMessageService({
                 { userMessageId: ctx.userMessageId },
                 'the turn was recovered before it finished; keeping the recovered state'
               )
-            } else if (failed) {
+            } else if (isFailed) {
               await trx
                 .updateTable('message')
                 .set({ status: 'failed' })
@@ -248,7 +285,6 @@ export function createMessageService({
         // Covers every path where the transaction did not commit; a no-op after it did.
         await ai.releaseLock(auth, ctx.lockToken)
       }
-    },
-    history: (auth, threadId) => buildHistory(db, auth, threadId)
+    }
   }
 }

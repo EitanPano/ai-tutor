@@ -36,6 +36,7 @@ describe('kill-switch backstop', () => {
     const ai: AiApi = off.modules.ai
     const message = createMessageService({
       db: {} as Db,
+      tutor: {} as never,
       topic: {} as never,
       ai,
       thread: {} as never,

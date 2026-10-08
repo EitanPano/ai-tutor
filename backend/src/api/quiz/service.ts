@@ -113,8 +113,8 @@ function toQuizDto(
 export type QuizService = {
   /**
    * Generates a quiz from a thread or from a topic. The provider call, its retry and the `ai_call`
-   * rows live in `generateValidated`; the generation lock is always released here. The AI switch
-   * is checked first, before anything else.
+   * rows live in `generateValidated`; the generation lock is always released here. The route checks
+   * the AI switch first; `ai.withGenerationLock` checks it again as the backstop.
    */
   create(auth: Auth, input: CreateQuizInput): Promise<QuizDto>
   get(auth: Auth, id: string): Promise<QuizDto>

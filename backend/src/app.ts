@@ -15,7 +15,12 @@ import { createGuideService, guideRouter } from './api/guide/index.js'
 import { createHealthService, healthRouter } from './api/health/index.js'
 import { createProgressService, progressRouter } from './api/progress/index.js'
 import { createQuizService, quizRouter } from './api/quiz/index.js'
-import { createThreadModule, type ThreadApi } from './api/thread/index.js'
+import {
+  createMessageService,
+  createThreadService,
+  threadRouter,
+  type ThreadApi
+} from './api/thread/index.js'
 import { createTopicService, topicRouter, type TopicApi } from './api/topic/index.js'
 import {
   createSessionService,
@@ -25,7 +30,6 @@ import {
 } from './api/user/index.js'
 import { createAiService, type AiApi } from './services/ai/index.js'
 import { attachContext, type Limiters } from './context.js'
-import { requireSession } from './middleware/auth.js'
 import { errorMiddleware, notFoundHandler } from './middleware/error.js'
 import { originCheck } from './middleware/origin-check.js'
 import { requestId } from './middleware/request-id.js'
@@ -108,17 +112,10 @@ export function createApp({
   const user = createUserService({ db })
   const topic = createTopicService({ db })
   const ai = createAiService({ db, config, logger })
-  const thread = createThreadModule({
-    db,
-    tutor: provider,
-    logger,
-    inFlight,
-    requireSession,
-    topic,
-    ai
-  })
-  const guide = createGuideService({ db, tutor: provider, topic, ai, thread: thread.api })
-  const quiz = createQuizService({ db, tutor: provider, topic, ai, thread: thread.api })
+  const thread = createThreadService({ db, topic, ai })
+  const message = createMessageService({ db, tutor: provider, topic, ai, thread, logger })
+  const guide = createGuideService({ db, tutor: provider, topic, ai, thread })
+  const quiz = createQuizService({ db, tutor: provider, topic, ai, thread })
   const progress = createProgressService({ db })
   const health = createHealthService({ db })
   // Before any router: route handlers read their dependencies per request through ctxOf(req).
@@ -129,13 +126,13 @@ export function createApp({
     tutor: provider,
     inFlight,
     limiters,
-    services: { ai, guide, health, progress, quiz, session, topic, user }
+    services: { ai, guide, health, message, progress, quiz, session, thread, topic, user }
   })
   for (const router of [
     healthRouter,
     userRouter,
     topicRouter,
-    thread.router,
+    threadRouter,
     guideRouter,
     quizRouter,
     progressRouter
@@ -150,14 +147,14 @@ export function createApp({
     modules: {
       topic,
       ai,
-      thread: thread.api,
+      thread,
       recoverAtBoot: async () => {
         // A failed sweep must not leave users locked out: release the locks anyway, then let the
         // sweep's error propagate so index.ts logs it.
         let turns: number
         let locks: number
         try {
-          turns = await thread.recoverStale()
+          turns = await thread.recoverStaleAtBoot()
         } finally {
           locks = await ai.releaseAllLocks()
         }

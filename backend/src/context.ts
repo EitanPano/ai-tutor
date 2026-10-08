@@ -9,6 +9,7 @@ import type { GuideService } from './api/guide/index.js'
 import type { HealthService } from './api/health/index.js'
 import type { ProgressService } from './api/progress/index.js'
 import type { QuizService } from './api/quiz/index.js'
+import type { MessageService, ThreadService } from './api/thread/index.js'
 import type { TopicService } from './api/topic/index.js'
 import type { SessionService, UserService } from './api/user/index.js'
 import type { AiService } from './services/ai/index.js'
@@ -21,9 +22,11 @@ export type Services = {
   ai: AiService
   guide: GuideService
   health: HealthService
+  message: MessageService
   progress: ProgressService
   quiz: QuizService
   session: SessionService
+  thread: ThreadService
   topic: TopicService
   user: UserService
 }
