@@ -88,7 +88,7 @@ export function createApp({
   app.use('/api', originCheck(config.frontendUrl))
   app.use(express.json({ limit: '256kb' }))
   const provider = tutor ?? createTutorProvider(config)
-  // Health and progress stand alone: they need only the database.
+  // Health and progress stand alone: they neither use nor are used by other services.
   const health = createHealthService({ db })
   const progress = createProgressService({ db })
   // The rest are built in dependency order: a service only receives the APIs of services built

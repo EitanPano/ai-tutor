@@ -1,4 +1,5 @@
-type Details = Record<string, unknown>
+/** Machine-readable context sent with an error, e.g. `{ threadId }`. */
+export type Details = Record<string, unknown>
 
 export class AppError extends Error {
   readonly status: number

@@ -6,7 +6,9 @@ import {
   type GuideInput,
   type QuizInput,
   type StructuredResult,
-  type TutorProvider
+  type TutorProvider,
+  type TutorTurn,
+  type TutorUsage
 } from './tutor.js'
 
 /**
@@ -47,13 +49,66 @@ const LANGUAGE_BY_TOPIC: Record<string, string> = {
 }
 
 const MARKER = /\[fake:[a-z_-]+\]/g
-const GUIDE_ONCE = '[fake:guide-invalid-once]'
-const QUIZ_ONCE = '[fake:quiz-invalid-once]'
+
+/** The markers that drive one kind of structured call, as listed above. */
+type StructuredMarkers = { error: string; refuse: string; invalid: string; invalidOnce: string }
+
+const GUIDE_MARKERS: StructuredMarkers = {
+  error: '[fake:guide-error]',
+  refuse: '[fake:guide-refuse]',
+  invalid: '[fake:guide-invalid]',
+  invalidOnce: '[fake:guide-invalid-once]'
+}
+
+const QUIZ_MARKERS: StructuredMarkers = {
+  error: '[fake:quiz-error]',
+  refuse: '[fake:quiz-refuse]',
+  invalid: '[fake:quiz-invalid]',
+  invalidOnce: '[fake:quiz-invalid-once]'
+}
+
+/** One `generateGuide` or `generateQuiz` call, in the terms `buildStructuredResult` needs. */
+type StructuredRequest<Draft> = {
+  topicName: string
+  history: TutorTurn[]
+  markers: StructuredMarkers
+  /** Calls seen per input, for the invalid-once marker. */
+  attempts: Map<string, number>
+  /** What counts as "the same input" for the invalid-once marker. */
+  attemptKey: string
+  draft: Draft
+  /** The draft changed so that it fails its schema. */
+  invalidate: (draft: Draft) => unknown
+}
 
 function bump(counter: Map<string, number>, key: string): number {
   const next = (counter.get(key) ?? 0) + 1
   counter.set(key, next)
   return next
+}
+
+/** Characters of the request as the model would get it: every turn `buildMessages` lays out. */
+function inputCharsOf(request: Parameters<typeof buildMessages>[0]): number {
+  return buildMessages(request).reduce((sum, turn) => sum + turn.content.length, 0)
+}
+
+/** Usage at about 4 characters per token. The fake never reads or writes a prompt cache. */
+function fakeUsage(inputChars: number, outputChars: number): TutorUsage {
+  return {
+    inputTokens: Math.ceil(inputChars / 4),
+    outputTokens: Math.ceil(outputChars / 4),
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0
+  }
+}
+
+/** Runs `build` now and settles with its result, so a synchronous throw becomes a rejection. */
+function settle<T>(build: () => T): Promise<T> {
+  try {
+    return Promise.resolve(build())
+  } catch (err) {
+    return Promise.reject(err instanceof Error ? err : new Error(String(err)))
+  }
 }
 
 function lastUserQuestion(history: GuideInput['history']): string {
@@ -167,8 +222,8 @@ const sleep = (ms: number, signal: AbortSignal) =>
   })
 
 export class FakeTutorProvider implements TutorProvider {
-  /** Every call's input without the signal, so tests can assert history and prefixes. */
   readonly model = 'fake'
+  /** Every call's input without the signal, so tests can assert history and prefixes. */
   readonly calls: Omit<ExplainInput, 'signal'>[] = []
   /** Every `generateGuide` input, in call order. */
   readonly guideCalls: GuideInput[] = []
@@ -208,18 +263,13 @@ export class FakeTutorProvider implements TutorProvider {
 
     const deltas = splitDeltas(buildAnswer(input.topicName, question))
     const delay = question.includes('[fake:slow]') ? SLOW_DELAY_MS : this.delayMs
-    const inputChars = buildMessages(input).reduce((sum, turn) => sum + turn.content.length, 0)
+    const inputChars = inputCharsOf(input)
     const result = (text: string, stopReason: ExplainResult['stopReason']): ExplainResult => ({
       text,
       stopReason,
       refusalCategory: stopReason === 'refusal' ? 'cyber' : null,
-      usage: {
-        inputTokens: Math.ceil(inputChars / 4),
-        outputTokens: Math.ceil(text.length / 4),
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0
-      },
-      model: 'fake'
+      usage: fakeUsage(inputChars, text.length),
+      model: this.model
     })
 
     let text = ''
@@ -237,93 +287,69 @@ export class FakeTutorProvider implements TutorProvider {
   }
 
   generateGuide(input: GuideInput): Promise<StructuredResult> {
-    try {
-      return Promise.resolve(this.buildGuideResult(input))
-    } catch (err) {
-      return Promise.reject(err instanceof Error ? err : new Error(String(err)))
-    }
-  }
-
-  private buildGuideResult(input: GuideInput): StructuredResult {
-    if (this.record) this.guideCalls.push(input)
-    const userText = input.history
-      .filter((turn) => turn.role === 'user')
-      .map((turn) => turn.content)
-      .join('\n')
-    if (userText.includes('[fake:guide-error]'))
-      throw new TutorProviderError('Fake provider error.')
-
-    const key = JSON.stringify([input.topicName, input.history])
-    const attempt = userText.includes(GUIDE_ONCE) ? bump(this.guideAttempts, key) : 0
-
-    const guide = buildGuide(input.topicName, lastUserQuestion(input.history))
-    const refuse = userText.includes('[fake:guide-refuse]')
-    const invalid =
-      userText.includes('[fake:guide-invalid]') || (userText.includes(GUIDE_ONCE) && attempt === 1)
-    const output = refuse ? null : invalid ? { ...guide, steps: guide.steps.slice(0, 2) } : guide
-    const inputChars = buildMessages({ ...input, question: '' }).reduce(
-      (sum, turn) => sum + turn.content.length,
-      0
-    )
-    return {
-      output,
-      stopReason: refuse ? 'refusal' : 'end_turn',
-      refusalCategory: refuse ? 'cyber' : null,
-      usage: {
-        inputTokens: Math.ceil(inputChars / 4),
-        outputTokens: Math.ceil(JSON.stringify(output).length / 4),
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0
-      },
-      model: 'fake'
-    }
+    return settle(() => {
+      if (this.record) this.guideCalls.push(input)
+      return this.buildStructuredResult({
+        topicName: input.topicName,
+        history: input.history,
+        markers: GUIDE_MARKERS,
+        attempts: this.guideAttempts,
+        attemptKey: JSON.stringify([input.topicName, input.history]),
+        draft: buildGuide(input.topicName, lastUserQuestion(input.history)),
+        // Two steps are fewer than GuideDraftSchema allows.
+        invalidate: (guide) => ({ ...guide, steps: guide.steps.slice(0, 2) })
+      })
+    })
   }
 
   generateQuiz(input: QuizInput): Promise<StructuredResult> {
-    try {
-      return Promise.resolve(this.buildQuizResult(input))
-    } catch (err) {
-      return Promise.reject(err instanceof Error ? err : new Error(String(err)))
-    }
+    return settle(() => {
+      if (this.record) this.quizCalls.push(input)
+      return this.buildStructuredResult({
+        topicName: input.topicName,
+        history: input.history ?? [],
+        markers: QUIZ_MARKERS,
+        attempts: this.quizAttempts,
+        attemptKey: JSON.stringify([input.topicName, input.difficulty, input.history]),
+        draft: buildQuiz(input.topicName, input.difficulty),
+        // Duplicate choices fail QuizDraftSchema.
+        invalidate: (quiz) => {
+          const [first, ...rest] = quiz.items
+          if (!first) return quiz
+          return { items: [{ ...first, choices: first.choices.map(() => 'Same choice') }, ...rest] }
+        }
+      })
+    })
   }
 
-  private buildQuizResult(input: QuizInput): StructuredResult {
-    if (this.record) this.quizCalls.push(input)
-    const userText = (input.history ?? [])
+  /** The markers are read from the user turns only, so an answer that quotes one is inert. */
+  private buildStructuredResult<Draft>(request: StructuredRequest<Draft>): StructuredResult {
+    const { markers } = request
+    const userText = request.history
       .filter((turn) => turn.role === 'user')
       .map((turn) => turn.content)
       .join('\n')
-    if (userText.includes('[fake:quiz-error]')) throw new TutorProviderError('Fake provider error.')
+    if (userText.includes(markers.error)) throw new TutorProviderError('Fake provider error.')
 
-    const key = JSON.stringify([input.topicName, input.difficulty, input.history])
-    const attempt = userText.includes(QUIZ_ONCE) ? bump(this.quizAttempts, key) : 0
-
-    const quiz = buildQuiz(input.topicName, input.difficulty)
-    const refuse = userText.includes('[fake:quiz-refuse]')
+    const attempt = userText.includes(markers.invalidOnce)
+      ? bump(request.attempts, request.attemptKey)
+      : 0
+    const refuse = userText.includes(markers.refuse)
     const invalid =
-      userText.includes('[fake:quiz-invalid]') || (userText.includes(QUIZ_ONCE) && attempt === 1)
-    const [first, ...rest] = quiz.items
-    const output = refuse
-      ? null
-      : invalid && first
-        ? { items: [{ ...first, choices: first.choices.map(() => 'Same choice') }, ...rest] }
-        : quiz
-    const inputChars = buildMessages({
-      topicName: input.topicName,
-      history: input.history ?? [],
+      userText.includes(markers.invalid) ||
+      (userText.includes(markers.invalidOnce) && attempt === 1)
+    const output = refuse ? null : invalid ? request.invalidate(request.draft) : request.draft
+    const inputChars = inputCharsOf({
+      topicName: request.topicName,
+      history: request.history,
       question: ''
-    }).reduce((sum, turn) => sum + turn.content.length, 0)
+    })
     return {
       output,
       stopReason: refuse ? 'refusal' : 'end_turn',
       refusalCategory: refuse ? 'cyber' : null,
-      usage: {
-        inputTokens: Math.ceil(inputChars / 4),
-        outputTokens: Math.ceil(JSON.stringify(output).length / 4),
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0
-      },
-      model: 'fake'
+      usage: fakeUsage(inputChars, JSON.stringify(output).length),
+      model: this.model
     }
   }
 }

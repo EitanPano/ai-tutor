@@ -508,6 +508,31 @@ describe('anthropic provider generateGuide', () => {
     expect(result).toMatchObject({ output: null, stopReason: 'max_tokens' })
   })
 
+  it.each([
+    ['end_turn', 'end_turn'],
+    ['max_tokens', 'max_tokens'],
+    ['model_context_window_exceeded', 'max_tokens'],
+    ['stop_sequence', 'stop_sequence'],
+    ['refusal', 'refusal'],
+    ['tool_use', 'end_turn'],
+    ['pause_turn', 'end_turn'],
+    ['a_reason_added_later', 'end_turn'],
+    // An Object.prototype key is not a stop reason of ours.
+    ['constructor', 'end_turn']
+  ])('maps the SDK stop reason %s to %s', async (sdkReason, stopReason) => {
+    const { provider } = providerWith(() => jsonMessage(JSON.stringify(GUIDE), sdkReason))
+    const result = await provider.generateGuide(guideInput)
+    expect(result.stopReason).toBe(stopReason)
+  })
+
+  it('maps a missing SDK stop reason to end_turn', async () => {
+    const { provider } = providerWith(() =>
+      jsonMessage(JSON.stringify(GUIDE), 'end_turn', { stop_reason: null })
+    )
+    const result = await provider.generateGuide(guideInput)
+    expect(result.stopReason).toBe('end_turn')
+  })
+
   it('throws TutorProviderError on a 500 without leaking the provider payload', async () => {
     const { provider } = providerWith(
       () =>
