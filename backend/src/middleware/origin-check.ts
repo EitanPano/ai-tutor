@@ -13,6 +13,6 @@ export function originCheck(frontendUrl: string): RequestHandler {
       next()
       return
     }
-    next(forbidden('This request came from an origin that is not allowed.', 'forbidden_origin'))
+    next(forbidden('forbidden_origin', 'This request came from an origin that is not allowed.'))
   }
 }

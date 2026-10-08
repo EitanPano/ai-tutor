@@ -38,9 +38,9 @@ export const unauthorized = (code: string, message: string) => new AppError(401,
 /** 401 `unauthenticated`: the request carries no valid session. */
 export const unauthenticated = () =>
   new AppError(401, 'unauthenticated', ERROR_MESSAGE.unauthenticated)
-export const forbidden = (message = 'This request is not allowed.', code = 'forbidden') =>
+export const forbidden = (code = 'forbidden', message = 'This request is not allowed.') =>
   new AppError(403, code, message)
-export const notFound = (message = 'Not found.', code = 'not_found') =>
+export const notFound = (code = 'not_found', message = 'Not found.') =>
   new AppError(404, code, message)
 export const conflict = (code: string, message: string, details?: Details) =>
   new AppError(409, code, message, details)
