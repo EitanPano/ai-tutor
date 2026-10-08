@@ -15,7 +15,7 @@ export type TopicProgressDto = {
   lastActivityAt: string | null
 }
 
-export type StreakDto = { current: number; longest: number; activeToday: boolean }
+export type StreakDto = { current: number; longest: number; isActiveToday: boolean }
 
 export type ActivityDto = {
   kind: 'question' | 'step' | 'attempt'
@@ -295,5 +295,5 @@ export function computeStreak(days: string[], today: string): StreakDto {
   for (let day = isActiveToday ? todayNumber : todayNumber - 1; active.has(day); day -= 1) {
     current += 1
   }
-  return { current, longest, activeToday: isActiveToday }
+  return { current, longest, isActiveToday }
 }

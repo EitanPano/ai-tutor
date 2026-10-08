@@ -56,7 +56,7 @@ export type GradedItemDto = {
   choices: string[]
   choiceIndex: number
   answerIndex: number
-  correct: boolean
+  isCorrect: boolean
   explanation: string
 }
 
@@ -229,7 +229,7 @@ function toAttemptDto(
         choices: item.choice,
         choiceIndex,
         answerIndex: item.answer_index,
-        correct: choiceIndex === item.answer_index,
+        isCorrect: choiceIndex === item.answer_index,
         explanation: item.explanation
       }
     })

@@ -22,7 +22,7 @@ type GradedBody = {
   position: number
   choiceIndex: number
   answerIndex: number
-  correct: boolean
+  isCorrect: boolean
   explanation: string
 }
 type AttemptBody = { id: string; quizId: string; score: number; total: number; items: GradedBody[] }
@@ -189,7 +189,7 @@ describe('attempts and grading', () => {
     expect(graded.items.map((item) => item.position)).toEqual([1, 2, 3, 4, 5])
     for (const item of graded.items) {
       expect(item.answerIndex).toBe(key.get(item.itemId))
-      expect(item.correct).toBe(item.position <= 3)
+      expect(item.isCorrect).toBe(item.position <= 3)
       expect(item.explanation.length).toBeGreaterThan(0)
     }
     expect(graded.items.map((item) => item.choiceIndex)).toEqual(

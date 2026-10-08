@@ -490,9 +490,9 @@ export interface components {
       guide: components['schemas']['Guide']
     }
     UpdateStepRequest: {
-      done?: boolean
+      isDone?: boolean
       /** @constant */
-      hintRevealed?: true
+      isHintRevealed?: true
     }
     StepResponse: {
       step: components['schemas']['Step']
@@ -549,7 +549,7 @@ export interface components {
       choices: string[]
       choiceIndex: number
       answerIndex: number
-      correct: boolean
+      isCorrect: boolean
       explanation: string
     }
     Attempt: {
@@ -582,7 +582,7 @@ export interface components {
     Streak: {
       current: number
       longest: number
-      activeToday: boolean
+      isActiveToday: boolean
     }
     ProgressTotals: {
       questions: number

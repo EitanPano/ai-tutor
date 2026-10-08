@@ -96,7 +96,7 @@ function Viewer({ guide }: { guide: Guide }) {
 
   function toggleDone(stepId: string, makeDone: boolean) {
     update.mutate(
-      { stepId, body: { done: makeDone } },
+      { stepId, body: { isDone: makeDone } },
       // Put the reader back on the step whose mark did not take.
       { onError: () => makeDone && setSelected(stepId) }
     )
@@ -108,7 +108,7 @@ function Viewer({ guide }: { guide: Guide }) {
   }
 
   const revealHint = useCallback(
-    (stepId: string) => update.mutate({ stepId, body: { hintRevealed: true } }),
+    (stepId: string) => update.mutate({ stepId, body: { isHintRevealed: true } }),
     // `mutate` is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [update.mutate]

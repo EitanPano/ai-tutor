@@ -68,15 +68,15 @@ function ReviewItem({ item, number }: { item: GradedItem; number: number }) {
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <p
           className={`flex items-center gap-1.5 text-sm font-semibold ${
-            item.correct ? 'text-correct' : 'text-wrong'
+            item.isCorrect ? 'text-correct' : 'text-wrong'
           }`}
         >
-          {item.correct ? (
+          {item.isCorrect ? (
             <DoneIcon aria-hidden="true" className="size-4" strokeWidth={3} />
           ) : (
             <WrongIcon aria-hidden="true" className="size-4" strokeWidth={3} />
           )}
-          {item.correct ? 'Correct' : 'Incorrect'}
+          {item.isCorrect ? 'Correct' : 'Incorrect'}
         </p>
         <p className="text-lead font-semibold">
           <Markdown inline>{item.prompt}</Markdown>

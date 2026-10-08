@@ -61,7 +61,7 @@ const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString
 
 const progress = (over: Partial<ProgressResponse> = {}): ProgressResponse => ({
   totals: { questions: 3, guidesCompleted: 1, stepsDone: 4, attempts: 1 },
-  streak: { current: 3, longest: 5, activeToday: true },
+  streak: { current: 3, longest: 5, isActiveToday: true },
   topics: [
     topic('js', 'JavaScript'),
     topic('react', 'React', {
@@ -147,7 +147,7 @@ describe('streak', () => {
   })
 
   it('nudges when the streak is alive but today is still empty', async () => {
-    setup(progress({ streak: { current: 1, longest: 1, activeToday: false } }))
+    setup(progress({ streak: { current: 1, longest: 1, isActiveToday: false } }))
 
     const streak = await screen.findByRole('region', { name: 'Streak' })
     expect(streak).toHaveTextContent('1 day streak')
@@ -160,7 +160,7 @@ describe('streak', () => {
   })
 
   it('invites a first question when there is no streak', async () => {
-    setup(progress({ streak: { current: 0, longest: 0, activeToday: false } }))
+    setup(progress({ streak: { current: 0, longest: 0, isActiveToday: false } }))
 
     const streak = await screen.findByRole('region', { name: 'Streak' })
     expect(within(streak).getByText('No streak yet. Ask a question to start one.')).toBeVisible()

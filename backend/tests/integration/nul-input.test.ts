@@ -78,7 +78,7 @@ describe('NUL characters in text input', () => {
         client
           .patch(`/api/guide/${guideId}/step/ab%00cd`)
           .set('Cookie', cookie)
-          .send({ done: true }),
+          .send({ isDone: true }),
       'GET /api/quiz/:id': () => client.get('/api/quiz/ab%00cd').set('Cookie', cookie),
       'POST /api/quiz/:id/attempt': () =>
         client.post('/api/quiz/ab%00cd/attempt').set('Cookie', cookie).send({ answers: [] }),

@@ -73,7 +73,7 @@ export type GuideService = {
     auth: Auth,
     guideId: string,
     stepId: string,
-    input: { done?: boolean | undefined; hintRevealed?: true | undefined }
+    input: { isDone?: boolean | undefined; isHintRevealed?: true | undefined }
   ): Promise<StepDto>
 }
 
@@ -165,9 +165,9 @@ export function createGuideService(deps: GuideServiceDeps): GuideService {
     },
     async updateStep(auth, guideId, stepId, input) {
       const changes = {
-        ...(input.done === true ? { done_at: sql<Date>`coalesce(done_at, now())` } : {}),
-        ...(input.done === false ? { done_at: null } : {}),
-        ...(input.hintRevealed === true
+        ...(input.isDone === true ? { done_at: sql<Date>`coalesce(done_at, now())` } : {}),
+        ...(input.isDone === false ? { done_at: null } : {}),
+        ...(input.isHintRevealed === true
           ? { hint_revealed_at: sql<Date>`coalesce(hint_revealed_at, now())` }
           : {})
       }

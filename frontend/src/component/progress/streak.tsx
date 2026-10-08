@@ -6,7 +6,7 @@ const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`
 
 /** The page's one memorable element: the current streak, with the number on the marker swipe. */
 export function Streak({ streak }: { streak: ProgressResponse['streak'] }) {
-  const { current, longest, activeToday } = streak
+  const { current, longest, isActiveToday } = streak
   const running = current > 0
   return (
     <Sheet as="section" aria-label="Streak" className="flex items-start gap-5 px-6 py-6 md:px-8">
@@ -26,7 +26,7 @@ export function Streak({ streak }: { streak: ProgressResponse['streak'] }) {
         {longest > 0 && <p className="text-ink-muted">Longest: {days(longest)}</p>}
         {running && (
           <p>
-            {activeToday
+            {isActiveToday
               ? 'You studied today.'
               : 'Ask a question, finish a step or take a quiz today to keep it going.'}
           </p>
