@@ -1,6 +1,7 @@
 # Naming
 
-Applies to API routes, domain entities, services, files, and data fields.
+Applies to API routes, domain entities, services, files, data fields, and to
+variables, parameters, properties, state and functions.
 
 - Prefer **singular** entity names: `site.service`, `/api/site`, `/api/post`.
 - Use the canonical short term, never a synonym:

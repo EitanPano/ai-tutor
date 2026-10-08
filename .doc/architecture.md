@@ -42,9 +42,11 @@ backend/src/
   drives the stream); it holds no SQL and no domain branching. The service holds the rules.
 
 Per-app context (`backend/src/context.ts`):
-- `createApp` builds the services in dependency order and puts them, with config, db, logger, tutor provider,
-  in-flight registry and rate limiters, into one `AppContext`. `attachContext` stores it on `app.locals` before any
-  router is mounted.
+- `createApp` builds the services in dependency order and puts them, with config, logger, in-flight registry and
+  rate limiters, into one `AppContext`. `attachContext` stores it on `app.locals` before any router is mounted. The
+  context holds no `db` and no tutor provider: a handler reaches data and the model only through a service.
+- `Services` types `ai` as `AiApi` and `thread` as `ThreadService` without `recoverStaleAtBoot`, so no controller or
+  middleware can reach the system-wide boot sweeps; only `recoverAtBoot` holds the full services.
 - Routers and controllers are module-level singletons. Controllers and middleware read their dependencies per
   request: services through `servicesOf(req)`, everything else through `ctxOf(req)` (`requireSession` looks up the
   `session` service, the rate limiters read `ctx.limiters`). `ctxOf` throws when the app has no context.
@@ -74,7 +76,8 @@ only what the API names.
 - `AiApi = Omit<AiService, 'releaseAllLocks'>`: `assertEnabled`, `assertWithinBudget`, `recordCall`, `acquireLock`,
   `releaseLock`, `withGenerationLock`, `generateValidated`, `lockTtlSeconds`
 
-Boot recovery is in neither `ThreadApi` nor `AiApi` (it is a system-wide sweep, so guide and quiz must not hold it).
+Boot recovery is in none of `ThreadApi`, `AiApi` and `Services` (it is a system-wide sweep, so guide, quiz and the
+controllers must not hold it).
 `createApp` returns `recoverAtBoot()`: `thread.recoverStaleAtBoot()`, then `ai.releaseAllLocks()` in a `finally`, so
 a failed sweep never leaves users locked out. `src/index.ts` awaits it before listening (see Boot recovery).
 
@@ -102,7 +105,8 @@ Enforcement:
   - `module-public-api-only` — a module reaches another only through its `index.ts`.
   - `module-values-own-or-infra` — a module imports values only from itself, `src/lib/`, `src/middleware/` and
     `src/context.ts`, so a re-export from a new folder or top-level file cannot launder another module's values.
-  - `services-have-no-middleware` — a service under `src/services/` imports no values from `src/middleware/`.
+  - `services-are-http-free` — a service imports no values from `src/middleware/` or `src/context.ts`: everything
+    under `src/services/`, and an HTTP module's `service.ts`, `x.service.ts`, `stale-turn.ts` and `dto.ts`.
   - `outside-uses-public-api` — code outside the module roots (`app.ts`, `context.ts`, `middleware/`) reaches a
     module only through its `index.ts`.
   - `index-imports-own-folder-only` — an `index.ts` imports only from its own folder.
@@ -115,11 +119,18 @@ Enforcement:
   `db/schema.sql` has no single owner (the `SHARED` allowlist covers `app_user`; `rate_limit` is written by
   `src/lib/`), when `src/api/` or `src/services/` holds a loose file, and when code outside the module roots and
   `src/lib/` writes any table.
+- The same test scans the HTTP layer as text, where neither the types nor dependency-cruiser can see:
+  - Service access: under `src/api/<m>/`, `servicesOf(req)` reads only the module's own services (`SERVICE_ACCESS`
+    adds `session` for `user` and `message` for `thread`); middleware reads only `session`. An alias or index access
+    of `servicesOf(req)`, and `ctxOf(req).services`, fail the test.
+  - Route validation: every `router.verb(...)` line whose path has a `:param`, or whose handler's `Handler` type names
+    a body or a query, passes a `validateX` constant that parses that part. Express infers those types from the
+    handler, so a route that forgets its `validateX` still compiles.
 
 Adding a module:
 - Create `backend/src/api/<m>/` (a domain service with no HTTP goes in `backend/src/services/<s>/`, without route,
   controller or validation):
-  - `validation.ts` — Zod request schemas and their `z.output` types.
+  - `validation.ts` (when the module takes input) — Zod request schemas and their `z.output` types.
   - `service.ts` — `createXService(deps)` returning `XService`: the rules and the SQL. If another module will call
     it, export a narrow `XApi` (`Pick` / `Omit` of `XService`); take other modules' APIs as deps.
   - `controller.ts` — one handler per route, reading the service through `servicesOf(req)`.
@@ -128,7 +139,8 @@ Adding a module:
 - Add the service to `Services` in `backend/src/context.ts`.
 - In `backend/src/app.ts`, build it after the services it depends on, add it to `services` and its router to the
   mounted list.
-- Add its entry to `OWNED` in `backend/tests/unit/architecture.test.ts` (an empty list when it writes no table).
+- Add its entry to `OWNED` in `backend/tests/unit/architecture.test.ts` (an empty list when it writes no table), and
+  to `SERVICE_ACCESS` there if its controller reads a second service of its own.
 
 ## Data Flow
 
@@ -153,12 +165,17 @@ SSE ask flow (`POST /api/thread/:id/message`; route in `api/thread/route.ts`, th
    while guide and quiz use `AiApi.withGenerationLock`, which runs the budget checks and then the lock).
 7. Save the user message.
 8. The controller opens the stream (`openEventStream` in `lib/sse.ts`) and sends `message.start`;
-   `MessageService.explain` streams the answer as `delta` events; the stream ends with `message.complete` or `error`.
-   The history sent to the model is capped at 64,000 characters, newest turns kept.
+   `MessageService.explain` streams the answer as `delta` events. The history sent to the model is capped at 64,000
+   characters, newest turns kept.
 9. `MessageService.finish` saves the assistant message and the `ai_call` row, and always releases the lock.
-10. If the client disconnects, abort the upstream call and save the partial answer as `incomplete`.
+10. Only after `finish` succeeds does the controller send the end event: `message.complete` for an answer, or an
+    `error` event for a refusal (`ai_refused`) or a provider failure (`ai_provider_error`). An `aborted` turn sends
+    no end event; the stream just ends. If `finish` fails, the stream ends with an `error` event `internal_error`
+    instead. Either way the stream is then closed.
+11. If the client disconnects, abort the upstream call and save the partial answer as `incomplete`.
 
-- A heartbeat comment is sent every 15 s, and the response sets `X-Accel-Buffering: no` (both in `lib/sse.ts`).
+- A heartbeat comment is sent every 15 s (`HEARTBEAT_MS` in `api/thread/controller.ts`); `lib/sse.ts` holds the
+  heartbeat mechanism and sets `X-Accel-Buffering: no`.
 - The upstream explain stream has a deadline: 45 s without a chunk (idle) or 180 s in total ends the call with an `error`
   event (the turn is saved as `failed`) (`backend/src/lib/tutor/anthropic.provider.ts`).
 - The client reads the stream with `fetch` + `ReadableStream`, because `EventSource` can't send a POST.

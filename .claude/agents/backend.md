@@ -37,14 +37,15 @@ That is your spec — implement all of it and nothing beyond it.
 
 ### Step 2: Implement
 Structure:
-- A new resource is a module in `backend/src/api/<m>/`: route, controller, service, validation, index.
-  - `validation.ts` — Zod request schemas and their `z.output` types.
+- A new resource is a module in `backend/src/api/<m>/`: route, controller, service, validation (when it takes
+  input), index.
+  - `validation.ts` (only when the module takes input) — Zod request schemas and their `z.output` types.
   - `service.ts` — `createXService(deps)` returning `XService`: the domain rules and the SQL. Export a
     narrow `XApi` (`Pick` / `Omit` of `XService`) if another module will call it.
-  - `controller.ts` — one handler per route: read the service through `servicesOf(req)` (anything else
-    through `ctxOf(req)`), call it, shape the HTTP response. No SQL, no domain branching.
+  - `controller.ts` — one handler per route: read the module's own service through `servicesOf(req)`
+    (anything else through `ctxOf(req)`), call it, shape the HTTP response. No SQL, no domain branching.
   - `route.ts` — a declarative table: `validateX` and limiter constants, one `router.verb(...)` line per
-    route, `export default router`.
+    route, `export default router`. Every `:param`, body and query a handler types gets a `validateX`.
   - `index.ts` — re-exports `xRouter`, `createXService` and the types.
 - A domain service with no HTTP goes in `backend/src/services/<s>/`.
 - Never capture a service, config value or limiter at import time: read them per request.
@@ -53,7 +54,8 @@ Structure:
 - Register the service in `Services` in `backend/src/context.ts`; in `backend/src/app.ts`, build it in
   dependency order, add it to `services` and mount its router.
 - Add the module to `OWNED` in `backend/tests/unit/architecture.test.ts` with the tables it writes
-  (an empty list when it writes none).
+  (an empty list when it writes none), and to `SERVICE_ACCESS` there if its controller reads a second
+  service of its own.
 
 Tests run against the real test database.
 
@@ -69,8 +71,9 @@ Per the `writing-tests` skill, for every endpoint:
 
 ### Step 5: Run
 ```bash
-cd backend && bunx vitest run    # must pass
-cd backend && bunx tsc --noEmit  # must be clean
+cd backend && bun run test       # must pass (never `bun test`: it skips the Vitest setup)
+cd backend && bun run typecheck  # must be clean
+cd backend && bun run lint       # must be clean: eslint, dependency-cruiser, prettier
 ```
 If a test fails: fix the implementation, not the test.
 
