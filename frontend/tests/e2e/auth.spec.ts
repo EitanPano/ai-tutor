@@ -8,6 +8,15 @@ async function logIn(page: Page, email: string, pass: string) {
   await page.getByRole('button', { name: 'Log in' }).click()
 }
 
+/**
+ * Signs out the way an expired cookie would, from outside the app: a page still loading answers a
+ * lost session with its own full-page redirect to /login, which would abort the next `goto`.
+ */
+async function dropSession(page: Page) {
+  await page.goto('about:blank')
+  await page.context().clearCookies()
+}
+
 test('/ sends a signed-out visitor to /login', async ({ page }) => {
   await page.goto('/')
   await expect(page).toHaveURL(/\/login$/)
@@ -87,7 +96,7 @@ test('signing up with a taken email shows the inline error', async ({ page }) =>
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/thread$/)
-  await page.context().clearCookies()
+  await dropSession(page)
 
   await page.goto('/signup')
   await page.getByLabel('Display name').fill('Other')
