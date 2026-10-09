@@ -1,6 +1,6 @@
 import { CompiledQuery } from 'kysely'
 import { afterAll, describe, expect, it } from 'vitest'
-import { olderThanTtl, staleTurnQuery } from '../../src/feature/thread/stale-turn.js'
+import { olderThanTtl, staleTurnQuery } from '../../src/api/thread/stale-turn.js'
 import { createTestApp } from '../helper/app.js'
 
 const ctx = createTestApp()

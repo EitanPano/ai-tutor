@@ -22,8 +22,8 @@ import {
   type TutorUsage
 } from './tutor.js'
 
-export const MAX_OUTPUT_TOKENS = 2048
-export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
+const MAX_OUTPUT_TOKENS = 2048
+const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
 /**
  * Bounds the wait for response headers per attempt (the SDK clears its timer once `fetch`
  * resolves, so it does not cover a streamed body), and default SDK retries. The generation lock
@@ -32,7 +32,7 @@ export const MAX_STRUCTURED_OUTPUT_TOKENS = 4096
 export const PROVIDER_TIMEOUT_MS = 60_000
 export const PROVIDER_MAX_RETRIES = 2
 /** The explain stream fails after this long without any stream event. */
-export const EXPLAIN_IDLE_TIMEOUT_MS = 45_000
+const EXPLAIN_IDLE_TIMEOUT_MS = 45_000
 /** The explain call fails after this long in total, SDK retries included. */
 export const EXPLAIN_TOTAL_TIMEOUT_MS = 180_000
 const GUIDE_REQUEST = 'Write the step-by-step guide for this conversation.'
@@ -45,7 +45,7 @@ function quizRequest(input: QuizInput): string {
     : `Write ${article} ${input.difficulty} quiz on this conversation.`
 }
 
-export type AnthropicProviderOptions = {
+type AnthropicProviderOptions = {
   apiKey: string
   model: string
   /** SDK retries on transient errors (default 2). */
@@ -58,17 +58,17 @@ export type AnthropicProviderOptions = {
   fetch?: typeof globalThis.fetch
 }
 
+/** SDK stop reasons with a counterpart of ours. Any other, or none, ends the turn normally. */
+const STOP_REASON_BY_SDK = new Map<string, TutorStopReason>([
+  ['max_tokens', 'max_tokens'],
+  ['model_context_window_exceeded', 'max_tokens'],
+  ['stop_sequence', 'stop_sequence'],
+  ['refusal', 'refusal']
+])
+
 function mapStopReason(reason: string | null): TutorStopReason {
-  switch (reason) {
-    case 'max_tokens':
-    case 'model_context_window_exceeded':
-      return 'max_tokens'
-    case 'stop_sequence':
-    case 'refusal':
-      return reason
-    default:
-      return 'end_turn'
-  }
+  if (reason === null) return 'end_turn'
+  return STOP_REASON_BY_SDK.get(reason) ?? 'end_turn'
 }
 
 function toUsage(usage: {
@@ -163,7 +163,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
       let text = ''
       let seenUsage: TutorUsage = ZERO_USAGE
       // An abort before this call never reaches the SDK, so nothing was sent and nothing is owed.
-      const requestSent = !input.signal.aborted
+      const hasSentRequest = !input.signal.aborted
       const messages = buildMessages(input)
       // The watchdog is ours (idle or total timeout); `input.signal` is the caller's abort. Which
       // signal fired decides the outcome, not the error type the SDK surfaces.
@@ -216,7 +216,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Tuto
             refusalCategory: null,
             // The request is already dispatched, so it may be billed even if no usage arrived.
             usage:
-              requestSent && usage.inputTokens === 0
+              hasSentRequest && usage.inputTokens === 0
                 ? {
                     ...usage,
                     inputTokens: estimateInputTokens(EXPLAIN_SYSTEM_PROMPT_V1, messages)

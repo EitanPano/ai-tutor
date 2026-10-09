@@ -1,10 +1,11 @@
+import { API_URL } from '@/lib/config'
 import type { components } from '@/types/api'
 import { createSseParser } from '../sse'
-import { API_URL, isErrorResponse, toApiError } from './client'
+import { apiErrorFrom, isAbortError, isErrorResponse, networkError, toApiError } from './client'
 import { ApiError } from './error'
 
-export type StreamMessageStart = components['schemas']['StreamMessageStart']
-export type StreamMessageComplete = components['schemas']['StreamMessageComplete']
+type StreamMessageStart = components['schemas']['StreamMessageStart']
+type StreamMessageComplete = components['schemas']['StreamMessageComplete']
 
 export type AskHandlers = {
   signal?: AbortSignal | undefined
@@ -15,8 +16,6 @@ export type AskHandlers = {
 
 /** `stopped` means the caller aborted: the server keeps the partial answer, nothing failed. */
 export type AskResult = 'completed' | 'stopped'
-
-const isAbort = (err: unknown) => err instanceof DOMException && err.name === 'AbortError'
 
 const interrupted = () =>
   new ApiError({
@@ -52,38 +51,37 @@ export async function askQuestion(
       ...(signal && { signal })
     })
   } catch (err) {
-    if (isAbort(err)) return 'stopped'
-    throw new ApiError({
-      status: 0,
-      code: 'network_error',
-      message: 'The request did not reach the server.'
-    })
+    if (isAbortError(err)) return 'stopped'
+    throw networkError()
   }
 
   if (!response.ok) throw await toApiError(response)
   if (!response.body) throw interrupted()
 
-  let completed = false
+  let isCompleted = false
   let failure: ApiError | undefined
+  // A Map, not an object: the event name comes off the wire and must never reach a prototype key.
+  const handlerByEvent = new Map<string, (payload: unknown) => void>([
+    ['message.start', (payload) => onStart?.(payload as StreamMessageStart)],
+    ['delta', (payload) => onDelta?.((payload as { text: string }).text)],
+    [
+      'message.complete',
+      (payload) => {
+        isCompleted = true
+        onComplete?.(payload as StreamMessageComplete)
+      }
+    ],
+    [
+      'error',
+      (payload) => {
+        failure = isErrorResponse(payload) ? apiErrorFrom(response.status, payload) : interrupted()
+      }
+    ]
+  ])
+  // Nothing after the end of the answer or a failure counts; an unknown event is ignored.
   const feed = createSseParser(({ event, data }) => {
-    if (completed || failure) return
-    const payload = parseJson(data)
-    if (event === 'message.start') onStart?.(payload as StreamMessageStart)
-    else if (event === 'delta') onDelta?.((payload as { text: string }).text)
-    else if (event === 'message.complete') {
-      completed = true
-      onComplete?.(payload as StreamMessageComplete)
-    } else if (event === 'error') {
-      failure = isErrorResponse(payload)
-        ? new ApiError({
-            status: response.status,
-            code: payload.error.code,
-            message: payload.error.message,
-            details: payload.error.details,
-            requestId: payload.requestId
-          })
-        : interrupted()
-    }
+    if (isCompleted || failure) return
+    handlerByEvent.get(event)?.(parseJson(data))
   })
 
   const reader = response.body.getReader()
@@ -100,12 +98,12 @@ export async function askQuestion(
     }
   } catch (err) {
     if (err === failure) throw err
-    if (isAbort(err) || signal?.aborted) return 'stopped'
+    if (isAbortError(err) || signal?.aborted) return 'stopped'
     throw interrupted()
   }
 
   if (failure) throw failure
-  if (!completed) {
+  if (!isCompleted) {
     if (signal?.aborted) return 'stopped'
     throw interrupted()
   }

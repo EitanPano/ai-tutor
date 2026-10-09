@@ -1,28 +1,24 @@
 'use client'
 
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { isApiError } from '@/lib/api/error'
-
-const AUTH_PATHS = ['/login', '/signup']
-
-const isAuthPath = (pathname: string) =>
-  AUTH_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+import { hardRedirect } from '@/lib/hard-redirect'
+import { LOGIN_PATH, isAuthPath } from '@/lib/route'
 
 export function Providers({ children }: { children: ReactNode }) {
-  const router = useRouter()
   const [queryClient] = useState(() => {
-    // A 401 `unauthenticated` anywhere means the session is gone: drop cached data and
-    // send the user to log in, then back here. The auth pages ask for the session on
-    // purpose and expect a 401, so they never redirect.
+    // A 401 `unauthenticated` anywhere means the session is gone: send the user to log in, then
+    // back here. A full page load, so no cached data of the old session survives. Not
+    // `client.clear()` + `router.replace`: clearing made every mounted query fetch again at once,
+    // 401 again and restart the navigation before it landed, an endless request loop.
+    // The auth pages ask for the session on purpose and expect a 401, so they never redirect.
     const onError = (err: unknown) => {
       if (!isApiError(err) || err.code !== 'unauthenticated') return
       const { pathname, search } = window.location
       if (isAuthPath(pathname)) return
-      client.clear()
-      router.replace(`/login?next=${encodeURIComponent(pathname + search)}`)
+      hardRedirect(`${LOGIN_PATH}?next=${encodeURIComponent(pathname + search)}`)
     }
     const client: QueryClient = new QueryClient({
       queryCache: new QueryCache({ onError }),

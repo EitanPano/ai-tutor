@@ -34,12 +34,17 @@
   `.orchestrate/api-contract.yaml` is the one versioned file there: the frontend/backend
   handshake (OpenAPI 3.1).
 - `frontend/` — the Next.js app.
-- `backend/` — the Express 5 API, split into feature modules.
-  - `src/feature/<m>/` — one module per domain; `index.ts` exposes only `createXModule` and types.
-    Modules call each other through an injected `XApi`, never another module's internals.
-  - `src/http/` — shared Express helpers. `src/lib/` — infrastructure. `src/app.ts` — wiring.
-  - Boundaries are enforced by dependency-cruiser in `bun run lint` and by
-    `backend/tests/unit/architecture.test.ts`.
+- `backend/` — the Express 5 API, split into modules.
+  - `src/api/<m>/` — one HTTP module per domain: `route`, `controller`, `service`, `validation` (when the module
+    takes input), `index`.
+  - `src/services/<s>/` — domain services with no HTTP (`ai`).
+  - `src/middleware/` — Express middleware (session, validation, rate limits, AI kill switch, errors).
+  - `src/lib/` — infrastructure; it imports nothing else under `src/`.
+  - `src/context.ts` — the per-app context; handlers read it per request through `ctxOf(req)` / `servicesOf(req)`.
+  - `src/app.ts` — wiring: builds the services in dependency order and mounts the routers.
+  - Modules call each other only through `import type` of a narrow `XApi`, with values injected in `src/app.ts`.
+    Boundaries are enforced by dependency-cruiser in `bun run lint` and by
+    `backend/tests/unit/architecture.test.ts` (table write ownership, service access, route validation).
   Schema lives in `db/schema.sql` (full bootstrap) and `db/migration/` (`NNN-*.sql`);
   change both together.
 - `compose.yaml` — local Postgres 18 (`docker compose up -d --wait db`).

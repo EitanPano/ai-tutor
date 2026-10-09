@@ -9,6 +9,7 @@ import { Select } from '@/component/ui/select'
 import { describeError } from '@/lib/api/error'
 import { deleteThread, threadKey, updateThread, type Thread } from '@/lib/api/thread'
 import { DeleteIcon, RenameIcon } from '@/lib/icon'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { useTopics } from '@/lib/topic'
 
 const MAX_TITLE = 120
@@ -17,8 +18,8 @@ function Title({ thread }: { thread: Thread }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<string>()
   // Escape unmounts the input, which can still fire a blur: this keeps that from saving.
-  const cancelled = useRef(false)
-  const editing = draft !== undefined
+  const isCancelled = useRef(false)
+  const isEditing = draft !== undefined
   // Stable, so typing does not re-run it and re-select the text.
   const focusField = useCallback((el: HTMLInputElement | null) => el?.select(), [])
 
@@ -29,7 +30,7 @@ function Title({ thread }: { thread: Thread }) {
   })
 
   function save() {
-    if (cancelled.current || draft === undefined) return
+    if (isCancelled.current || draft === undefined) return
     const title = draft.trim()
     setDraft(undefined)
     if (title && title !== thread.title) rename.mutate(title)
@@ -40,12 +41,12 @@ function Title({ thread }: { thread: Thread }) {
       event.preventDefault()
       save()
     } else if (event.key === 'Escape') {
-      cancelled.current = true
+      isCancelled.current = true
       setDraft(undefined)
     }
   }
 
-  if (editing) {
+  if (isEditing) {
     return (
       <h1 className="min-w-0 flex-1">
         <input
@@ -69,7 +70,7 @@ function Title({ thread }: { thread: Thread }) {
       <button
         type="button"
         onClick={() => {
-          cancelled.current = false
+          isCancelled.current = false
           setDraft(thread.title)
         }}
         aria-label={`Rename thread: ${shown}`}
@@ -89,15 +90,15 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
   const router = useRouter()
   const queryClient = useQueryClient()
   const topics = useTopics()
-  const [confirming, setConfirming] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
   const deleteButton = useRef<HTMLButtonElement>(null)
   const wasConfirming = useRef(false)
   // Focus follows the swap: onto the safe choice when asking, back onto Delete when dismissed.
   const focusCancel = useCallback((el: HTMLButtonElement | null) => el?.focus(), [])
   useEffect(() => {
-    if (!confirming && wasConfirming.current) deleteButton.current?.focus()
-    wasConfirming.current = confirming
-  }, [confirming])
+    if (!isConfirming && wasConfirming.current) deleteButton.current?.focus()
+    wasConfirming.current = isConfirming
+  }, [isConfirming])
 
   const changeTopic = useMutation({
     mutationFn: (topicId: string) => updateThread(thread.id, { topicId }),
@@ -108,12 +109,12 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
     mutationFn: () => deleteThread(thread.id),
     onSuccess: () => {
       // Leave first: touching the still-mounted detail query would flash "doesn't exist".
-      router.replace('/thread')
+      router.replace(THREAD_LIST_PATH)
       void queryClient.invalidateQueries({ queryKey: threadKey.list })
       toast('Thread deleted')
     },
     onError: (err) => {
-      setConfirming(false)
+      setIsConfirming(false)
       toast.error(describeError(err))
     }
   })
@@ -140,7 +141,7 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
             ))}
           </Select>
         </div>
-        {confirming ? (
+        {isConfirming ? (
           <div
             role="group"
             aria-label="Delete this thread?"
@@ -151,11 +152,11 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
               variant="danger"
               aria-label="Confirm delete"
               onClick={() => remove.mutate()}
-              loading={remove.isPending}
+              isLoading={remove.isPending}
             >
               Delete
             </Button>
-            <Button variant="secondary" ref={focusCancel} onClick={() => setConfirming(false)}>
+            <Button variant="secondary" ref={focusCancel} onClick={() => setIsConfirming(false)}>
               Cancel
             </Button>
           </div>
@@ -164,7 +165,7 @@ export const ThreadHeader = memo(function ThreadHeader({ thread }: { thread: Thr
             ref={deleteButton}
             variant="ghost"
             className="text-wrong hover:bg-wrong/10"
-            onClick={() => setConfirming(true)}
+            onClick={() => setIsConfirming(true)}
           >
             <DeleteIcon aria-hidden="true" className="size-4" />
             Delete

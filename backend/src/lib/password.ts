@@ -8,7 +8,7 @@ export function hashPassword(password: string): Promise<string> {
 }
 
 /** Returns false for a wrong password or an unparseable hash; never throws on bad input. */
-export async function verifyPassword(hash: string, password: string): Promise<boolean> {
+export async function doesPasswordMatch(hash: string, password: string): Promise<boolean> {
   try {
     return await argon2.verify(hash, password)
   } catch {

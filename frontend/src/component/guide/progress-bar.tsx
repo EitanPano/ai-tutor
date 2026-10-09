@@ -5,13 +5,13 @@ import { memo } from 'react'
  * sized fill: a step count is discrete, and it needs no inline width.
  */
 export const ProgressBar = memo(function ProgressBar({
-  done,
+  doneCount,
   total
 }: {
-  done: number
+  doneCount: number
   total: number
 }) {
-  const label = `${done} of ${total} steps done`
+  const label = `${doneCount} of ${total} steps done`
   return (
     <div className="flex items-center gap-3">
       <div
@@ -19,19 +19,19 @@ export const ProgressBar = memo(function ProgressBar({
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={total}
-        aria-valuenow={done}
+        aria-valuenow={doneCount}
         aria-valuetext={label}
         className="flex h-2 min-w-0 flex-1 gap-0.5"
       >
         {Array.from({ length: total }, (_, i) => (
           <span
             key={i}
-            className={`flex-1 transition-colors first:rounded-l-sm last:rounded-r-sm ${i < done ? 'bg-ink' : 'bg-rule'}`}
+            className={`flex-1 transition-colors first:rounded-l-sm last:rounded-r-sm ${i < doneCount ? 'bg-ink' : 'bg-rule'}`}
           />
         ))}
       </div>
       <p aria-hidden="true" className="shrink-0 text-sm font-semibold tabular-nums text-ink-muted">
-        {done} / {total}
+        {doneCount} / {total}
       </p>
     </div>
   )

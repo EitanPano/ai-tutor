@@ -1,7 +1,8 @@
 import type { Express } from 'express'
 import { sql } from 'kysely'
 import { stopServer } from './client.js'
-import { createApp, type AppModules } from '../../src/app.js'
+import { createApp, type RecoverAtBoot } from '../../src/app.js'
+import type { Services } from '../../src/context.js'
 import { loadConfig, type Config } from '../../src/lib/config.js'
 import { createDb, type Db } from '../../src/lib/db/index.js'
 import { InFlightRegistry } from '../../src/lib/in-flight.js'
@@ -10,8 +11,10 @@ import { FakeTutorProvider } from '../../src/lib/tutor/fake.provider.js'
 
 export type TestApp = {
   app: Express
-  /** The module APIs, as `createApp` returns them. */
-  modules: AppModules
+  /** The services the app was built with (`ctx.services`). */
+  services: Services
+  /** The boot recovery, as `createApp` returns it. */
+  recoverAtBoot: RecoverAtBoot
   config: Config
   db: Db
   /** The fake tutor wired into the app; `tutor.calls` records every explain input. */
@@ -30,11 +33,11 @@ export function createTestApp(
   } = {}
 ): TestApp {
   const config = { ...loadConfig(process.env), ...overrides.config }
-  const tutor = new FakeTutorProvider({ delayMs: 0, record: true })
+  const tutor = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
   const databaseUrl = overrides.databaseUrl ?? config.databaseUrl
   const { db, pool } = createDb(databaseUrl)
   const inFlight = new InFlightRegistry()
-  const { app, modules } = createApp({
+  const { app, ctx, recoverAtBoot } = createApp({
     config,
     db,
     pool,
@@ -45,7 +48,8 @@ export function createTestApp(
   })
   return {
     app,
-    modules,
+    services: ctx.services,
+    recoverAtBoot,
     config,
     db,
     tutor,

@@ -4,10 +4,7 @@ import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract } from '../helper/contract.js'
 import { parseSse } from '../helper/sse.js'
-import {
-  computeStreak,
-  createProgressService
-} from '../../src/feature/progress/progress.service.js'
+import { computeStreak, createProgressService } from '../../src/api/progress/service.js'
 
 // QA adversarial pass for plan 001. Everything here goes through the HTTP API (or the progress
 // service with an explicit clock), against the real test database and the fake provider.
@@ -127,7 +124,7 @@ describe('cross-resource ids inside one account', () => {
     const res = await client
       .patch(`/api/guide/${guideA.id}/step/${foreignStep.id}`)
       .set('Cookie', session.cookie)
-      .send({ done: true })
+      .send({ isDone: true })
     expect(res.status).toBe(404)
     expect((res.body as ErrorBody).error.code).toBe('not_found')
     // The foreign step is untouched.
@@ -534,7 +531,7 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     return { session, threadId: thread.id }
   }
 
-  it('uses the user local date, not UTC, for activeToday and current', async () => {
+  it('uses the user local date, not UTC, for isActiveToday and current', async () => {
     const { session, threadId } = await userWithThread()
     // now = 2026-10-07T02:00Z = Oct 6 22:00 in New York: the UTC date (Oct 7) is already tomorrow.
     const now = new Date('2026-10-07T02:00:00Z')
@@ -543,7 +540,7 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     await questionAt(session.user.id, threadId, at(5, '09:00'))
     await questionAt(session.user.id, threadId, at(4, '09:00'))
     const progress = await progressService.get({ userId: session.user.id }, { now })
-    expect(progress.streak).toEqual({ current: 3, longest: 3, activeToday: true })
+    expect(progress.streak).toEqual({ current: 3, longest: 3, isActiveToday: true })
   })
 
   it('does not count the UTC next day as active for a late-evening local user', async () => {
@@ -552,7 +549,7 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
     await questionAt(session.user.id, threadId, at(6, '23:30'))
     const now = at(6, '23:45')
     const progress = await progressService.get({ userId: session.user.id }, { now })
-    expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: true })
+    expect(progress.streak).toEqual({ current: 1, longest: 1, isActiveToday: true })
   })
 
   it('reports longest 4 and current 2 for an older 4-day run and a current 2-day run', async () => {
@@ -569,25 +566,29 @@ describe('progress edge cases (Task 13 review carry-overs)', () => {
       await questionAt(session.user.id, threadId, at(day, '12:00', month))
     }
     const progress = await progressService.get({ userId: session.user.id }, { now })
-    expect(progress.streak).toEqual({ current: 2, longest: 4, activeToday: true })
+    expect(progress.streak).toEqual({ current: 2, longest: 4, isActiveToday: true })
   })
 
-  it('answers current 1 and activeToday false when only yesterday is active', async () => {
+  it('answers current 1 and isActiveToday false when only yesterday is active', async () => {
     const { session, threadId } = await userWithThread()
     await questionAt(session.user.id, threadId, at(6, '12:00'))
     const progress = await progressService.get(
       { userId: session.user.id },
       { now: new Date('2026-10-07T15:00:00Z') }
     )
-    expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: false })
+    expect(progress.streak).toEqual({ current: 1, longest: 1, isActiveToday: false })
   })
 
   it('computeStreak survives an empty list and duplicate days', () => {
-    expect(computeStreak([], '2026-10-07')).toEqual({ current: 0, longest: 0, activeToday: false })
+    expect(computeStreak([], '2026-10-07')).toEqual({
+      current: 0,
+      longest: 0,
+      isActiveToday: false
+    })
     expect(computeStreak(['2026-10-07', '2026-10-07'], '2026-10-07')).toEqual({
       current: 1,
       longest: 1,
-      activeToday: true
+      isActiveToday: true
     })
   })
 

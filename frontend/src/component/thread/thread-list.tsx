@@ -4,10 +4,14 @@ import { useInfiniteQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { Button, buttonClass } from '@/component/ui/button'
 import { EmptyState } from '@/component/ui/empty-state'
+import { ErrorPanel } from '@/component/ui/error-panel'
+import { Sheet } from '@/component/ui/sheet'
+import { SkeletonCard, SkeletonSection } from '@/component/ui/skeleton'
 import { describeError } from '@/lib/api/error'
 import { listThreads, threadKey } from '@/lib/api/thread'
-import { NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { relativeTime } from '@/lib/relative-time'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { useTopics } from '@/lib/topic'
 
 export function ThreadList({ activeId }: { activeId?: string | undefined }) {
@@ -28,51 +32,40 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
         <h2 id="thread-list-heading" className="text-lead">
           Threads
         </h2>
-        <Link href="/thread" className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+        <Link href={THREAD_LIST_PATH} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
           <NewIcon aria-hidden="true" className="size-4" />
           New thread
         </Link>
       </div>
 
       {threads.isPending ? (
-        <div aria-busy="true" aria-label="Loading threads" className="flex flex-col gap-2">
+        <SkeletonSection label="Loading threads" gap={2}>
           {[0, 1, 2].map((n) => (
-            <div key={n} className="h-16 animate-pulse rounded-md border border-rule bg-sheet" />
+            <SkeletonCard key={n} className="h-16" />
           ))}
-        </div>
+        </SkeletonSection>
       ) : !threads.data ? (
-        <div className="rounded-md border border-rule bg-sheet">
-          <EmptyState
-            icon={RetryIcon}
-            action={
-              <Button variant="secondary" onClick={() => threads.refetch()}>
-                Retry
-              </Button>
-            }
-          >
-            {describeError(threads.error)}
-          </EmptyState>
-        </div>
+        <ErrorPanel onRetry={() => threads.refetch()}>{describeError(threads.error)}</ErrorPanel>
       ) : rows.length === 0 ? (
-        <div className="rounded-md border border-rule bg-sheet">
+        <Sheet>
           <EmptyState icon={ThreadIcon}>No threads yet. Ask your first question.</EmptyState>
-        </div>
+        </Sheet>
       ) : (
         <>
           <ul className="flex flex-col gap-2">
             {rows.map((thread) => {
-              const active = thread.id === activeId
+              const isActive = thread.id === activeId
               return (
                 <li key={thread.id}>
                   <Link
-                    href={`/thread/${thread.id}`}
-                    aria-current={active ? 'page' : undefined}
+                    href={`/thread/${encodeURIComponent(thread.id)}`}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`flex flex-col gap-0.5 rounded-md border bg-sheet px-3 py-2.5 hover:border-ink-muted ${
-                      active ? 'border-ink' : 'border-rule'
+                      isActive ? 'border-ink' : 'border-rule'
                     }`}
                   >
                     <span className="min-w-0 truncate font-semibold text-ink">
-                      <span className={active ? 'marker rounded-sm px-1' : 'px-1'}>
+                      <span className={isActive ? 'marker rounded-sm px-1' : 'px-1'}>
                         {thread.title}
                       </span>
                     </span>
@@ -91,7 +84,7 @@ export function ThreadList({ activeId }: { activeId?: string | undefined }) {
             <Button
               variant="secondary"
               onClick={() => threads.fetchNextPage()}
-              loading={threads.isFetchingNextPage}
+              isLoading={threads.isFetchingNextPage}
             >
               Load more
             </Button>

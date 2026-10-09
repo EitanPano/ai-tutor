@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GuideViewer } from '@/component/guide/guide-viewer'
 import { ApiError } from '@/lib/api/error'
-import { guideKey, type Guide, type Step } from '@/lib/api/guide'
+import { guideKey, type Guide, type Step, type UpdateStepRequest } from '@/lib/api/guide'
 import { renderWithQuery } from './test-utils'
 
 const api = vi.hoisted(() => ({ getGuide: vi.fn(), updateStep: vi.fn(), createQuiz: vi.fn() }))
@@ -57,10 +57,10 @@ function serve(steps: Step[]) {
   }
   api.getGuide.mockImplementation(async () => ({ guide: structuredClone(server) }))
   api.updateStep.mockImplementation(
-    async (_guide: string, stepId: string, body: { done?: boolean; hintRevealed?: true }) => {
+    async (_guide: string, stepId: string, body: UpdateStepRequest) => {
       const target = server.steps.find((s) => s.id === stepId)!
-      if (body.done !== undefined) target.doneAt = body.done ? NOW : null
-      if (body.hintRevealed) target.hintRevealedAt = NOW
+      if (body.isDone !== undefined) target.doneAt = body.isDone ? NOW : null
+      if (body.isHintRevealed) target.hintRevealedAt = NOW
       return { step: structuredClone(target) }
     }
   )
@@ -139,7 +139,7 @@ describe('GuideViewer', () => {
 
     await typist.click(screen.getByRole('button', { name: 'Show hint' }))
 
-    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { hintRevealed: true })
+    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { isHintRevealed: true })
     const hint = await screen.findByRole('complementary', { name: 'Hint' })
     expect(hint).toHaveTextContent('Hint for step 1')
     expect(hint).toHaveFocus()
@@ -159,7 +159,7 @@ describe('GuideViewer', () => {
 
     await typist.click(screen.getByRole('button', { name: 'Mark done' }))
 
-    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { done: true })
+    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { isDone: true })
     expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument()
     expect(heading()).toHaveTextContent('Step title 2')
     expect(heading()).toHaveFocus()
@@ -180,7 +180,7 @@ describe('GuideViewer', () => {
 
     await typist.click(screen.getByRole('button', { name: 'Mark not done' }))
 
-    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { done: false })
+    expect(api.updateStep).toHaveBeenCalledWith('g1', 's1', { isDone: false })
     expect(screen.getByText('Step 1 of 4')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Mark done' })).toBeInTheDocument()
     expect(progress()).toHaveAccessibleName('0 of 4 steps done')

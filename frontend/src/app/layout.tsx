@@ -4,10 +4,14 @@ import { connection } from 'next/server'
 import { Providers } from './providers'
 import './globals.css'
 
+// `fallback` is explicit because Next has no size-adjust metrics for these families: without it,
+// every compile warns "Failed to find font override values" (`adjustFontFallback: false` does not
+// stop the lookup under Turbopack). The font variables carry the whole stack; globals.css uses them.
 const sans = Atkinson_Hyperlegible_Next({
   subsets: ['latin'],
   weight: ['400', '600', '800'],
   variable: '--font-atkinson-next',
+  fallback: ['ui-sans-serif', 'system-ui', 'sans-serif'],
   display: 'swap'
 })
 
@@ -15,6 +19,7 @@ const mono = Atkinson_Hyperlegible_Mono({
   subsets: ['latin'],
   weight: ['400', '600'],
   variable: '--font-atkinson-mono',
+  fallback: ['ui-monospace', 'Cascadia Code', 'monospace'],
   display: 'swap'
 })
 

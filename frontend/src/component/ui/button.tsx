@@ -1,8 +1,9 @@
 import type { ComponentProps } from 'react'
+import { cn } from '@/lib/cn'
 import { Spinner } from './spinner'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
-export type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonSize = 'sm' | 'md' | 'lg'
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded-md font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-60'
@@ -30,28 +31,28 @@ export const buttonClass = ({
 type ButtonProps = ComponentProps<'button'> & {
   variant?: ButtonVariant
   size?: ButtonSize
-  loading?: boolean
+  isLoading?: boolean
 }
 
 export function Button({
   variant,
   size,
-  loading = false,
+  isLoading = false,
   disabled,
   type = 'button',
-  className = '',
+  className,
   children,
   ...rest
 }: ButtonProps) {
   return (
     <button
       type={type}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      className={`${buttonClass({ variant, size })} ${className}`.trim()}
+      disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
+      className={cn(buttonClass({ variant, size }), className)}
       {...rest}
     >
-      {loading && <Spinner label="" />}
+      {isLoading && <Spinner label="" />}
       {children}
     </button>
   )

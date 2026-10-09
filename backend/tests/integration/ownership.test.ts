@@ -115,7 +115,7 @@ describe('ownership (AC03)', () => {
           client
             .patch(`/api/guide/${seed.guideId}/step/${seed.stepId}`)
             .set('Cookie', c)
-            .send({ done: true })
+            .send({ isDone: true })
       },
       {
         name: 'POST guide on the thread',

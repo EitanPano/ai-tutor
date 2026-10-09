@@ -11,7 +11,7 @@ function Harness({
 }: {
   onSubmit: () => void
   initial?: string
-  streaming?: boolean
+  isStreaming?: boolean
   onStop?: () => void
 }) {
   const [value, setValue] = useState(initial)
@@ -65,7 +65,7 @@ describe('Composer', () => {
   it('swaps Ask for Stop while streaming and ignores Ctrl+Enter', async () => {
     const onSubmit = vi.fn()
     const onStop = vi.fn()
-    render(<Harness onSubmit={onSubmit} onStop={onStop} streaming initial="next" />)
+    render(<Harness onSubmit={onSubmit} onStop={onStop} isStreaming initial="next" />)
     const typist = userEvent.setup()
 
     expect(screen.queryByRole('button', { name: 'Ask' })).not.toBeInTheDocument()

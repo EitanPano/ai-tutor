@@ -33,7 +33,7 @@ const item = (n: number, choiceIndex: number, answerIndex: number): GradedItem =
   choices: [0, 1, 2, 3].map((c) => `Choice ${n}.${c}`),
   choiceIndex,
   answerIndex,
-  correct: choiceIndex === answerIndex,
+  isCorrect: choiceIndex === answerIndex,
   explanation: `Because **reason ${n}**.`
 })
 

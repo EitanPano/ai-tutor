@@ -3,12 +3,10 @@ import type { ReactNode } from 'react'
 import { ProductPreview } from '@/component/auth/product-preview'
 import { SignedInRedirect } from '@/component/auth/signed-in-redirect'
 import { Wordmark } from '@/component/ui/wordmark'
+import { SESSION_COOKIE } from '@/lib/config'
 
 const PRODUCT_LINE =
   'Ask a coding question. Get an explanation, a step-by-step guide you can check off, and a quiz to make it stick.'
-
-// Same cookie name the proxy and the API use.
-const SESSION_COOKIE = 'sid'
 
 export default async function AuthLayout({ children }: { children: ReactNode }) {
   // Only a visitor who has a session cookie can be signed in: probing /api/session without one

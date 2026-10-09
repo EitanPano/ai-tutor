@@ -4,7 +4,7 @@ import { z } from 'zod'
  * The guide the model must produce. The API may not enforce every length or count constraint of
  * a structured-output schema, so the service re-validates the output with this same schema.
  */
-export const GuideStepDraftSchema = z.object({
+const GuideStepDraftSchema = z.object({
   title: z.string().min(1).max(120),
   /** Markdown, no raw HTML. */
   body: z.string().min(1).max(4000),

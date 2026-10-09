@@ -1,4 +1,5 @@
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react'
+import { cn } from '@/lib/cn'
 
 type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> & {
   label: string
@@ -7,14 +8,7 @@ type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> & {
   id?: string
 }
 
-export function TextField({
-  label,
-  hint,
-  error,
-  id: idProp,
-  className = '',
-  ...input
-}: TextFieldProps) {
+export function TextField({ label, hint, error, id: idProp, className, ...input }: TextFieldProps) {
   const generated = useId()
   const id = idProp ?? generated
   const hintId = `${id}-hint`
@@ -30,9 +24,11 @@ export function TextField({
         id={id}
         aria-describedby={describedBy}
         aria-invalid={error ? true : undefined}
-        className={`h-10 rounded-md border bg-sheet px-3 text-base text-ink placeholder:text-ink-muted disabled:opacity-60 ${
-          error ? 'border-wrong' : 'border-rule hover:border-ink-muted'
-        } ${className}`.trim()}
+        className={cn(
+          'h-10 rounded-md border bg-sheet px-3 text-base text-ink placeholder:text-ink-muted disabled:opacity-60',
+          error ? 'border-wrong' : 'border-rule hover:border-ink-muted',
+          className
+        )}
         {...input}
       />
       {hint && (

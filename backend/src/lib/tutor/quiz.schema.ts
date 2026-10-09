@@ -6,7 +6,7 @@ import { z } from 'zod'
  * same schema. The distinct-choices refinement only exists here: it is not part of the JSON
  * schema sent to the API.
  */
-export const QuizItemDraftSchema = z
+const QuizItemDraftSchema = z
   .object({
     prompt: z.string().min(1).max(1000),
     choices: z.array(z.string().min(1).max(300)).length(4),

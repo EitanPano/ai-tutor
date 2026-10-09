@@ -3,16 +3,16 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
-import { createGuideService } from '../../src/feature/guide/guide.service.js'
+import { createGuideService } from '../../src/api/guide/service.js'
 
 const ctx = createTestApp()
 const client = createClient(ctx.app, ctx.config)
 const guideService = createGuideService({
   db: ctx.db,
   tutor: ctx.tutor,
-  topic: ctx.modules.topic,
-  ai: ctx.modules.ai,
-  thread: ctx.modules.thread
+  topic: ctx.services.topic,
+  ai: ctx.services.ai,
+  thread: ctx.services.thread
 })
 
 type StepBody = {
@@ -23,7 +23,7 @@ type StepBody = {
   doneAt: string | null
 }
 type GuideBody = { id: string; threadId: string; topicId: string; title: string; steps: StepBody[] }
-type ErrorBody = { error: { code: string }; requestId: string }
+type ErrorBody = { error: { code: string; message: string }; requestId: string }
 type Session = Awaited<ReturnType<typeof signUp>>
 
 beforeEach(async () => {
@@ -113,19 +113,22 @@ describe('guide generation and reading (AC06)', () => {
     expect(calls[0]).toMatchObject({ model: 'fake', stop_reason: 'end_turn' })
   })
 
-  it('persists hintRevealed and done, and clears done again', async () => {
+  it('persists isHintRevealed and isDone, and clears isDone again', async () => {
     const { session, threadId } = await setup()
     const guide = await createdGuide(session, threadId)
     const step = guide.steps[0] as StepBody
     const path = `/api/guide/${guide.id}/step/${step.id}`
 
-    const hint = await client.patch(path).set('Cookie', session.cookie).send({ hintRevealed: true })
+    const hint = await client
+      .patch(path)
+      .set('Cookie', session.cookie)
+      .send({ isHintRevealed: true })
     expect(hint.status).toBe(200)
     expectContract(hint, 'patch', '/api/guide/{id}/step/{stepId}')
     const hintAt = (hint.body as { step: StepBody }).step.hintRevealedAt
     expect(hintAt).not.toBeNull()
 
-    const done = await client.patch(path).set('Cookie', session.cookie).send({ done: true })
+    const done = await client.patch(path).set('Cookie', session.cookie).send({ isDone: true })
     expect(done.status).toBe(200)
     expectContract(done, 'patch', '/api/guide/{id}/step/{stepId}')
     const doneAt = (done.body as { step: StepBody }).step.doneAt
@@ -135,7 +138,7 @@ describe('guide generation and reading (AC06)', () => {
     const again = await client
       .patch(path)
       .set('Cookie', session.cookie)
-      .send({ done: true, hintRevealed: true })
+      .send({ isDone: true, isHintRevealed: true })
     expect((again.body as { step: StepBody }).step).toMatchObject({
       doneAt,
       hintRevealedAt: hintAt
@@ -148,7 +151,7 @@ describe('guide generation and reading (AC06)', () => {
       hintRevealedAt: hintAt
     })
 
-    const undone = await client.patch(path).set('Cookie', session.cookie).send({ done: false })
+    const undone = await client.patch(path).set('Cookie', session.cookie).send({ isDone: false })
     expect((undone.body as { step: StepBody }).step).toMatchObject({
       doneAt: null,
       hintRevealedAt: hintAt
@@ -167,11 +170,11 @@ describe('guide generation and reading (AC06)', () => {
     await client
       .patch(`/api/guide/${first.id}/step/${first.steps[0]?.id}`)
       .set('Cookie', session.cookie)
-      .send({ done: true })
+      .send({ isDone: true })
     await client
       .patch(`/api/guide/${first.id}/step/${first.steps[1]?.id}`)
       .set('Cookie', session.cookie)
-      .send({ done: true })
+      .send({ isDone: true })
 
     const res = await client.get(`/api/thread/${threadId}`).set('Cookie', session.cookie)
     expectContract(res, 'get', '/api/thread/{id}')
@@ -213,7 +216,9 @@ describe('invalid output, refusal and provider errors (AC10)', () => {
     const res = await generate(session, threadId)
     expect(res.status).toBe(422)
     expectContract(res, 'post', '/api/thread/{id}/guide')
-    expect((res.body as ErrorBody).error.code).toBe('ai_refused')
+    const { error } = res.body as ErrorBody
+    expect(error.code).toBe('ai_refused')
+    expect(error.message).toBe("The tutor can't help with that question. Try rephrasing it.")
     const calls = await guideCalls(session.user.id)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ stop_reason: 'refusal', refusal_category: 'cyber' })
@@ -313,7 +318,7 @@ describe('guards', () => {
   })
 
   it('answers 503 ai_unavailable when AI is disabled', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
@@ -328,7 +333,7 @@ describe('guards', () => {
   })
 
   it('answers 503 ai_unavailable, not 400, for an invalid body when AI is disabled', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
@@ -348,7 +353,14 @@ describe('guards', () => {
     const { session, threadId } = await setup()
     const guide = await createdGuide(session, threadId)
     const path = `/api/guide/${guide.id}/step/${guide.steps[0]?.id}`
-    for (const body of [{}, { hintRevealed: false }, { done: 'yes' }, { extra: 1 }]) {
+    for (const body of [
+      {},
+      { isHintRevealed: false },
+      { isDone: 'yes' },
+      // A removed field name answers 400, not a silent no-op.
+      { done: true },
+      { extra: 1 }
+    ]) {
       const res = await client.patch(path).set('Cookie', session.cookie).send(body)
       expect(res.status).toBe(400)
       expectContract(res, 'patch', '/api/guide/{id}/step/{stepId}')
@@ -360,7 +372,7 @@ describe('guards', () => {
     const getRes = await client.get('/api/guide/x')
     expect(getRes.status).toBe(401)
     expectContract(getRes, 'get', '/api/guide/{id}')
-    const patchRes = await client.patch('/api/guide/x/step/y').send({ done: true })
+    const patchRes = await client.patch('/api/guide/x/step/y').send({ isDone: true })
     expect(patchRes.status).toBe(401)
     expectContract(patchRes, 'patch', '/api/guide/{id}/step/{stepId}')
     const postRes = await client.post('/api/thread/x/guide')
@@ -383,7 +395,7 @@ describe('scoping and soft delete', () => {
     const patch = await client
       .patch(`/api/guide/${guide.id}/step/${guide.steps[0]?.id}`)
       .set('Cookie', session.cookie)
-      .send({ done: true })
+      .send({ isDone: true })
     expect(patch.status).toBe(404)
     expectContract(patch, 'patch', '/api/guide/{id}/step/{stepId}')
     // The row is untouched.
@@ -417,7 +429,7 @@ describe('scoping and soft delete', () => {
     const res = await client
       .patch(`/api/guide/${first.id}/step/${second.steps[0]?.id}`)
       .set('Cookie', session.cookie)
-      .send({ done: true })
+      .send({ isDone: true })
     expect(res.status).toBe(404)
     expectContract(res, 'patch', '/api/guide/{id}/step/{stepId}')
     const missing = await client.get('/api/guide/does-not-exist').set('Cookie', session.cookie)

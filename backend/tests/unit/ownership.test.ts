@@ -3,11 +3,12 @@ import {
   Kysely,
   PostgresAdapter,
   PostgresIntrospector,
-  PostgresQueryCompiler
+  PostgresQueryCompiler,
+  sql
 } from 'kysely'
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../src/lib/db/schema.js'
-import { ownedBy, requireFound } from '../../src/lib/ownership.js'
+import { isQuizLive, isThreadLive, ownedBy, requireFound } from '../../src/lib/ownership.js'
 
 const db = new Kysely<Database>({
   dialect: {
@@ -49,6 +50,20 @@ describe('requireFound', () => {
   it.each([undefined, null])('throws 404 not_found for %s', (missing) => {
     expect(() => requireFound(missing)).toThrowError(
       expect.objectContaining({ status: 404, code: 'not_found' }) as Error
+    )
+  })
+})
+
+describe('isThreadLive', () => {
+  it('filters a builder query on the thread soft-delete column', () => {
+    const query = db.selectFrom('thread').select('id').where(isThreadLive).compile()
+    expect(query.sql).toBe('select "id" from "thread" where "thread"."deleted_at" is null')
+  })
+
+  it('interpolates into a sql template, alone and inside isQuizLive', () => {
+    expect(sql`WHERE ${isThreadLive}`.compile(db).sql).toBe('WHERE "thread"."deleted_at" is null')
+    expect(sql`WHERE ${isQuizLive}`.compile(db).sql).toBe(
+      'WHERE (quiz.thread_id IS NULL OR "thread"."deleted_at" is null)'
     )
   })
 })

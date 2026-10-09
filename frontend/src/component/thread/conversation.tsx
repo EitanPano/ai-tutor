@@ -3,13 +3,16 @@
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, buttonClass } from '@/component/ui/button'
-import { EmptyState } from '@/component/ui/empty-state'
+import { BackLink } from '@/component/ui/back-link'
+import { buttonClass } from '@/component/ui/button'
+import { ErrorPanel } from '@/component/ui/error-panel'
+import { NotFoundPanel } from '@/component/ui/not-found-panel'
 import { Sheet } from '@/component/ui/sheet'
-import { describeError, isApiError } from '@/lib/api/error'
+import { describeError, isApiError, messageFor } from '@/lib/api/error'
 import { getThread, isPending, threadKey } from '@/lib/api/thread'
-import { BackIcon, NewIcon, RetryIcon, ThreadIcon } from '@/lib/icon'
+import { NewIcon, ThreadIcon } from '@/lib/icon'
 import { usePageTitle } from '@/lib/page-title'
+import { THREAD_LIST_PATH } from '@/lib/route'
 import { Composer } from './composer'
 import { StudyTools } from './study-tools'
 import { takePendingQuestion } from './pending-question'
@@ -41,7 +44,7 @@ const scrollToEnd = () =>
 
 export function Conversation({ threadId }: { threadId: string }) {
   const [draft, setDraft] = useState('')
-  const { asking, ask, stop, announcement, budgetSpent, threadFull } = useAsk(threadId, {
+  const { asking, ask, stop, announcement, isBudgetSpent, isThreadFull } = useAsk(threadId, {
     // A Retry from the toast re-asked the text the composer got back: do not leave it to be sent twice.
     onRetryAccepted: (question) => setDraft((d) => (d.trim() === question.trim() ? '' : d))
   })
@@ -58,7 +61,7 @@ export function Conversation({ threadId }: { threadId: string }) {
     }
   })
   usePageTitle(detail.data?.thread.title)
-  const parked = useRef(false)
+  const wasParkedQuestionChecked = useRef(false)
 
   const unfinishedId = detail.data?.messages.find(isPending)?.id
   useEffect(() => {
@@ -66,13 +69,13 @@ export function Conversation({ threadId }: { threadId: string }) {
     const timer = setTimeout(() => setStalledId(unfinishedId), STALL_MS)
     return () => clearTimeout(timer)
   }, [unfinishedId, asking])
-  const stalled = !!unfinishedId && unfinishedId === stalledId
+  const isStalled = !!unfinishedId && unfinishedId === stalledId
 
   /** Asks, and hands the text back to the composer when the server never took the question. */
   const submit = useCallback(
     async (question: string) => {
-      const { started, outcome } = await ask(question)
-      if (!started && outcome !== 'completed') setDraft((current) => current || question)
+      const { hasStarted, outcome } = await ask(question)
+      if (!hasStarted && outcome !== 'completed') setDraft((current) => current || question)
     },
     [ask]
   )
@@ -80,8 +83,8 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   // A question parked by the new-question page is asked as soon as the thread opens.
   useEffect(() => {
-    if (parked.current) return
-    parked.current = true
+    if (wasParkedQuestionChecked.current) return
+    wasParkedQuestionChecked.current = true
     const question = takePendingQuestion(threadId)
     // Starting the stream is the sync with an external system (storage, network); the state it
     // sets is that stream's progress.
@@ -94,48 +97,33 @@ export function Conversation({ threadId }: { threadId: string }) {
   const textLength = asking?.text.length ?? 0
   useEffect(() => {
     if (!textLength) return
-    const nearEnd =
+    const isNearEnd =
       window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240
-    if (nearEnd) scrollToEnd()
+    if (isNearEnd) scrollToEnd()
   }, [textLength])
 
-  const loaded = !!detail.data
+  const isLoaded = !!detail.data
   useEffect(() => {
-    if (loaded) scrollToEnd()
-  }, [loaded])
+    if (isLoaded) scrollToEnd()
+  }, [isLoaded])
 
   if (detail.isPending) return <ThreadSkeleton />
 
   if (!detail.data) {
-    const missing = isApiError(detail.error) && detail.error.code === 'not_found'
-    return (
-      <Sheet>
-        <EmptyState
-          icon={missing ? ThreadIcon : RetryIcon}
-          action={
-            missing ? (
-              <Link href="/thread" className={buttonClass({ variant: 'secondary' })}>
-                Back to threads
-              </Link>
-            ) : (
-              <Button variant="secondary" onClick={() => detail.refetch()}>
-                Retry
-              </Button>
-            )
-          }
-        >
-          {describeError(detail.error)}
-        </EmptyState>
-      </Sheet>
+    const isMissing = isApiError(detail.error) && detail.error.code === 'not_found'
+    return isMissing ? (
+      <NotFoundPanel icon={ThreadIcon}>{describeError(detail.error)}</NotFoundPanel>
+    ) : (
+      <ErrorPanel onRetry={() => detail.refetch()}>{describeError(detail.error)}</ErrorPanel>
     )
   }
 
   const { thread, messages, guides, quizzes } = detail.data
   const hasAnswer = messages.some((m) => m.role === 'assistant' && m.status === 'complete')
-  const full = threadFull || thread.messageCount + 2 > MAX_MESSAGES
-  const busy = !!asking || (!!unfinishedId && !stalled)
-  const locked = budgetSpent || full
-  const streaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
+  const isFull = isThreadFull || thread.messageCount + 2 > MAX_MESSAGES
+  const isBusy = !!asking || (!!unfinishedId && !isStalled)
+  const isLocked = isBudgetSpent || isFull
+  const isStreaming = asking?.phase === 'thinking' || asking?.phase === 'streaming'
 
   function send() {
     const question = draft.trim()
@@ -146,13 +134,9 @@ export function Conversation({ threadId }: { threadId: string }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link
-        href="/thread"
-        className="inline-flex items-center gap-1.5 self-start text-sm font-semibold lg:hidden"
-      >
-        <BackIcon aria-hidden="true" className="size-4" />
+      <BackLink href={THREAD_LIST_PATH} className="lg:hidden">
         Threads
-      </Link>
+      </BackLink>
 
       <ThreadHeader thread={thread} />
 
@@ -160,20 +144,20 @@ export function Conversation({ threadId }: { threadId: string }) {
       <StudyTools
         threadId={threadId}
         hasAnswer={hasAnswer}
-        busy={busy}
+        isBusy={isBusy}
         guides={guides}
         quizzes={quizzes}
       />
 
       <Sheet className="p-5 md:p-8">
-        {messages.length === 0 && !busy ? (
+        {messages.length === 0 && !isBusy ? (
           <p className="text-ink-muted">Ask your first question below.</p>
         ) : (
           <Transcript
             messages={messages}
             asking={asking}
-            stalled={stalled}
-            onRetry={locked || busy ? undefined : retry}
+            isStalled={isStalled}
+            onRetry={isLocked || isBusy ? undefined : retry}
           />
         )}
       </Sheet>
@@ -184,16 +168,12 @@ export function Conversation({ threadId }: { threadId: string }) {
 
       {/* Solid canvas behind the composer so transcript text never shows around it. */}
       <div className="sticky bottom-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pt-2 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:-top-6 before:h-6 before:bg-linear-to-t before:from-canvas before:to-transparent">
-        {budgetSpent && (
-          <Banner>
-            You&apos;ve used today&apos;s AI budget. It resets at midnight in your time zone.
-          </Banner>
-        )}
-        {full && (
+        {isBudgetSpent && <Banner>{messageFor('ai_budget_exceeded')}</Banner>}
+        {isFull && (
           <Banner
             action={
               <Link
-                href={`/thread?topic=${encodeURIComponent(thread.topicId)}`}
+                href={`${THREAD_LIST_PATH}?topic=${encodeURIComponent(thread.topicId)}`}
                 className={buttonClass({ variant: 'secondary', size: 'sm' })}
               >
                 <NewIcon aria-hidden="true" className="size-4" />
@@ -201,7 +181,7 @@ export function Conversation({ threadId }: { threadId: string }) {
               </Link>
             }
           >
-            This thread is full. Start a new thread to keep going.
+            {messageFor('thread_full')}
           </Banner>
         )}
         <Sheet className="p-4 shadow-lg shadow-ink/10">
@@ -209,9 +189,9 @@ export function Conversation({ threadId }: { threadId: string }) {
             value={draft}
             onChange={setDraft}
             onSubmit={send}
-            disabled={locked}
-            streaming={busy && streaming}
-            submitting={busy && !streaming}
+            disabled={isLocked}
+            isStreaming={isBusy && isStreaming}
+            isSubmitting={isBusy && !isStreaming}
             onStop={stop}
           />
         </Sheet>

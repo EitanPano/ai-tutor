@@ -1,4 +1,4 @@
-export const DEFAULT_PATH = '/thread'
+import { DEFAULT_PATH } from './route'
 
 const BASE = 'http://local.invalid'
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/

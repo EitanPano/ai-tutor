@@ -2,12 +2,20 @@ import { z } from 'zod'
 
 const DEV_DATABASE_URL = 'postgres://ai_tutor:ai_tutor@localhost:5432/ai_tutor'
 const DEV_FRONTEND_URL = 'http://localhost:3000'
-/** The real provider spends money: 50k tokens a day. The free fake one is effectively unlimited. */
-const DEFAULT_BUDGET_ANTHROPIC = 50_000
-const DEFAULT_BUDGET_FAKE = 1_000_000
-/** Across all users, per UTC day: 500k tokens with the real provider, effectively unlimited with the fake one. */
-const DEFAULT_GLOBAL_BUDGET_ANTHROPIC = 500_000
-const DEFAULT_GLOBAL_BUDGET_FAKE = 1_000_000_000
+
+/** Daily token budgets, per user and across all users. */
+type DailyTokenBudget = { perUser: number; global: number }
+
+/**
+ * Daily token budgets when AI_DAILY_TOKEN_BUDGET / AI_GLOBAL_DAILY_TOKEN_BUDGET are unset.
+ * `perUser`: the real provider spends money, 50k tokens a day; the free fake one is effectively
+ * unlimited. `global`: across all users, per UTC day, 500k tokens with the real provider,
+ * effectively unlimited with the fake one.
+ */
+const DEFAULT_BUDGET_BY_PROVIDER: Record<Config['aiProvider'], DailyTokenBudget> = {
+  anthropic: { perUser: 50_000, global: 500_000 },
+  fake: { perUser: 1_000_000, global: 1_000_000_000 }
+}
 
 const boolString = z.enum(['true', 'false']).transform((value) => value === 'true')
 
@@ -37,6 +45,8 @@ const envSchema = z.object({
   RECOVER_STALE_ON_BOOT: boolString.default(true)
 })
 
+type Env = z.output<typeof envSchema>
+
 export type Config = {
   nodeEnv: 'development' | 'test' | 'production'
   port: number
@@ -49,9 +59,9 @@ export type Config = {
   anthropicApiKey: string | undefined
   aiDailyTokenBudget: number
   aiGlobalDailyTokenBudget: number
-  aiEnabled: boolean
+  isAiEnabled: boolean
   aiFakeDelayMs: number
-  recoverStaleOnBoot: boolean
+  shouldRecoverStaleOnBoot: boolean
   /** Reverse proxies in front of the backend whose X-Forwarded-For is trusted; 0 trusts none. */
   trustProxy: number
   /** Sign-ups per hour per IP. */
@@ -59,6 +69,31 @@ export type Config = {
   /** Login attempts per 15 minutes per IP, on top of the ip + email limit. */
   loginIpRateLimit: number
 }
+
+/** Variables that each parse on their own but are refused in this combination. */
+type ConfigRule<V> = { isBrokenBy: (v: V) => boolean; problem: string }
+
+const DATABASE_URL_RULE: ConfigRule<Pick<Env, 'NODE_ENV' | 'DATABASE_URL'>> = {
+  isBrokenBy: (v) => v.NODE_ENV === 'production' && !v.DATABASE_URL,
+  problem: 'DATABASE_URL: required in production'
+}
+
+/** Every rule that matches is reported, in this order. */
+const CONFIG_RULES: readonly ConfigRule<Env>[] = [
+  DATABASE_URL_RULE,
+  {
+    isBrokenBy: (v) => v.NODE_ENV === 'production' && !v.FRONTEND_URL,
+    problem: 'FRONTEND_URL: required in production'
+  },
+  {
+    isBrokenBy: (v) => v.NODE_ENV === 'production' && v.AI_PROVIDER === 'fake',
+    problem: 'AI_PROVIDER: "fake" is not allowed in production'
+  },
+  {
+    isBrokenBy: (v) => v.AI_PROVIDER === 'anthropic' && !v.ANTHROPIC_API_KEY,
+    problem: 'ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic'
+  }
+]
 
 /** Treat empty strings (e.g. an empty ANTHROPIC_API_KEY in a copied template) as unset. */
 function withoutEmpty(vars: NodeJS.ProcessEnv): Record<string, string> {
@@ -69,30 +104,37 @@ function withoutEmpty(vars: NodeJS.ProcessEnv): Record<string, string> {
   return out
 }
 
+function invalidConfiguration(problems: readonly string[]): Error {
+  return new Error(`Invalid configuration:\n- ${problems.join('\n- ')}`)
+}
+
+/**
+ * Parses `vars` with `schema`, then checks `rules`. Throws one error naming every invalid
+ * variable, or else every broken rule.
+ */
+function parseEnv<S extends z.ZodType>(
+  schema: S,
+  rules: readonly ConfigRule<z.output<S>>[],
+  vars: NodeJS.ProcessEnv
+): z.output<S> {
+  const parsed = schema.safeParse(withoutEmpty(vars))
+  if (!parsed.success) {
+    throw invalidConfiguration(
+      parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+    )
+  }
+  const problems = rules.filter((rule) => rule.isBrokenBy(parsed.data)).map((rule) => rule.problem)
+  if (problems.length > 0) throw invalidConfiguration(problems)
+  return parsed.data
+}
+
 /**
  * Validates env vars and returns a typed config. Throws one error naming every invalid
  * variable. Never prints variable values, so secrets cannot leak into logs.
  */
 export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = envSchema.safeParse(withoutEmpty(vars))
-  if (!parsed.success) {
-    const lines = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-    throw new Error(`Invalid configuration:\n- ${lines.join('\n- ')}`)
-  }
-  const v = parsed.data
-  const production = v.NODE_ENV === 'production'
-  const problems: string[] = []
-
-  if (production && !v.DATABASE_URL) problems.push('DATABASE_URL: required in production')
-  if (production && !v.FRONTEND_URL) problems.push('FRONTEND_URL: required in production')
-  if (production && v.AI_PROVIDER === 'fake') {
-    problems.push('AI_PROVIDER: "fake" is not allowed in production')
-  }
-  if (v.AI_PROVIDER === 'anthropic' && !v.ANTHROPIC_API_KEY) {
-    problems.push('ANTHROPIC_API_KEY: required when AI_PROVIDER=anthropic')
-  }
-  if (problems.length > 0) throw new Error(`Invalid configuration:\n- ${problems.join('\n- ')}`)
-
+  const v = parseEnv(envSchema, CONFIG_RULES, vars)
+  const defaultBudget = DEFAULT_BUDGET_BY_PROVIDER[v.AI_PROVIDER]
   return {
     nodeEnv: v.NODE_ENV,
     port: v.PORT,
@@ -103,15 +145,11 @@ export function loadConfig(vars: NodeJS.ProcessEnv = process.env): Config {
     aiProvider: v.AI_PROVIDER,
     aiModel: v.AI_MODEL,
     anthropicApiKey: v.ANTHROPIC_API_KEY,
-    aiDailyTokenBudget:
-      v.AI_DAILY_TOKEN_BUDGET ??
-      (v.AI_PROVIDER === 'fake' ? DEFAULT_BUDGET_FAKE : DEFAULT_BUDGET_ANTHROPIC),
-    aiGlobalDailyTokenBudget:
-      v.AI_GLOBAL_DAILY_TOKEN_BUDGET ??
-      (v.AI_PROVIDER === 'fake' ? DEFAULT_GLOBAL_BUDGET_FAKE : DEFAULT_GLOBAL_BUDGET_ANTHROPIC),
-    aiEnabled: v.AI_ENABLED,
+    aiDailyTokenBudget: v.AI_DAILY_TOKEN_BUDGET ?? defaultBudget.perUser,
+    aiGlobalDailyTokenBudget: v.AI_GLOBAL_DAILY_TOKEN_BUDGET ?? defaultBudget.global,
+    isAiEnabled: v.AI_ENABLED,
     aiFakeDelayMs: v.AI_FAKE_DELAY_MS,
-    recoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
+    shouldRecoverStaleOnBoot: v.RECOVER_STALE_ON_BOOT,
     trustProxy: v.TRUST_PROXY,
     signupRateLimit: v.SIGNUP_RATE_LIMIT,
     loginIpRateLimit: v.LOGIN_IP_RATE_LIMIT
@@ -133,22 +171,14 @@ export function configWarning(
 
 const dbEnvSchema = envSchema.pick({ NODE_ENV: true, DATABASE_URL: true, LOG_LEVEL: true })
 
-export type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>
+type DbConfig = Pick<Config, 'nodeEnv' | 'databaseUrl' | 'logLevel'>
 
 /**
  * The narrow config the db CLI (migrate, seed, reset-password, ...) needs: it must run in an
  * image or shell that has no AI settings, so it never validates them.
  */
 export function loadDbConfig(vars: NodeJS.ProcessEnv = process.env): DbConfig {
-  const parsed = dbEnvSchema.safeParse(withoutEmpty(vars))
-  if (!parsed.success) {
-    const lines = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-    throw new Error(`Invalid configuration:\n- ${lines.join('\n- ')}`)
-  }
-  const v = parsed.data
-  if (v.NODE_ENV === 'production' && !v.DATABASE_URL) {
-    throw new Error('Invalid configuration:\n- DATABASE_URL: required in production')
-  }
+  const v = parseEnv(dbEnvSchema, [DATABASE_URL_RULE], vars)
   return {
     nodeEnv: v.NODE_ENV,
     databaseUrl: v.DATABASE_URL ?? DEV_DATABASE_URL,

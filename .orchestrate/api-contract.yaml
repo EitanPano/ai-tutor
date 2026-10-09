@@ -1159,9 +1159,9 @@ components:
       additionalProperties: false
       minProperties: 1
       properties:
-        done:
+        isDone:
           type: boolean
-        hintRevealed:
+        isHintRevealed:
           type: boolean
           const: true
     StepResponse:
@@ -1283,7 +1283,7 @@ components:
     GradedItem:
       type: object
       additionalProperties: false
-      required: [itemId, position, prompt, choices, choiceIndex, answerIndex, correct, explanation]
+      required: [itemId, position, prompt, choices, choiceIndex, answerIndex, isCorrect, explanation]
       properties:
         itemId:
           type: string
@@ -1307,7 +1307,7 @@ components:
           type: integer
           minimum: 0
           maximum: 3
-        correct:
+        isCorrect:
           type: boolean
         explanation:
           type: string
@@ -1389,7 +1389,7 @@ components:
     Streak:
       type: object
       additionalProperties: false
-      required: [current, longest, activeToday]
+      required: [current, longest, isActiveToday]
       properties:
         current:
           type: integer
@@ -1397,7 +1397,7 @@ components:
         longest:
           type: integer
           minimum: 0
-        activeToday:
+        isActiveToday:
           type: boolean
     ProgressTotals:
       type: object

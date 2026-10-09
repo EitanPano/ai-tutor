@@ -17,7 +17,7 @@ type Previous = Pick<Step, 'doneAt' | 'hintRevealedAt'>
 const STEP_MUTATION = ['guide', 'step'] as const
 
 /** The sentence for a failed step update. A missing guide is named as one, not as a thread. */
-export function describeStepError(err: unknown): string {
+function describeStepError(err: unknown): string {
   return isApiError(err) && err.code === 'not_found'
     ? "This guide doesn't exist or was deleted."
     : describeError(err)
@@ -56,8 +56,8 @@ export function useStepUpdate(guideId: string, threadId: string | undefined) {
       const now = new Date().toISOString()
       patch(stepId, (step) => ({
         ...step,
-        ...(body.done !== undefined && { doneAt: body.done ? now : null }),
-        ...(body.hintRevealed && { hintRevealedAt: step.hintRevealedAt ?? now })
+        ...(body.isDone !== undefined && { doneAt: body.isDone ? now : null }),
+        ...(body.isHintRevealed && { hintRevealedAt: step.hintRevealedAt ?? now })
       }))
       return before && { doneAt: before.doneAt, hintRevealedAt: before.hintRevealedAt }
     },
@@ -65,8 +65,8 @@ export function useStepUpdate(guideId: string, threadId: string | undefined) {
       if (previous) {
         patch(stepId, (step) => ({
           ...step,
-          ...(body.done !== undefined && { doneAt: previous.doneAt }),
-          ...(body.hintRevealed && { hintRevealedAt: previous.hintRevealedAt })
+          ...(body.isDone !== undefined && { doneAt: previous.doneAt }),
+          ...(body.isHintRevealed && { hintRevealedAt: previous.hintRevealedAt })
         }))
       }
       toast.error(describeStepError(err))

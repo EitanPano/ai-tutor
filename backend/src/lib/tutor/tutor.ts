@@ -21,7 +21,7 @@ export type ExplainResult = {
 }
 
 export type GuideInput = { topicName: string; history: TutorTurn[] }
-export type QuizDifficultyName = 'easy' | 'medium' | 'hard'
+type QuizDifficultyName = 'easy' | 'medium' | 'hard'
 /** `history` is `null` for a quiz generated from a topic alone. */
 export type QuizInput = {
   topicName: string
@@ -107,12 +107,15 @@ export const ZERO_USAGE: TutorUsage = {
   cacheCreationTokens: 0
 }
 
+/** What `buildMessages` lays out: an explain input without its abort signal. */
+export type MessagesInput = Pick<ExplainInput, 'topicName' | 'history' | 'question'>
+
 /**
  * The messages sent to the model: the thread history in order, then the new question. The first
  * user turn carries the `Topic:` prefix so the system prompt stays byte-identical across threads
  * and the per-thread prefix stays stable across turns.
  */
-export function buildMessages(input: Pick<ExplainInput, 'topicName' | 'history' | 'question'>) {
+export function buildMessages(input: MessagesInput) {
   const turns: TutorTurn[] = [...input.history, { role: 'user', content: input.question }]
   const firstUser = turns.findIndex((turn) => turn.role === 'user')
   return turns.map((turn, index) =>

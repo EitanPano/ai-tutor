@@ -3,7 +3,7 @@ import {
   createProgressService,
   computeStreak,
   type ProgressDto
-} from '../../src/feature/progress/progress.service.js'
+} from '../../src/api/progress/service.js'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
@@ -32,14 +32,14 @@ async function newUser(timeZone = ZONE): Promise<Session> {
   return signUp(client, { timeZone })
 }
 
-async function addThread(userId: string, topicId: string, title: string, deleted = false) {
+async function addThread(userId: string, topicId: string, title: string, isDeleted = false) {
   return ctx.db
     .insertInto('thread')
     .values({
       user_id: userId,
       topic_id: topicId,
       title,
-      deleted_at: deleted ? new Date() : null
+      deleted_at: isDeleted ? new Date() : null
     })
     .returning(['id', 'topic_id'])
     .executeTakeFirstOrThrow()
@@ -213,7 +213,7 @@ describe('GET /api/progress (AC08)', () => {
     }
     expect(progress.totals).toEqual({ questions: 7, guidesCompleted: 1, stepsDone: 4, attempts: 3 })
     // Oct 5, 6 (23:30 local, already Oct 7 in UTC) and 7 are active; Oct 3-4 are not.
-    expect(progress.streak).toEqual({ current: 3, longest: 3, activeToday: true })
+    expect(progress.streak).toEqual({ current: 3, longest: 3, isActiveToday: true })
 
     // 14 events exist; the 10 newest come back, newest first, with the right ids per kind.
     expect(progress.recent).toHaveLength(10)
@@ -255,8 +255,8 @@ describe('GET /api/progress (AC08)', () => {
     // 23:30 on Oct 6 in New York is 03:30Z on Oct 7: UTC would merge it into today.
     await addQuestion(user.id, thread.id, at(6, '23:30'))
     const progress = await progressService.get({ userId: user.id }, { now: NOW })
-    // In UTC that question would fall on today (Oct 7) and activeToday would be true.
-    expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: false })
+    // In UTC that question would fall on today (Oct 7) and isActiveToday would be true.
+    expect(progress.streak).toEqual({ current: 1, longest: 1, isActiveToday: false })
   })
 
   it('counts through yesterday when today is not active yet', async () => {
@@ -266,7 +266,7 @@ describe('GET /api/progress (AC08)', () => {
     await addQuestion(user.id, thread.id, at(5, '09:00'))
     await addQuestion(user.id, thread.id, at(4, '09:00'))
     const progress = await progressService.get({ userId: user.id }, { now: NOW })
-    expect(progress.streak).toEqual({ current: 3, longest: 3, activeToday: false })
+    expect(progress.streak).toEqual({ current: 3, longest: 3, isActiveToday: false })
   })
 
   it('resets the current streak to 0 once a whole day was missed', async () => {
@@ -275,7 +275,7 @@ describe('GET /api/progress (AC08)', () => {
     await addQuestion(user.id, thread.id, at(5, '09:00'))
     await addQuestion(user.id, thread.id, at(4, '09:00'))
     const progress = await progressService.get({ userId: user.id }, { now: NOW })
-    expect(progress.streak).toEqual({ current: 0, longest: 2, activeToday: false })
+    expect(progress.streak).toEqual({ current: 0, longest: 2, isActiveToday: false })
   })
 
   it('returns zeros, nulls, every topic and an empty recent list for a new user', async () => {
@@ -285,7 +285,7 @@ describe('GET /api/progress (AC08)', () => {
     expectContract(res, 'get', '/api/progress')
     const body = res.body as ProgressDto
     expect(body.totals).toEqual({ questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 })
-    expect(body.streak).toEqual({ current: 0, longest: 0, activeToday: false })
+    expect(body.streak).toEqual({ current: 0, longest: 0, isActiveToday: false })
     expect(body.recent).toEqual([])
     expect(body.topics).toHaveLength(12)
     expect(body.topics[0]).toEqual({
@@ -326,7 +326,7 @@ describe('GET /api/progress (AC08)', () => {
 
     const progress = await progressService.get({ userId: mine.user.id }, { now: NOW })
     expect(progress.totals).toEqual({ questions: 0, guidesCompleted: 0, stepsDone: 0, attempts: 0 })
-    expect(progress.streak).toEqual({ current: 0, longest: 0, activeToday: false })
+    expect(progress.streak).toEqual({ current: 0, longest: 0, isActiveToday: false })
     expect(progress.recent).toEqual([])
   })
 
@@ -346,7 +346,7 @@ describe('GET /api/progress (AC08)', () => {
       averageScorePercent: 20,
       lastActivityAt: at(6, '11:00').toISOString()
     })
-    expect(progress.streak).toEqual({ current: 1, longest: 1, activeToday: false })
+    expect(progress.streak).toEqual({ current: 1, longest: 1, isActiveToday: false })
     expect(progress.recent).toHaveLength(1)
     expect(progress.recent[0]).toMatchObject({
       kind: 'attempt',
@@ -370,11 +370,15 @@ describe('computeStreak', () => {
     ).toEqual({
       current: 3,
       longest: 3,
-      activeToday: false
+      isActiveToday: false
     })
   })
 
   it('is all zeros without activity', () => {
-    expect(computeStreak([], '2026-10-07')).toEqual({ current: 0, longest: 0, activeToday: false })
+    expect(computeStreak([], '2026-10-07')).toEqual({
+      current: 0,
+      longest: 0,
+      isActiveToday: false
+    })
   })
 })

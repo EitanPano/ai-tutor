@@ -11,7 +11,7 @@ import { ThreadList } from './thread-list'
 export function ThreadPanes({ children }: { children: ReactNode }) {
   const activeId = /^\/thread\/([^/]+)/.exec(usePathname())?.[1]
   return (
-    <div className="grid gap-8 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
       <aside
         aria-label="Your threads"
         className={`${activeId ? 'hidden lg:block' : 'order-2 lg:order-1'} lg:sticky lg:top-10 lg:-m-1 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto lg:p-1`}

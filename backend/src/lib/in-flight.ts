@@ -6,11 +6,11 @@
  */
 export class InFlightRegistry {
   private readonly controllers = new Set<AbortController>()
-  private closed = false
+  private isClosed = false
 
   /** Tracks `controller`; returns the function that untracks it. Aborts at once after `abortAll`. */
   track(controller: AbortController): () => void {
-    if (this.closed) controller.abort()
+    if (this.isClosed) controller.abort()
     else this.controllers.add(controller)
     return () => {
       this.controllers.delete(controller)
@@ -19,7 +19,7 @@ export class InFlightRegistry {
 
   /** Aborts every tracked generation and any tracked afterwards. Returns how many it aborted. */
   abortAll(): number {
-    this.closed = true
+    this.isClosed = true
     const count = this.controllers.size
     for (const controller of this.controllers) controller.abort()
     this.controllers.clear()

@@ -11,15 +11,16 @@ import {
 } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { cn } from '@/lib/cn'
 import { CodeBlock } from './code-block'
 import { remarkNoRawHtml } from './no-raw-html'
 
 type MarkdownProps = {
   children: string
   /** True while the text is still arriving: code highlighting waits for the end. */
-  streaming?: boolean
+  isStreaming?: boolean
   /** Phrasing content only (a `span`, no paragraphs), for text that lives inside a label or legend. */
-  inline?: boolean
+  isInline?: boolean
   className?: string
 }
 
@@ -38,12 +39,12 @@ function textOf(node: ReactNode): string {
 const StreamingContext = createContext(false)
 
 function Pre({ children }: ComponentPropsWithoutRef<'pre'>) {
-  const streaming = useContext(StreamingContext)
+  const isStreaming = useContext(StreamingContext)
   const code = isValidElement(children)
     ? (children as ReactElement<ComponentPropsWithoutRef<'code'>>)
     : undefined
   const language = /language-([^\s]+)/.exec(code?.props.className ?? '')?.[1]
-  return <CodeBlock code={textOf(children)} language={language} streaming={streaming} />
+  return <CodeBlock code={textOf(children)} language={language} isStreaming={isStreaming} />
 }
 
 // Any other origin is external, including protocol-relative `//host/path` links. The fallback
@@ -60,9 +61,8 @@ function isExternal(href: string): boolean {
 function Anchor({ href, children }: ComponentPropsWithoutRef<'a'>) {
   // A URL react-markdown refused (such as `javascript:`) arrives empty: show it as text.
   if (!href) return <span>{children}</span>
-  const external = isExternal(href)
   return (
-    <a href={href} {...(external && { target: '_blank', rel: 'noopener noreferrer' })}>
+    <a href={href} {...(isExternal(href) && { target: '_blank', rel: 'noopener noreferrer' })}>
       {children}
     </a>
   )
@@ -81,17 +81,18 @@ const inlineComponents: Components = { ...components, p: ({ children }) => <>{ch
 
 export const Markdown = memo(function Markdown({
   children,
-  streaming = false,
-  inline = false,
-  className = ''
+  isStreaming = false,
+  isInline = false,
+  className
 }: MarkdownProps) {
-  const Wrapper = inline ? 'span' : 'div'
+  const Wrapper = isInline ? 'span' : 'div'
   return (
-    <StreamingContext value={streaming}>
-      <Wrapper
-        className={`${proseClass} ${streaming ? 'streaming-caret' : ''} ${className}`.trim()}
-      >
-        <ReactMarkdown remarkPlugins={plugins} components={inline ? inlineComponents : components}>
+    <StreamingContext value={isStreaming}>
+      <Wrapper className={cn(proseClass, isStreaming && 'streaming-caret', className)}>
+        <ReactMarkdown
+          remarkPlugins={plugins}
+          components={isInline ? inlineComponents : components}
+        >
           {children}
         </ReactMarkdown>
       </Wrapper>

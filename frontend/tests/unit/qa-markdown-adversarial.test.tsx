@@ -59,7 +59,7 @@ describe('Markdown (adversarial)', () => {
   })
 
   it('renders an unterminated code fence while streaming', () => {
-    const { container } = render(<Markdown streaming>{'```ts\nconst a = 1'}</Markdown>)
+    const { container } = render(<Markdown isStreaming>{'```ts\nconst a = 1'}</Markdown>)
     expect(container.querySelector('pre')).not.toBeNull()
   })
 

@@ -1,6 +1,7 @@
+import { ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { sql } from 'kysely'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestApp, truncateAll } from '../helper/app.js'
 import { createClient, signUp } from '../helper/client.js'
 import { expectContract, expectSchema } from '../helper/contract.js'
@@ -641,6 +642,38 @@ describe('persistence failure', () => {
   })
 })
 
+describe('stream open failure', () => {
+  it('fails the turn, records the call and releases the lock when opening the stream throws', async () => {
+    const { session, threadId } = await setup()
+    // `flushHeaders` is only called while opening the stream; this request is the only one open.
+    const flush = vi.spyOn(ServerResponse.prototype, 'flushHeaders').mockImplementation(() => {
+      throw new Error('forced flush failure')
+    })
+    try {
+      const { res } = await ask(session.cookie, threadId, 'hello')
+      expect(flush).toHaveBeenCalledOnce()
+      // The half-opened response is ended at once, with no event.
+      expect(res.status).toBe(200)
+      expect(parseSse(res.text)).toEqual([])
+    } finally {
+      flush.mockRestore()
+    }
+    // The response ends before the server finishes the turn.
+    await waitSettled(session.user.id)
+    expect(ctx.tutor.calls).toHaveLength(0)
+    const { messages } = await detail(session.cookie, threadId)
+    expect(messages.map((m) => [m.role, m.status, m.stopReason])).toEqual([
+      ['user', 'failed', null],
+      ['assistant', 'failed', 'error']
+    ])
+    expect(await aiCalls(session.user.id)).toMatchObject([
+      { kind: 'explain', stop_reason: 'error', input_token: 0, output_token: 0 }
+    ])
+    const { events } = await ask(session.cookie, threadId, 'hello again')
+    expect(events.at(-1)?.event).toBe('message.complete')
+  })
+})
+
 describe('validation and gates (AC11)', () => {
   it.each([
     ['empty', ''],
@@ -686,7 +719,7 @@ describe('validation and gates (AC11)', () => {
   })
 
   it('answers 503 ai_unavailable as JSON when AI_ENABLED=false, and leaves nothing behind', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie, user } = await signUp(offClient)
@@ -725,7 +758,7 @@ describe('validation and gates (AC11)', () => {
 
 describe('AI switch order', () => {
   it('answers 503 ai_unavailable, not 400, for an invalid body when AI_ENABLED=false', async () => {
-    const off = createTestApp({ config: { aiEnabled: false } })
+    const off = createTestApp({ config: { isAiEnabled: false } })
     try {
       const offClient = createClient(off.app, off.config)
       const { cookie } = await signUp(offClient)
@@ -830,14 +863,14 @@ describe('recovery of turns left in flight (I2)', () => {
       .where('role', '=', 'assistant')
       .executeTakeFirstOrThrow()
     expect(row.status).toBe('incomplete')
-    expect((await ctx.modules.recoverAtBoot()).turns).toBe(1)
+    expect((await ctx.recoverAtBoot()).turns).toBe(1)
   })
 
   it('recovers a seconds-old turn and a held lock at boot, and the user can ask again', async () => {
     const { session, threadId } = await setup()
     await insertOrphanTurn(session.user.id, threadId, 5 / 60)
     expect(await lockOf(session.user.id)).not.toBeNull()
-    expect(await ctx.modules.recoverAtBoot()).toMatchObject({ turns: 1 })
+    expect(await ctx.recoverAtBoot()).toMatchObject({ turns: 1 })
     expect(await lockOf(session.user.id)).toBeNull()
     const { messages } = await detail(session.cookie, threadId)
     expect(messages.map((m) => [m.role, m.status])).toEqual([

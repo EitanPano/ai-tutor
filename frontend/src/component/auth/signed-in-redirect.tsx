@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { getSession } from '@/lib/api/session'
-import { DEFAULT_PATH } from '@/lib/next-path'
+import { DEFAULT_PATH } from '@/lib/route'
 import { SESSION_KEY } from '@/lib/session'
 
 /**
@@ -17,7 +17,7 @@ export function SignedInRedirect() {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    let cancelled = false
+    let isCancelled = false
     queryClient
       .fetchQuery({
         queryKey: SESSION_KEY,
@@ -26,11 +26,11 @@ export function SignedInRedirect() {
         retry: false
       })
       .then(() => {
-        if (!cancelled) router.replace(DEFAULT_PATH)
+        if (!isCancelled) router.replace(DEFAULT_PATH)
       })
       .catch(() => {})
     return () => {
-      cancelled = true
+      isCancelled = true
     }
   }, [queryClient, router])
 

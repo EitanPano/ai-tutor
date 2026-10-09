@@ -1,7 +1,8 @@
-import type { ComponentType, ReactNode, SVGProps } from 'react'
+import type { ReactNode } from 'react'
+import type { IconComponent } from '@/lib/icon'
 
 type EmptyStateProps = {
-  icon: ComponentType<SVGProps<SVGSVGElement>>
+  icon: IconComponent
   /** One plain sentence saying what is missing and what to do. */
   children: ReactNode
   /** At most one action, usually a `Button` or a link styled with `buttonClass`. */

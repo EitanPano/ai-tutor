@@ -3,11 +3,11 @@ import { getSession } from '@/lib/api/session'
 
 export const SESSION_KEY = ['session'] as const
 
-export function useSession({ enabled = true }: { enabled?: boolean } = {}) {
+export function useSession({ isEnabled = true }: { isEnabled?: boolean } = {}) {
   return useQuery({
     queryKey: SESSION_KEY,
     queryFn: ({ signal }) => getSession(signal),
     staleTime: 60_000,
-    enabled
+    enabled: isEnabled
   })
 }

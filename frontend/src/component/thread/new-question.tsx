@@ -30,7 +30,7 @@ export function NewQuestion() {
         toast.error("Couldn't start the answer. Open the thread and ask again.")
       }
       void queryClient.invalidateQueries({ queryKey: threadKey.list })
-      router.push(`/thread/${thread.id}`)
+      router.push(`/thread/${encodeURIComponent(thread.id)}`)
     },
     onError: (err) => toast.error(describeError(err))
   })
@@ -56,7 +56,7 @@ export function NewQuestion() {
           value={question}
           onChange={setQuestion}
           onSubmit={() => create.mutate()}
-          submitting={create.isPending || create.isSuccess}
+          isSubmitting={create.isPending || create.isSuccess}
         />
       </Sheet>
     </div>

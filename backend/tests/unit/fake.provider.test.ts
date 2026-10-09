@@ -20,7 +20,7 @@ function input(question: string, overrides: Partial<ExplainInput> = {}): Explain
 }
 
 async function run(question: string, overrides: Partial<ExplainInput> = {}) {
-  const fake = new FakeTutorProvider({ delayMs: 0, record: true })
+  const fake = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
   const deltas: string[] = []
   const result = await fake.explain(input(question, overrides), (text) => deltas.push(text))
   return { fake, deltas, result }
@@ -90,7 +90,7 @@ describe('FakeTutorProvider', () => {
   })
 
   it('[fake:error] throws before any delta', async () => {
-    const fake = new FakeTutorProvider({ delayMs: 0, record: true })
+    const fake = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
     const deltas: string[] = []
     await expect(fake.explain(input('boom [fake:error]'), (t) => deltas.push(t))).rejects.toThrow(
       TutorProviderError
@@ -99,7 +99,7 @@ describe('FakeTutorProvider', () => {
   })
 
   it('[fake:error-mid] emits 2 deltas then throws', async () => {
-    const fake = new FakeTutorProvider({ delayMs: 0, record: true })
+    const fake = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
     const deltas: string[] = []
     await expect(
       fake.explain(input('boom [fake:error-mid]'), (t) => deltas.push(t))
@@ -126,7 +126,7 @@ describe('FakeTutorProvider', () => {
 
     it('waits 400 ms between deltas', async () => {
       vi.useFakeTimers()
-      const fake = new FakeTutorProvider({ delayMs: 0, record: true })
+      const fake = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
       const deltas: string[] = []
       const pending = fake.explain(input('slow [fake:slow]'), (text) => deltas.push(text))
       await vi.advanceTimersByTimeAsync(0)
@@ -142,7 +142,7 @@ describe('FakeTutorProvider', () => {
     it('ends the wait on abort and returns the text so far, without any timer firing', async () => {
       vi.useFakeTimers()
       const controller = new AbortController()
-      const fake = new FakeTutorProvider({ delayMs: 0, record: true })
+      const fake = new FakeTutorProvider({ delayMs: 0, shouldRecord: true })
       const deltas: string[] = []
       const pending = fake.explain(
         input('slow [fake:slow]', { signal: controller.signal }),
@@ -205,13 +205,13 @@ describe('FakeTutorProvider generateGuide', () => {
   })
 
   it('records each call', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     await fake.generateGuide(guideInput('q'))
     expect(fake.guideCalls).toEqual([guideInput('q')])
   })
 
   it('[fake:guide-invalid] always fails the schema', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     for (let call = 0; call < 3; call += 1) {
       const result = await fake.generateGuide(guideInput('q [fake:guide-invalid]'))
       expect(GuideDraftSchema.safeParse(result.output).success).toBe(false)
@@ -220,7 +220,7 @@ describe('FakeTutorProvider generateGuide', () => {
   })
 
   it('[fake:guide-invalid-once] fails the first call per history, then succeeds', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     const question = 'q [fake:guide-invalid-once]'
     expect(
       GuideDraftSchema.safeParse((await fake.generateGuide(guideInput(question))).output).success
@@ -293,7 +293,7 @@ describe('FakeTutorProvider generateQuiz', () => {
   })
 
   it('works without history (a topic-only quiz) and records the call', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     const input: QuizInput = { topicName: 'SQL', difficulty: 'easy', history: null }
     const result = await fake.generateQuiz(input)
     expect(QuizDraftSchema.safeParse(result.output).success).toBe(true)
@@ -301,7 +301,7 @@ describe('FakeTutorProvider generateQuiz', () => {
   })
 
   it('[fake:quiz-invalid] always fails the schema (duplicate choices)', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     for (let call = 0; call < 3; call += 1) {
       const result = await fake.generateQuiz(quizInput('q [fake:quiz-invalid]'))
       expect(QuizDraftSchema.safeParse(result.output).success).toBe(false)
@@ -310,30 +310,30 @@ describe('FakeTutorProvider generateQuiz', () => {
   })
 
   it('[fake:quiz-invalid-once] fails the first call per input, then succeeds, until reset', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     const input = quizInput('q [fake:quiz-invalid-once]')
-    const valid = async () =>
+    const isValid = async () =>
       QuizDraftSchema.safeParse((await fake.generateQuiz(input)).output).success
-    expect(await valid()).toBe(false)
-    expect(await valid()).toBe(true)
+    expect(await isValid()).toBe(false)
+    expect(await isValid()).toBe(true)
     fake.reset()
     expect(fake.quizCalls).toHaveLength(0)
-    expect(await valid()).toBe(false)
+    expect(await isValid()).toBe(false)
   })
 
   it('reset() also clears the guide once-counter and the recorded calls', async () => {
-    const fake = new FakeTutorProvider({ record: true })
+    const fake = new FakeTutorProvider({ shouldRecord: true })
     const input: GuideInput = {
       topicName: 'React',
       history: [{ role: 'user', content: 'q [fake:guide-invalid-once]' }]
     }
-    const valid = async () =>
+    const isValid = async () =>
       GuideDraftSchema.safeParse((await fake.generateGuide(input)).output).success
-    expect(await valid()).toBe(false)
-    expect(await valid()).toBe(true)
+    expect(await isValid()).toBe(false)
+    expect(await isValid()).toBe(true)
     fake.reset()
     expect(fake.guideCalls).toHaveLength(0)
-    expect(await valid()).toBe(false)
+    expect(await isValid()).toBe(false)
   })
 
   it('[fake:quiz-refuse] refuses with category cyber and no output', async () => {

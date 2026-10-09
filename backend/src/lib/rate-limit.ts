@@ -5,8 +5,8 @@ import type pg from 'pg'
 import { RateLimiterPostgres, RateLimiterRes } from 'rate-limiter-flexible'
 import { tooManyRequests } from './error.js'
 
-export const LOGIN_POINTS = 5
-export const LOGIN_DURATION_SECONDS = 60
+const LOGIN_POINTS = 5
+const LOGIN_DURATION_SECONDS = 60
 
 /**
  * Postgres-backed login limiter: 5 attempts per minute per ip + email.
@@ -44,16 +44,6 @@ function createLimiter(
   })
 }
 
-/** The limiters the user module consumes. */
-export type UserLimiters = {
-  /** 5 per minute per ip + email. */
-  login: RateLimiterPostgres
-  /** Login attempts per IP. */
-  loginIp: RateLimiterPostgres
-  /** Sign-ups per IP. */
-  signup: RateLimiterPostgres
-}
-
 /**
  * Consumes one point. On exhaustion sets `Retry-After` and throws 429 `rate_limited`.
  * Any other failure (a database error) propagates unchanged.
@@ -69,7 +59,7 @@ export async function consumeOrThrow(
   } catch (err) {
     if (!(err instanceof RateLimiterRes)) throw err
     res.set('Retry-After', String(Math.max(1, Math.ceil(err.msBeforeNext / 1000))))
-    throw tooManyRequests(message)
+    throw tooManyRequests('rate_limited', message)
   }
 }
 

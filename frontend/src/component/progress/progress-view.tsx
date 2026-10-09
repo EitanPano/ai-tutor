@@ -3,28 +3,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
-import { Button } from '@/component/ui/button'
-import { EmptyState } from '@/component/ui/empty-state'
-import { Sheet } from '@/component/ui/sheet'
+import { ErrorPanel } from '@/component/ui/error-panel'
 import { describeError } from '@/lib/api/error'
 import { getProgress, progressKey } from '@/lib/api/progress'
-import { RetryIcon } from '@/lib/icon'
 import { useSession } from '@/lib/session'
 import { ProfileForm } from './profile-form'
+import { ProgressSkeleton } from './progress-skeleton'
 import { RecentActivity } from './recent-activity'
 import { Streak } from './streak'
 import { Totals } from './totals'
 import { TopicTable } from './topic-table'
-
-export function ProgressSkeleton() {
-  return (
-    <div aria-busy="true" aria-label="Loading progress" className="flex flex-col gap-5">
-      <div className="h-32 animate-pulse rounded-md border border-rule bg-sheet" />
-      <div className="h-5 w-2/3 animate-pulse rounded-sm bg-rule" />
-      <div className="h-80 animate-pulse rounded-md border border-rule bg-sheet" />
-    </div>
-  )
-}
 
 export function ProgressView() {
   const session = useSession()
@@ -33,11 +21,11 @@ export function ProgressView() {
     queryFn: ({ signal }) => getProgress(signal)
   })
   const user = session.data?.user
-  const failed = progress.isError && !progress.data
+  const hasFailed = progress.isError && !progress.data
 
   useEffect(() => {
-    if (failed) toast.error(describeError(progress.error), { id: 'progress-error' })
-  }, [failed, progress.error])
+    if (hasFailed) toast.error(describeError(progress.error), { id: 'progress-error' })
+  }, [hasFailed, progress.error])
 
   const data = progress.data
   const topicName = (topicId: string) =>
@@ -49,18 +37,7 @@ export function ProgressView() {
       {progress.isPending ? (
         <ProgressSkeleton />
       ) : !data ? (
-        <Sheet>
-          <EmptyState
-            icon={RetryIcon}
-            action={
-              <Button variant="secondary" onClick={() => progress.refetch()}>
-                Retry
-              </Button>
-            }
-          >
-            {describeError(progress.error)}
-          </EmptyState>
-        </Sheet>
+        <ErrorPanel onRetry={() => progress.refetch()}>{describeError(progress.error)}</ErrorPanel>
       ) : (
         <>
           <div className="flex max-w-[72ch] flex-col gap-4">
