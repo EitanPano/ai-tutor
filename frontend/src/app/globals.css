@@ -46,8 +46,8 @@
   --color-code-ink: var(--code-ink);
   --color-marker-ink: var(--marker-ink);
 
-  --font-sans: var(--font-atkinson-next), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-atkinson-mono), ui-monospace, 'Cascadia Code', monospace;
+  --font-sans: var(--font-atkinson-next);
+  --font-mono: var(--font-atkinson-mono);
 
   --radius-sm: 4px;
   --radius-md: 6px;
