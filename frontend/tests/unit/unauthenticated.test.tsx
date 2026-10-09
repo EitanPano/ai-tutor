@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Providers } from '@/app/providers'
 import { ApiError } from '@/lib/api/error'
 
-const router = vi.hoisted(() => ({ replace: vi.fn() }))
-vi.mock('next/navigation', () => ({ useRouter: () => router }))
+const hardRedirect = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/hard-redirect', () => ({ hardRedirect }))
 
 function Failing({ error }: { error: ApiError }) {
   const query = useQuery({
@@ -19,7 +19,7 @@ const failure = (status: number, code: string) =>
   new ApiError({ status, code, message: 'x', requestId: 'r' })
 
 beforeEach(() => {
-  router.replace.mockReset()
+  hardRedirect.mockReset()
 })
 
 afterEach(() => {
@@ -36,10 +36,29 @@ describe('Providers 401 handling', () => {
     )
 
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
+      expect(hardRedirect).toHaveBeenCalledWith(
         `/login?next=${encodeURIComponent('/thread/abc?x=1')}`
       )
     )
+  })
+
+  it('does not fetch an unauthenticated query again while the redirect is pending', async () => {
+    window.history.pushState({}, '', '/thread')
+    const queryFn = vi.fn(() => Promise.reject(failure(401, 'unauthenticated')))
+    function Counting() {
+      const query = useQuery({ queryKey: ['counted'], queryFn })
+      return <p>{query.isError ? 'failed' : 'loading'}</p>
+    }
+    render(
+      <Providers>
+        <Counting />
+      </Providers>
+    )
+
+    expect(await screen.findByText('failed')).toBeInTheDocument()
+    // Let any refetch the redirect set off settle before counting.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(queryFn).toHaveBeenCalledTimes(1)
   })
 
   it('does not redirect on the auth pages, which expect a 401', async () => {
@@ -51,7 +70,7 @@ describe('Providers 401 handling', () => {
     )
 
     expect(await screen.findByText('failed')).toBeInTheDocument()
-    expect(router.replace).not.toHaveBeenCalled()
+    expect(hardRedirect).not.toHaveBeenCalled()
   })
 
   it('does not redirect on other errors such as invalid_credentials', async () => {
@@ -63,6 +82,6 @@ describe('Providers 401 handling', () => {
     )
 
     expect(await screen.findByText('failed')).toBeInTheDocument()
-    expect(router.replace).not.toHaveBeenCalled()
+    expect(hardRedirect).not.toHaveBeenCalled()
   })
 })

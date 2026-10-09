@@ -32,6 +32,15 @@ function spendDailyBudget(email: string): Promise<void> {
   )
 }
 
+/**
+ * Signs out the way an expired cookie would, from outside the app: a page still loading answers a
+ * lost session with its own full-page redirect to /login, which would abort the next `goto`.
+ */
+async function dropSession(page: Page) {
+  await page.goto('about:blank')
+  await page.context().clearCookies()
+}
+
 async function signUp(page: Page, name = 'QA user') {
   const email = `qa-${Date.now()}-${counter++}@example.com`
   await page.goto('/signup')
@@ -72,7 +81,7 @@ test('an unauthenticated deep link to a guide goes to login and comes back after
   const guideUrl = page.url()
   const guidePath = new URL(guideUrl).pathname
 
-  await page.context().clearCookies()
+  await dropSession(page)
   await page.goto(guideUrl)
   await expect(page).toHaveURL(new RegExp(`/login\\?next=${encodeURIComponent(guidePath)}$`))
   await expect(page.getByText(/^Step \d+ of \d+$/)).toHaveCount(0)
@@ -95,7 +104,7 @@ test('a signed-out deep link to a quiz and a thread keeps its path through login
 
 test('login ignores an off-site next parameter', async ({ page }) => {
   const email = await signUp(page)
-  await page.context().clearCookies()
+  await dropSession(page)
   for (const next of ['https://evil.example/', '//evil.example/', '/\\evil.example']) {
     await page.goto(`/login?next=${encodeURIComponent(next)}`)
     await page.getByLabel('Email').fill(email)
@@ -103,7 +112,7 @@ test('login ignores an off-site next parameter', async ({ page }) => {
     await page.getByRole('button', { name: 'Log in' }).click()
     await expect(page).toHaveURL(/localhost:3100\/(thread|progress)/)
     expect(new URL(page.url()).hostname).toBe('localhost')
-    await page.context().clearCookies()
+    await dropSession(page)
   }
 })
 
